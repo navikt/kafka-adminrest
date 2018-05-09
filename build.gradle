@@ -22,7 +22,7 @@ plugins{
 }
 
 group 'no.nav.integrasjon'
-version '0.51'
+version '0.51-SNAPSHOT'
 
 // suppress warning for experimental coroutines
 kotlin { experimental { coroutines "enable"} }

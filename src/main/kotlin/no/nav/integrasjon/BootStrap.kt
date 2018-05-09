@@ -71,9 +71,9 @@ object BootStrap {
             }
 
 
-    fun getBrokerConfig(adminClient: AdminClient): String =
+    fun getBrokerConfig(adminClient: AdminClient, brokerID: String): String =
             try {
-                adminClient.describeConfigs(mutableListOf(ConfigResource(ConfigResource.Type.BROKER,"0")))
+                adminClient.describeConfigs(mutableListOf(ConfigResource(ConfigResource.Type.BROKER,brokerID)))
                         .values()
                         .entries
                         .map { Pair(it.key,it.value.get()) }
@@ -84,11 +84,11 @@ object BootStrap {
                 ""
             }
 
-    fun getTopicConfig(adminClient: AdminClient): String =
+    fun getTopicConfig(adminClient: AdminClient, topicName: String): String =
             try {
                 adminClient.describeConfigs(
                         mutableListOf(
-                                ConfigResource(ConfigResource.Type.TOPIC,"aapen-altinn-oppfolgingsplan-Mottatt"))
+                                ConfigResource(ConfigResource.Type.TOPIC,topicName))
                 )
                         .values()
                         .entries
@@ -108,6 +108,8 @@ object BootStrap {
 
         log.info { "Starting embedded REST server" }
         val eREST = embeddedServer(Netty, 8080){}.start()
+
+        val REST_ENDPOINT = "/api/v1"
 
         try {
             runBlocking {
@@ -130,28 +132,30 @@ object BootStrap {
                                         collectorRegistry.filteredMetricFamilySamples(names))
                             }
                         }
-                        get("/topics") {
+                        get("$REST_ENDPOINT/topics") {
 
                             call.respondText(ContentType.Text.Plain, HttpStatusCode.OK) { getTopics(adminClient) }
                         }
 
-                        get("/acls") {
+                        get("$REST_ENDPOINT/topics/{topicName}/config") {
+
+                            val topicName = call.parameters["topicName"] ?: throw IllegalArgumentException("Parameter topicName not found")
+                            call.respondText(ContentType.Text.Plain, HttpStatusCode.OK) { getTopicConfig(adminClient,topicName) }
+                        }
+
+                        get("$REST_ENDPOINT/acls") {
 
                             call.respondText(ContentType.Text.Plain, HttpStatusCode.OK) { getAcls(adminClient) }
                         }
 
-                        get("/cluster") {
+                        get("$REST_ENDPOINT/brokers") {
 
                             call.respondText(ContentType.Text.Plain, HttpStatusCode.OK) { getCluster(adminClient) }
                         }
 
-                        get("/brokerConfig") {
-
-                            call.respondText(ContentType.Text.Plain, HttpStatusCode.OK) { getBrokerConfig(adminClient) }
-                        }
-                        get("/topicConfig") {
-
-                            call.respondText(ContentType.Text.Plain, HttpStatusCode.OK) { getTopicConfig(adminClient) }
+                        get("$REST_ENDPOINT/brokers/{brokerID}") {
+                            val brokerID = call.parameters["brokerID"] ?: throw IllegalArgumentException("Parameter brokerID not found")
+                            call.respondText(ContentType.Text.Plain, HttpStatusCode.OK) { getBrokerConfig(adminClient,brokerID) }
                         }
 
                     }

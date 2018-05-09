@@ -94,9 +94,9 @@ pipeline {
             }
         }
         success {
-            junit '**/build/test-results/junit-platform/*.xml'
+            //junit '**/build/test-results/junit-platform/*.xml'
             archive '**/build/libs/*'
-            archive '**/build/install/*'
+            //archive '**/build/install/*'
             deleteDir()
             githubStatus 'success'
             slackStatus status: 'success'
