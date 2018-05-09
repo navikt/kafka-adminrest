@@ -1,0 +1,42 @@
+image: "repo.adeo.no:5443/integrasjon/${application.name}"
+replicas:
+  min: 1
+  max: 1
+port: 8080
+healthcheck:
+  liveness:
+    path: /isAlive
+    # wait 30 seconds before trying to check status,
+    # and then try 30 times with 5 second intervals before
+    # killing the pod: 30 + 5*30 = 180 seconds before pod is killed
+    initialDelay: 30
+    periodSeconds: 5
+    failureThreshold: 30
+  readiness:
+    path: /isReady
+    initialDelay: 30
+    periodSeconds: 5
+    failureThreshold: 30
+prometheus:
+  enabled: true
+  path: /prometheus
+ingress:
+  enabled: false
+resources:
+  limits:
+    cpu: 250m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+fasitResources:
+  used:
+  - alias: ${service.user.credential}
+    resourceType: credential
+    propertyMap:
+      username: KAFKA_USER
+      password: KAFKA_PASSWORD
+  - alias: ${application.properties}
+    resourceType: ApplicationProperties
+
+
