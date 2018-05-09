@@ -1,19 +1,25 @@
 #!/usr/bin/env groovy
 
 pipeline {
-    agent { label 'erbeskær1' }
+    agent any
 
     environment {
-        APPLICATION_NAME = 'kafka.admin.client'
+        APPLICATION_NAME = 'kafka.adminclient'
+        GIT_PROJECT = 'INT'
         FASIT_ENV = 'q4'
+        ZONE = 'fss'
+        NAMESPACE = 'default'
     }
 
     stages {
-        stage('prepare') { steps { ciSkip action: 'check' } }
         stage('initialize') {
             steps {
                 script {
+                    sh './gradlew clean'
+                    applicationVersionGradle = sh(script: './gradlew -q printVersion', returnStdout: true).trim()
                     gitVars = utils.gitVars(env.APPLICATION_NAME)
+                    applicationVersion = "${applicationVersionGradle}.${env.BUILD_ID}-${gitVars.commitHashShort}"
+                    applicationFullName = "${env.APPLICATION_NAME}:${applicationVersion}"
                     utils.slackBuildStarted(env.APPLICATION_NAME, gitVars.changeLog.toString())
                     utils.githubCommitStatus(env.APPLICATION_NAME, gitVars.commitHash, "pending", "Build started")
                 }
@@ -22,11 +28,6 @@ pipeline {
         stage('build') {
             steps {
                 script {
-                    sh './gradlew clean'
-                    applicationVersionGradle = sh(script: './gradlew -q printVersion', returnStdout: true).trim()
-                    gitCommitHashShort = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    applicationVersion = "${applicationVersionGradle}"
-                    //applicationVersion = "${applicationVersionGradle}.${env.BUILD_ID}-${gitCommitHashShort}"
                     sh './gradlew build -x test'
                 }
             }
@@ -35,9 +36,11 @@ pipeline {
             steps {
                 script {
                     sh './gradlew test'
+                    utils.slackBuildPassed(env.APPLICATION_NAME)
                 }
             }
         }
+
         stage('generate executable FAT jar') {
             steps {
                 script {
@@ -45,87 +48,37 @@ pipeline {
                 }
             }
         }
-        stage('deploy') {
-            parallel {
-                stage('deploy bankkontonummer') {
-                    steps {
-                        script {
-                            def application = [
-                                    name       : 'kafka2jms-bankkontonr',
-                                    credential : 'srvkafka2jms-bankkontonr',
-                                    properties : 'bankkontonr_kafka_event',
-                                    channel    : 'kafka2jms-bankkontonr_channel',
-                                    outputQueue: 'eia_queue_mottak_online_inbound'
-                            ]
 
-                            applicationFullname = "${application.name}:${applicationVersion}"
-                            utils.dockerCreatePushImage(applicationFullname, gitCommitHashShort)
-                            utils.kafka2jmsBuildGeneric(application, applicationVersion, env.FASIT_ENV)
-                        }
-                    }
+        stage('push docker image') {
+            steps {
+                script {
+                    utils.dockerCreatePushImage(applicationFullName, gitVars.commitHash)
                 }
-                stage('deploy oppfolgingsplan') {
-                    steps {
-                        script {
-                            def application = [
-                                    name       : 'kafka2jms-oppfolgingsplan',
-                                    credential : 'srvkafka2jms-oppfolgingsplan',
-                                    properties : 'oppfolgingsplan_kafka_event',
-                                    channel    : 'kafka2jms-oppfolgingsplan_channel',
-                                    outputQueue: 'eia_queue_mottak_inbound'
-                            ]
-                            applicationFullname = "${application.name}:${applicationVersion}"
-                            utils.dockerCreatePushImage(applicationFullname, gitCommitHashShort)
-                            utils.kafka2jmsBuildGeneric(application, applicationVersion, env.FASIT_ENV)
-                        }
-                    }
+            }
+        }
+        stage('validate & upload nais.yaml to nexus m2internal') {
+            steps {
+                script {
+                    deploy.naisUploadYaml(env.APPLICATION_NAME, applicationVersion)
                 }
-                stage('deploy maalekort') {
-                    steps {
-                        script {
-                            def application = [
-                                    name       : 'kafka2jms-maalekort',
-                                    credential : 'srvkafka2jms-maalekort',
-                                    properties : 'maalekort_kafka_event',
-                                    channel    : 'kafka2jms-maalekort_channel',
-                                    outputQueue: 'mottak_queue_maalekort_meldinger'
-                            ]
-                            applicationFullname = "${application.name}:${applicationVersion}"
-                            utils.dockerCreatePushImage(applicationFullname, gitCommitHashShort)
-                            utils.kafka2jmsBuildGeneric(application, applicationVersion, env.FASIT_ENV)
+            }
+        }
+        stage('deploy to nais') {
+            steps {
+                script {
+                    response = deploy.naisDeployJira(env.APPLICATION_NAME, applicationVersion, env.FASIT_ENV, env.NAMESPACE, env.ZONE)
+                    def jiraIssueId = readJSON([text: response.content])["key"].toString()
+                    currentBuild.description = "Waiting for <a href=\"https://jira.adeo.no/browse/$jiraIssueId\">$jiraIssueId</a>"
+                    utils.slackBuildDeploying(env.APPLICATION_NAME, jiraIssueId)
+
+                    try {
+                        timeout(time: 1, unit: 'HOURS') {
+                            input id: "deploy", message: "Waiting for remote Jenkins server to deploy the application..."
                         }
-                    }
-                }
-                stage('deploy barnehageliste') {
-                    steps {
-                        script {
-                            def application = [
-                                    name       : 'kafka2jms-barnehageliste',
-                                    credential : 'srvkafka2jms-barnehageliste',
-                                    properties : 'barnehageliste_kafka_event',
-                                    channel    : 'kafka2jms-barnehageliste_channel',
-                                    outputQueue: 'BARNEHAGELISTER_FRA_ALTINN'
-                            ]
-                            applicationFullname = "${application.name}:${applicationVersion}"
-                            utils.dockerCreatePushImage(applicationFullname, gitCommitHashShort)
-                            utils.kafka2jmsBuildGeneric(application, applicationVersion, env.FASIT_ENV)
-                        }
-                    }
-                }
-                stage('deploy inntektsskjema') {
-                    steps {
-                        script {
-                            def application = [
-                                    name       : 'kafka2jms-inntektsskjema',
-                                    credential : 'srvkafka2jms-inntektsskjema',
-                                    properties : 'inntektsskjema_kafka_event',
-                                    channel    : 'kafka2jms-inntektsskjema_channel',
-                                    outputQueue: 'dokmot_ALTINNMOTTAK'
-                            ]
-                            applicationFullname = "${application.name}:${applicationVersion}"
-                            utils.dockerCreatePushImage(applicationFullname, gitCommitHashShort)
-                            utils.kafka2jmsBuildGeneric(application, applicationVersion, env.FASIT_ENV)
-                        }
+                        currentBuild.description = ""
+                    } catch (Exception exception) {
+                        currentBuild.description = "Deploy failed, see <a href=\"https://jira.adeo.no/browse/$jiraIssueId\">$jiraIssueId</a>"
+                        throw exception
                     }
                 }
             }
@@ -133,10 +86,15 @@ pipeline {
     }
     post {
         always {
-            ciSkip action: 'postProcess'
+            junit '**/build/test-results/junit-platform/*.xml'
+            archive '**/build/libs/*'
+            archive '**/build/install/*'
             deleteDir()
             script {
                 utils.dockerPruneBuilds()
+                if (currentBuild.result == 'ABORTED') {
+                    utils.slackBuildAborted(env.APPLICATION_NAME)
+                }
             }
         }
         success {

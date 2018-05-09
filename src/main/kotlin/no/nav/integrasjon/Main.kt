@@ -32,5 +32,7 @@ fun main(args: Array<String>) {
                 }
             }
 
+    // start application
+
     BootStrap.start(props)
 }
