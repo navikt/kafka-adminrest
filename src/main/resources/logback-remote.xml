@@ -4,10 +4,7 @@
         <encoder class="net.logstash.logback.encoder.LogstashEncoder" />
     </appender>
 
-    <logger name="org.apache.cxf.service.invoker.AbstractInvoker" level="OFF" />
-    <logger name="org.apache.cxf.services" level="WARN" additivity="false"/>
-
-    <logger name="no.nav.altinnkanal" level="INFO"/>
+    <logger name="no.nav.integrasjon" level="INFO"/>
 
     <root level="INFO">
         <appender-ref ref="stdout_json" />

@@ -1,4 +1,4 @@
-# kafka.adminclient
+# kafka-adminrest
 
 To be defined
 
