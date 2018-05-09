@@ -4,7 +4,7 @@ pipeline {
     agent any
 
     environment {
-        APPLICATION_NAME = 'kafka.adminclient'
+        APPLICATION_NAME = 'kafka-adminrest'
         FASIT_ENV = 'q4'
         ZONE = 'fss'
         NAMESPACE = 'default'
