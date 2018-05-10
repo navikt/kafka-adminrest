@@ -4,9 +4,12 @@ import io.ktor.application.ApplicationCall
 import io.ktor.application.call
 import io.ktor.http.HttpStatusCode
 import io.ktor.pipeline.PipelineContext
+import io.ktor.request.receive
 import io.ktor.response.respond
 import io.ktor.routing.Routing
 import io.ktor.routing.get
+import io.ktor.routing.post
+import kotlinx.coroutines.experimental.runBlocking
 import no.nav.integrasjon.api.v1.ACLS
 import no.nav.integrasjon.api.v1.BROKERS
 import no.nav.integrasjon.api.v1.TOPICS
@@ -21,14 +24,17 @@ import org.apache.kafka.common.resource.ResourceType
 fun Routing.kafkaAPI(adminClient: AdminClient) {
     getBrokers(adminClient)
     getBrokerConfig(adminClient)
+
     getTopics(adminClient)
     getTopicConfig(adminClient)
     getTopicAcl(adminClient)
+    postNewTopic(adminClient)
+
     getACLS(adminClient)
 }
 
 // simple class for kafka exceptions
-private data class KafkaError(val error: String)
+private data class Error(val error: String)
 
 // a wrapper for each call to AdminClient - used in routes
 private suspend fun PipelineContext<Unit, ApplicationCall>.kafka(block: () -> Any) =
@@ -36,7 +42,7 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.kafka(block: () -> An
             call.respond(block())
         }
         catch (e: Exception) {
-            call.respond(HttpStatusCode.ExceptionFailed, KafkaError("Could not get data from kafka env. - $e"))
+            call.respond(HttpStatusCode.ExceptionFailed, Error("Exception happened - $e"))
         }
 
 fun Routing.getBrokers(adminClient: AdminClient) =
@@ -65,6 +71,18 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
                         .values()
                         .entries
                         .map { Pair(it.key,it.value.get()) }
+            }
+        }
+// observe - json payload is only one NewTopic
+fun Routing.postNewTopic(adminClient: AdminClient) =
+        post(TOPICS) {
+            kafka {
+                runBlocking {
+                    adminClient.createTopics(mutableListOf(call.receive()))
+                            .values()
+                            .entries
+                            .map { Pair(it.key, it.value.get()) }
+                }
             }
         }
 
