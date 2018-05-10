@@ -75,7 +75,6 @@ fun Application.main() {
 
     install(ContentNegotiation) {
         gson {
-            setPrettyPrinting()
             serializeNulls()
         }
     }
