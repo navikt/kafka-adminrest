@@ -1,7 +1,10 @@
 package no.nav.integrasjon
 
+import com.fasterxml.jackson.databind.SerializationFeature
+import com.fasterxml.jackson.datatype.jsr310.*
 import io.ktor.application.*
 import io.ktor.features.*
+import io.ktor.gson.gson
 import io.ktor.http.*
 import io.ktor.response.*
 import io.ktor.routing.Routing
@@ -14,6 +17,7 @@ import no.nav.integrasjon.api.nais.client.getPrometheus
 import no.nav.integrasjon.api.v1.adminclient.kafkaAPI
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.slf4j.event.Level
 import java.util.*
 
 
@@ -58,11 +62,21 @@ fun Application.main() {
     install(ConditionalHeaders)
     install(Compression)
     install(AutoHeadResponse)
+    install(CallLogging) {
+        level = Level.INFO
+    }
     install(XForwardedHeadersSupport)
     install(StatusPages) {
         exception<Throwable> { cause ->
             environment.log.error(cause)
             call.respond(HttpStatusCode.InternalServerError)
+        }
+    }
+
+    install(ContentNegotiation) {
+        gson {
+            setPrettyPrinting()
+            serializeNulls()
         }
     }
 
@@ -74,8 +88,6 @@ fun Application.main() {
 
         kafkaAPI(adminClient)
     }
-
-    log.info { "ktor server ready" }
 }
 
 

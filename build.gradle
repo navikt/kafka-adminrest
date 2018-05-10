@@ -5,9 +5,10 @@ buildscript {
     ext.coroutines_version = '0.22.5'
     ext.kotlin_loggin_version = '1.5.3'
     ext.confluent_version = '4.0.0'
-    ext.ktor_version = '0.9.2-alpha-2'
+    ext.ktor_version = '0.9.2'
     ext.prometheus_version = '0.3.0'
     ext.logstash_encoder_version = '4.10'
+    ext.fjackson_datatype_version = '2.9.2'
 
     dependencies {
         classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.2'
@@ -78,12 +79,18 @@ configurations {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     implementation "org.jetbrains.kotlin:kotlin-reflect"
-    implementation "org.apache.kafka:kafka_2.12:$kafka_version"
-    implementation "io.github.microutils:kotlin-logging:$kotlin_loggin_version"
+
+    implementation "org.apache.kafka:kafka-clients:1.0.1"
     implementation "io.ktor:ktor-server-netty:$ktor_version"
+    implementation "io.ktor:ktor-gson:$ktor_version"
+
+    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$fjackson_datatype_version"
+
+    implementation "io.github.microutils:kotlin-logging:$kotlin_loggin_version"
     implementation "ch.qos.logback:logback-classic:1.2.3"
     implementation "org.slf4j:log4j-over-slf4j:1.7.25"
     implementation "net.logstash.logback:logstash-logback-encoder:$logstash_encoder_version"
+
     implementation "io.prometheus:simpleclient_common:$prometheus_version"
 
     testCompile "org.jetbrains.spek:spek-api:1.1.5"
