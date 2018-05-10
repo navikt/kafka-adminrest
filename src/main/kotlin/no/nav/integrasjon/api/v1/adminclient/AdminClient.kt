@@ -11,8 +11,11 @@ import no.nav.integrasjon.api.v1.ACLS
 import no.nav.integrasjon.api.v1.BROKERS
 import no.nav.integrasjon.api.v1.TOPICS
 import org.apache.kafka.clients.admin.AdminClient
+import org.apache.kafka.common.acl.AccessControlEntryFilter
 import org.apache.kafka.common.acl.AclBindingFilter
 import org.apache.kafka.common.config.ConfigResource
+import org.apache.kafka.common.resource.ResourceFilter
+import org.apache.kafka.common.resource.ResourceType
 
 // a wrapper for kafka api to be installed as routes
 fun Routing.kafkaAPI(adminClient: AdminClient) {
@@ -20,6 +23,7 @@ fun Routing.kafkaAPI(adminClient: AdminClient) {
     getBrokerConfig(adminClient)
     getTopics(adminClient)
     getTopicConfig(adminClient)
+    getTopicAcl(adminClient)
     getACLS(adminClient)
 }
 
@@ -61,6 +65,17 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
                         .values()
                         .entries
                         .map { Pair(it.key,it.value.get()) }
+            }
+        }
+
+fun Routing.getTopicAcl(adminClient: AdminClient) =
+        get("$TOPICS/{topicName}/acls") {
+            kafka {
+                adminClient.describeAcls(
+                        AclBindingFilter(
+                                ResourceFilter(ResourceType.TOPIC, call.parameters["topicName"]),
+                                AccessControlEntryFilter.ANY))
+                        .values().get()
             }
         }
 

@@ -1,7 +1,5 @@
 package no.nav.integrasjon
 
-import com.fasterxml.jackson.databind.SerializationFeature
-import com.fasterxml.jackson.datatype.jsr310.*
 import io.ktor.application.*
 import io.ktor.features.*
 import io.ktor.gson.gson
