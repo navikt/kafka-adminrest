@@ -6,17 +6,21 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.pipeline.PipelineContext
 import io.ktor.request.receive
 import io.ktor.response.respond
-import io.ktor.routing.Routing
-import io.ktor.routing.get
-import io.ktor.routing.post
+import io.ktor.routing.*
 import kotlinx.coroutines.experimental.runBlocking
 import no.nav.integrasjon.api.v1.ACLS
 import no.nav.integrasjon.api.v1.BROKERS
 import no.nav.integrasjon.api.v1.TOPICS
 import org.apache.kafka.clients.admin.AdminClient
+import org.apache.kafka.clients.admin.Config
+import org.apache.kafka.clients.admin.ConfigEntry
+import org.apache.kafka.clients.admin.NewTopic
+import org.apache.kafka.common.acl.AccessControlEntry
 import org.apache.kafka.common.acl.AccessControlEntryFilter
+import org.apache.kafka.common.acl.AclBinding
 import org.apache.kafka.common.acl.AclBindingFilter
 import org.apache.kafka.common.config.ConfigResource
+import org.apache.kafka.common.resource.Resource
 import org.apache.kafka.common.resource.ResourceFilter
 import org.apache.kafka.common.resource.ResourceType
 
@@ -26,9 +30,14 @@ fun Routing.kafkaAPI(adminClient: AdminClient) {
     getBrokerConfig(adminClient)
 
     getTopics(adminClient)
+    createNewTopic(adminClient)
+    deleteTopic(adminClient)
+
     getTopicConfig(adminClient)
-    getTopicAcl(adminClient)
-    postNewTopic(adminClient)
+    updateTopicConfig(adminClient)
+
+    getTopicAcls(adminClient)
+    createNewTopicAcl(adminClient)
 
     getACLS(adminClient)
 }
@@ -44,6 +53,12 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.kafka(block: () -> An
         catch (e: Exception) {
             call.respond(HttpStatusCode.ExceptionFailed, Error("Exception happened - $e"))
         }
+
+/**
+ * See https://kafka.apache.org/10/javadoc/index.html?org/apache/kafka/clients/admin/AdminClient.html
+ *
+ * Implementation of routes below are just using the AdminClient API
+ */
 
 fun Routing.getBrokers(adminClient: AdminClient) =
         get(BROKERS) { kafka { adminClient.describeCluster().nodes().get() } }
@@ -62,6 +77,44 @@ fun Routing.getBrokerConfig(adminClient: AdminClient) =
 
 fun Routing.getTopics(adminClient: AdminClient) = get(TOPICS) { kafka { adminClient.listTopics().listings().get() } }
 
+/**
+ * Observe - json payload is only one new topic at the time
+ * Example json payload: {"name":"test7","numPartitions":1,"replicationFactor":1}
+ */
+fun Routing.createNewTopic(adminClient: AdminClient) =
+        post(TOPICS) {
+            kafka {
+                runBlocking {
+                    val newTopic = call.receive<NewTopic>()
+                    // TODO - should we return new topic config instead? Reroute of use of admin client?
+                    adminClient.createTopics(mutableListOf(newTopic))
+                            .values()
+                            .entries
+                            .map { Pair(it.key, it.value.get()) }
+                }
+            }
+        }
+
+// TODO - need to clean up properly (delete related ACLs, Groups)
+/**
+ * Observe 1 - no payload, deletion of just one topic at the time
+ * Observe 2 - will take ´a little bit of time´ before the deleted topics is not showing up in topics list
+ */
+fun Routing.deleteTopic(adminClient: AdminClient) =
+        delete("$TOPICS/{topicName}") {
+            kafka {
+                adminClient.deleteTopics(listOf(call.parameters["topicName"]))
+                        .values()
+                        .entries
+                        .map { Pair(it.key, it.value.get()) }
+            }
+        }
+
+/**
+ * NB! The AdminClient is listing a config independent of the topic exists or not...
+ * TODO - should implement a test for existence
+ */
+
 fun Routing.getTopicConfig(adminClient: AdminClient) =
         get("$TOPICS/{topicName}") {
             kafka {
@@ -73,20 +126,30 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
                         .map { Pair(it.key,it.value.get()) }
             }
         }
-// observe - json payload is only one NewTopic
-fun Routing.postNewTopic(adminClient: AdminClient) =
-        post(TOPICS) {
+
+/**
+ * Observe - update of topic config with one ConfigEntry(name, value) at the time
+ * Please use getTopicConfig first in order to get an idea of which entry to update
+ */
+fun Routing.updateTopicConfig(adminClient: AdminClient) =
+        put("$TOPICS/{topicName}") {
             kafka {
                 runBlocking {
-                    adminClient.createTopics(mutableListOf(call.receive()))
+                    val configEntry = call.receive<ConfigEntry>()
+                    adminClient.alterConfigs(
+                            mutableMapOf(
+                                    ConfigResource(
+                                            ConfigResource.Type.TOPIC,
+                                            call.parameters["topicName"]) to Config(listOf(configEntry))))
                             .values()
                             .entries
-                            .map { Pair(it.key, it.value.get()) }
+                            .map { Pair(it.key,it.value.get()) }
                 }
             }
         }
 
-fun Routing.getTopicAcl(adminClient: AdminClient) =
+
+fun Routing.getTopicAcls(adminClient: AdminClient) =
         get("$TOPICS/{topicName}/acls") {
             kafka {
                 adminClient.describeAcls(
@@ -94,6 +157,23 @@ fun Routing.getTopicAcl(adminClient: AdminClient) =
                                 ResourceFilter(ResourceType.TOPIC, call.parameters["topicName"]),
                                 AccessControlEntryFilter.ANY))
                         .values().get()
+            }
+        }
+
+fun Routing.createNewTopicAcl(adminClient: AdminClient) =
+        post("$TOPICS/{topicName}/acls") {
+            kafka {
+                runBlocking {
+                    val accessControlEntry = call.receive<AccessControlEntry>()
+                    adminClient.createAcls(
+                            listOf(
+                                    AclBinding(
+                                            Resource(ResourceType.TOPIC, call.parameters["topicName"]),
+                                            accessControlEntry)))
+                            .values()
+                            .entries
+                            .map { Pair(it.key,it.value.get()) }
+                }
             }
         }
 
