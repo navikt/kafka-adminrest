@@ -1,5 +1,6 @@
 package no.nav.integrasjon.api.v1.adminclient
 
+import com.google.gson.annotations.SerializedName
 import io.ktor.application.ApplicationCall
 import io.ktor.application.call
 import io.ktor.http.HttpStatusCode
@@ -15,10 +16,7 @@ import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.Config
 import org.apache.kafka.clients.admin.ConfigEntry
 import org.apache.kafka.clients.admin.NewTopic
-import org.apache.kafka.common.acl.AccessControlEntry
-import org.apache.kafka.common.acl.AccessControlEntryFilter
-import org.apache.kafka.common.acl.AclBinding
-import org.apache.kafka.common.acl.AclBindingFilter
+import org.apache.kafka.common.acl.*
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.Resource
 import org.apache.kafka.common.resource.ResourceFilter
@@ -37,7 +35,8 @@ fun Routing.kafkaAPI(adminClient: AdminClient) {
     updateTopicConfig(adminClient)
 
     getTopicAcls(adminClient)
-    createNewTopicAcl(adminClient)
+    createNewTopicAcls(adminClient)
+    deleteTopicAcls(adminClient)
 
     getACLS(adminClient)
 }
@@ -160,22 +159,68 @@ fun Routing.getTopicAcls(adminClient: AdminClient) =
             }
         }
 
-fun Routing.createNewTopicAcl(adminClient: AdminClient) =
+private enum class Role {
+    @SerializedName("producer") PRODUCER,
+    @SerializedName("consumer") CONSUMER
+}
+private data class ACEntry(val role: Role, val groupName: String)
+
+fun Routing.createNewTopicAcls(adminClient: AdminClient) =
         post("$TOPICS/{topicName}/acls") {
             kafka {
                 runBlocking {
-                    val accessControlEntry = call.receive<AccessControlEntry>()
-                    adminClient.createAcls(
-                            listOf(
-                                    AclBinding(
-                                            Resource(ResourceType.TOPIC, call.parameters["topicName"]),
-                                            accessControlEntry)))
+
+                    val acEntry = call.receive<ACEntry>()
+                    val rsrc = Resource(ResourceType.TOPIC, call.parameters["topicName"])
+                    val acls = when(acEntry.role) {
+
+                        Role.PRODUCER -> mutableListOf(
+                                AclBinding(
+                                        rsrc,
+                                        AccessControlEntry(
+                                                acEntry.groupName,
+                                                "*",
+                                                AclOperation.WRITE,
+                                                AclPermissionType.ALLOW)))
+                        Role.CONSUMER -> mutableListOf(
+                                AclBinding(
+                                        rsrc,
+                                        AccessControlEntry(
+                                                acEntry.groupName,
+                                                "*",
+                                                AclOperation.READ,
+                                                AclPermissionType.ALLOW)))
+
+                    }.apply {
+                        this.add(AclBinding(
+                                rsrc,
+                                AccessControlEntry(
+                                        acEntry.groupName,
+                                        "*",
+                                        AclOperation.DESCRIBE,
+                                        AclPermissionType.ALLOW)))
+                    }
+
+                    adminClient.createAcls(acls.toList())
                             .values()
                             .entries
                             .map { Pair(it.key,it.value.get()) }
                 }
             }
         }
+
+fun Routing.deleteTopicAcls(adminClient: AdminClient) =
+        delete("$TOPICS/{topicName}/acls") {
+            kafka {
+                adminClient.deleteAcls(mutableListOf(AclBindingFilter(
+                        ResourceFilter(ResourceType.TOPIC, call.parameters["topicName"]),
+                        AccessControlEntryFilter.ANY)))
+                        .values()
+                        .entries
+                        .map { Pair(it.key,it.value.get()) }
+            }
+        }
+
 
 fun Routing.getACLS(adminClient: AdminClient) =
         get(ACLS) { kafka { adminClient.describeAcls(AclBindingFilter.ANY).values().get() } }
