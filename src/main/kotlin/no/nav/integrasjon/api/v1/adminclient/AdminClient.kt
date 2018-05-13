@@ -41,7 +41,7 @@ fun Routing.kafkaAPI(adminClient: AdminClient) {
     getACLS(adminClient)
 }
 
-// simple class for kafka exceptions
+// simple data class for exceptions
 private data class Error(val error: String)
 
 // a wrapper for each call to AdminClient - used in routes
@@ -77,26 +77,24 @@ fun Routing.getBrokerConfig(adminClient: AdminClient) =
 fun Routing.getTopics(adminClient: AdminClient) = get(TOPICS) { kafka { adminClient.listTopics().listings().get() } }
 
 /**
- * Observe - json payload is only one new topic at the time
+ * Observe - json payload is only one new topic at a time
  * Example json payload: {"name":"test7","numPartitions":1,"replicationFactor":1}
  */
 fun Routing.createNewTopic(adminClient: AdminClient) =
         post(TOPICS) {
             kafka {
-                runBlocking {
-                    val newTopic = call.receive<NewTopic>()
-                    // TODO - should we return new topic config instead? Reroute of use of admin client?
-                    adminClient.createTopics(mutableListOf(newTopic))
-                            .values()
-                            .entries
-                            .map { Pair(it.key, it.value.get()) }
-                }
+                val newTopic = runBlocking { call.receive<NewTopic>() }
+                // TODO - should we return new topic config instead? Reroute of use of admin client?
+                adminClient.createTopics(mutableListOf(newTopic))
+                        .values()
+                        .entries
+                        .map { Pair(it.key, it.value.get()) }
             }
         }
 
 // TODO - need to clean up properly (delete related ACLs, Groups)
 /**
- * Observe 1 - no payload, deletion of just one topic at the time
+ * Observe 1 - no payload, deletion of just one topic at a time
  * Observe 2 - will take ´a little bit of time´ before the deleted topics is not showing up in topics list
  */
 fun Routing.deleteTopic(adminClient: AdminClient) =
@@ -133,17 +131,15 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
 fun Routing.updateTopicConfig(adminClient: AdminClient) =
         put("$TOPICS/{topicName}") {
             kafka {
-                runBlocking {
-                    val configEntry = call.receive<ConfigEntry>()
-                    adminClient.alterConfigs(
-                            mutableMapOf(
-                                    ConfigResource(
-                                            ConfigResource.Type.TOPIC,
-                                            call.parameters["topicName"]) to Config(listOf(configEntry))))
-                            .values()
-                            .entries
-                            .map { Pair(it.key,it.value.get()) }
-                }
+                val configEntry = runBlocking { call.receive<ConfigEntry>() }
+            adminClient.alterConfigs(
+                    mutableMapOf(
+                            ConfigResource(
+                                    ConfigResource.Type.TOPIC,
+                                    call.parameters["topicName"]) to Config(listOf(configEntry))))
+                    .values()
+                    .entries
+                    .map { Pair(it.key,it.value.get()) }
             }
         }
 
@@ -159,53 +155,55 @@ fun Routing.getTopicAcls(adminClient: AdminClient) =
             }
         }
 
-private enum class Role {
+/*private enum class Role {
     @SerializedName("producer") PRODUCER,
     @SerializedName("consumer") CONSUMER
-}
-private data class ACEntry(val role: Role, val groupName: String)
+}*/
+private data class ACEntry(
+        val producerGroupName: String,
+        val consumerGroupName: String)
 
 fun Routing.createNewTopicAcls(adminClient: AdminClient) =
         post("$TOPICS/{topicName}/acls") {
             kafka {
-                runBlocking {
+                val acEntry = runBlocking { call.receive<ACEntry>() }
+                val rsrc = Resource(ResourceType.TOPIC, call.parameters["topicName"])
 
-                    val acEntry = call.receive<ACEntry>()
-                    val rsrc = Resource(ResourceType.TOPIC, call.parameters["topicName"])
-                    val acls = when(acEntry.role) {
-
-                        Role.PRODUCER -> mutableListOf(
-                                AclBinding(
-                                        rsrc,
-                                        AccessControlEntry(
-                                                acEntry.groupName,
-                                                "*",
-                                                AclOperation.WRITE,
-                                                AclPermissionType.ALLOW)))
-                        Role.CONSUMER -> mutableListOf(
-                                AclBinding(
-                                        rsrc,
-                                        AccessControlEntry(
-                                                acEntry.groupName,
-                                                "*",
-                                                AclOperation.READ,
-                                                AclPermissionType.ALLOW)))
-
-                    }.apply {
-                        this.add(AclBinding(
+                val acls = mutableListOf(
+                        AclBinding(
                                 rsrc,
                                 AccessControlEntry(
-                                        acEntry.groupName,
+                                        acEntry.producerGroupName,
+                                        "*",
+                                        AclOperation.WRITE,
+                                        AclPermissionType.ALLOW)),
+                        AclBinding(
+                                rsrc,
+                                AccessControlEntry(
+                                        acEntry.producerGroupName,
                                         "*",
                                         AclOperation.DESCRIBE,
-                                        AclPermissionType.ALLOW)))
-                    }
+                                        AclPermissionType.ALLOW)),
+                        AclBinding(
+                                rsrc,
+                                AccessControlEntry(
+                                        acEntry.consumerGroupName,
+                                        "*",
+                                        AclOperation.READ,
+                                        AclPermissionType.ALLOW)),
+                        AclBinding(
+                                rsrc,
+                                AccessControlEntry(
+                                        acEntry.consumerGroupName,
+                                        "*",
+                                        AclOperation.DESCRIBE,
+                                        AclPermissionType.ALLOW))
+                        )
 
-                    adminClient.createAcls(acls.toList())
-                            .values()
-                            .entries
-                            .map { Pair(it.key,it.value.get()) }
-                }
+                adminClient.createAcls(acls.toList())
+                        .values()
+                        .entries
+                        .map { Pair(it.key,it.value.get()) }
             }
         }
 
