@@ -127,6 +127,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
 /**
  * Observe - update of topic config with one ConfigEntry(name, value) at the time
  * Please use getTopicConfig first in order to get an idea of which entry to update
+ * e.g. {"name": "retention.ms","value": "3600000"}
  */
 fun Routing.updateTopicConfig(adminClient: AdminClient) =
         put("$TOPICS/{topicName}") {
@@ -159,6 +160,14 @@ fun Routing.getTopicAcls(adminClient: AdminClient) =
     @SerializedName("producer") PRODUCER,
     @SerializedName("consumer") CONSUMER
 }*/
+
+/**
+ * E.g. {
+"producerGroupName": "User:ktprodTest",
+"consumerGroupName": "User:ktconsTest"
+}
+ */
+
 private data class ACEntry(
         val producerGroupName: String,
         val consumerGroupName: String)
