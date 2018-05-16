@@ -13,6 +13,7 @@ import no.nav.integrasjon.api.nais.client.getIsAlive
 import no.nav.integrasjon.api.nais.client.getIsReady
 import no.nav.integrasjon.api.nais.client.getPrometheus
 import no.nav.integrasjon.api.v1.adminclient.kafkaAPI
+import no.nav.integrasjon.api.v1.ldap.ldapAPI
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.slf4j.event.Level
@@ -84,6 +85,7 @@ fun Application.main() {
         getPrometheus(collectorRegistry)
 
         kafkaAPI(adminClient)
+        ldapAPI(FasitProperties())
     }
 }
 

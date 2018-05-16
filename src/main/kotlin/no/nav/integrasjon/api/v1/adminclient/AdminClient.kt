@@ -1,6 +1,5 @@
 package no.nav.integrasjon.api.v1.adminclient
 
-import com.google.gson.annotations.SerializedName
 import io.ktor.application.ApplicationCall
 import io.ktor.application.call
 import io.ktor.http.HttpStatusCode
@@ -10,6 +9,7 @@ import io.ktor.response.respond
 import io.ktor.routing.*
 import kotlinx.coroutines.experimental.runBlocking
 import no.nav.integrasjon.api.v1.ACLS
+import no.nav.integrasjon.api.v1.AnError
 import no.nav.integrasjon.api.v1.BROKERS
 import no.nav.integrasjon.api.v1.TOPICS
 import org.apache.kafka.clients.admin.AdminClient
@@ -41,16 +41,13 @@ fun Routing.kafkaAPI(adminClient: AdminClient) {
     getACLS(adminClient)
 }
 
-// simple data class for exceptions
-private data class Error(val error: String)
-
 // a wrapper for each call to AdminClient - used in routes
 private suspend fun PipelineContext<Unit, ApplicationCall>.kafka(block: () -> Any) =
         try {
             call.respond(block())
         }
         catch (e: Exception) {
-            call.respond(HttpStatusCode.ExceptionFailed, Error("Exception happened - $e"))
+            call.respond(HttpStatusCode.ExceptionFailed, AnError("Exception happened - $e"))
         }
 
 /**

@@ -81,6 +81,7 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-reflect"
 
     implementation "org.apache.kafka:kafka-clients:1.0.1"
+    implementation "com.unboundid:unboundid-ldapsdk:4.0.5"
     implementation "io.ktor:ktor-server-netty:$ktor_version"
     implementation "io.ktor:ktor-gson:$ktor_version"
 

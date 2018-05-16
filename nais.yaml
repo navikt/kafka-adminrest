@@ -36,6 +36,11 @@ fasitResources:
     propertyMap:
       username: KAFKA_USER
       password: KAFKA_PASSWORD
+  - alias: srvkafkaadadm_credential
+    resourceType: credential
+    propertyMap:
+      username: LDAP_USER
+      password: LDAP_PASSWORD
   - alias: kafka-adminrest-aprops
     resourceType: ApplicationProperties
 
