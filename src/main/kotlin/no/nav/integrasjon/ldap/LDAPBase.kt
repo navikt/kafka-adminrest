@@ -97,7 +97,7 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
                                     SearchScope.ONE,
                                     Filter.createEqualityFilter(
                                             "objectClass",
-                                            "groupOfUniqueNames"),
+                                            "group"),
                                     config.ldapGroupAttrName)
                     )
                     .searchEntries.map { it.getAttribute(config.ldapGroupAttrName).value}
@@ -110,7 +110,11 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
                             newGroupAttr.toMutableList().apply {
                                 add(Attribute("cn","$prefix$topicName"))
                                 add(Attribute("sAMAccountName","$prefix$topicName"))
-                            }))
+                            }).also {
+                        log.info { "Creating group: $it" }
+                        it
+                    }
+            )
         }
         catch (e: LDAPException) {
             log.error { "Sorry, exception happened - $e" }
