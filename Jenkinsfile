@@ -5,7 +5,7 @@ pipeline {
 
     environment {
         APPLICATION_NAME = 'kafka-adminrest'
-        FASIT_ENV = 'q4'
+        FASIT_ENV = 't4'
         ZONE = 'fss'
         NAMESPACE = 'default'
     }
