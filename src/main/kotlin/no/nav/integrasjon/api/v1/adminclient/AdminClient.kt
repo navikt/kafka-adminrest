@@ -1,6 +1,7 @@
 package no.nav.integrasjon.api.v1.adminclient
 
 import io.ktor.application.ApplicationCall
+import io.ktor.application.application
 import io.ktor.application.call
 import io.ktor.http.HttpStatusCode
 import io.ktor.pipeline.PipelineContext
@@ -47,7 +48,8 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.kafka(block: () -> An
             call.respond(block())
         }
         catch (e: Exception) {
-            call.respond(HttpStatusCode.ExceptionFailed, AnError("Exception happened - $e"))
+            application.environment.log.error("Sorry, exception happened - $e")
+            call.respond(HttpStatusCode.ExceptionFailed, AnError("Sorry, exception happened - $e"))
         }
 
 /**

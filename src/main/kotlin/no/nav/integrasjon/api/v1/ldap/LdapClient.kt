@@ -8,9 +8,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.pipeline.PipelineContext
 import io.ktor.request.receive
 import io.ktor.response.respond
-import io.ktor.routing.Routing
-import io.ktor.routing.get
-import io.ktor.routing.put
+import io.ktor.routing.*
 import kotlinx.coroutines.experimental.runBlocking
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.api.v1.AnError
@@ -21,6 +19,9 @@ import no.nav.integrasjon.ldap.LDAPBase
 fun Routing.ldapAPI(config: FasitProperties) {
 
     getGroups(config)
+    createGroups(config)
+    deleteGroup(config)
+
     getGroupMembers(config)
     updateGroupMembers(config)
 }
@@ -34,10 +35,27 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.ldap(config: FasitPro
         }
         catch (e: Exception) {
             application.environment.log.error("Sorry, exception happened - $e")
-            call.respond(HttpStatusCode.ExceptionFailed, AnError("Exception happened - $e"))
+            call.respond(HttpStatusCode.ExceptionFailed, AnError("Sorry, exception happened - $e"))
         }
 
 fun Routing.getGroups(config: FasitProperties) = get("$GROUPS") { ldap(config) { lc -> lc.getKafkaGroups() } }
+
+data class ManageGroup(val topicName: String)
+
+fun Routing.createGroups(config: FasitProperties) =
+        post("$GROUPS") {
+            ldap(config) { lc ->
+
+                val group = runBlocking { call.receive<ManageGroup>() }
+                lc.createKafkaGroups(group.topicName)
+            } }
+
+fun Routing.deleteGroup(config: FasitProperties) =
+        delete("$GROUPS/{groupName}") {
+            ldap(config) { lc ->
+                call.parameters["groupName"]?.let { lc.deleteKafkaGroups(it) } ?: emptyList<String>()
+            }
+        }
 
 fun Routing.getGroupMembers(config: FasitProperties) =
         get("$GROUPS/{groupName}") {
@@ -45,7 +63,6 @@ fun Routing.getGroupMembers(config: FasitProperties) =
             call.parameters["groupName"]?.let { lc.getKafkaGroupMembers(it) } ?: emptyList<String>()
             }
         }
-
 
 enum class Operation {
     @SerializedName("add") ADD,
