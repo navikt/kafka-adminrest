@@ -1,9 +1,13 @@
 package no.nav.integrasjon
 
 import io.ktor.application.*
+import io.ktor.auth.Authentication
+import io.ktor.auth.UserIdPrincipal
+import io.ktor.auth.basic
 import io.ktor.features.*
 import io.ktor.gson.gson
 import io.ktor.http.*
+import io.ktor.request.path
 import io.ktor.response.*
 import io.ktor.routing.Routing
 import io.ktor.util.*
@@ -12,8 +16,11 @@ import mu.KotlinLogging
 import no.nav.integrasjon.api.nais.client.getIsAlive
 import no.nav.integrasjon.api.nais.client.getIsReady
 import no.nav.integrasjon.api.nais.client.getPrometheus
+import no.nav.integrasjon.api.v1.API_V1
 import no.nav.integrasjon.api.v1.adminclient.kafkaAPI
+import no.nav.integrasjon.api.v1.adminclient.kafkaAndLdapAPI
 import no.nav.integrasjon.api.v1.ldap.ldapAPI
+import no.nav.integrasjon.ldap.LDAPBase
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.slf4j.event.Level
@@ -35,7 +42,7 @@ fun Application.main() {
         }
 
         if (fp.kafkaSecurityEnabled() && !fp.kafkaSecurityComplete()) {
-            log.error { "Kafka security enable, but incomplete kafka security settings - $fp" }
+            log.error { "Kafka security enabled, but incomplete kafka security settings - $fp" }
             return
         }
 
@@ -63,12 +70,27 @@ fun Application.main() {
     install(AutoHeadResponse)
     install(CallLogging) {
         level = Level.INFO
+        filter { call -> call.request.path().startsWith(API_V1) }
     }
     install(XForwardedHeadersSupport)
     install(StatusPages) {
         exception<Throwable> { cause ->
             environment.log.error(cause)
             call.respond(HttpStatusCode.InternalServerError)
+        }
+    }
+
+    install(Authentication) {
+        basic(name = "basicAuth") {
+            realm = "Ktor Server"
+            validate { credentials ->
+                LDAPBase(FasitProperties()).use { ldap ->
+                        if (ldap.canUserAuthenticate(credentials.name, credentials.password))
+                            UserIdPrincipal(credentials.name)
+                        else
+                            null
+                }
+            }
         }
     }
 
@@ -86,6 +108,8 @@ fun Application.main() {
 
         kafkaAPI(adminClient)
         ldapAPI(FasitProperties())
+
+        kafkaAndLdapAPI(adminClient, FasitProperties())
     }
 }
 

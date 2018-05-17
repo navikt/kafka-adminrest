@@ -40,6 +40,6 @@ fun FasitProperties.kafkaSecurityComplete(): Boolean =
 
 fun FasitProperties.userDN(user: String) = "$ldapUserAttrName=$user,$ldapUserBase"
 
-fun FasitProperties.srvUserDN(user: String) = "$ldapUserAttrName=$user,$ldapSrvUserBase"
+fun FasitProperties.srvUserDN() = "$ldapUserAttrName=$ldapUser,$ldapSrvUserBase"
 
 fun FasitProperties.groupDN(groupName: String) = "$ldapGroupAttrName=$groupName,$ldapGroupBase"

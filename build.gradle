@@ -82,8 +82,10 @@ dependencies {
 
     implementation "org.apache.kafka:kafka-clients:1.0.1"
     implementation "com.unboundid:unboundid-ldapsdk:4.0.5"
+
     implementation "io.ktor:ktor-server-netty:$ktor_version"
     implementation "io.ktor:ktor-gson:$ktor_version"
+    implementation "io.ktor:ktor-auth:$ktor_version"
 
     implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$fjackson_datatype_version"
 
