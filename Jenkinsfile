@@ -8,51 +8,41 @@ pipeline {
         FASIT_ENV = 't4'
         ZONE = 'fss'
         NAMESPACE = 'default'
+        COMMIT_HASH_SHORT = gitVars 'commitHashShort'
+        COMMIT_HASH = gitVars 'commitHash'
     }
 
     stages {
-        stage('prepare') {
-            steps {
-                ciSkip 'check'
-            }
-        }
         stage('initialize') {
             steps {
+                ciSkip 'check'
+                sh './gradlew clean'
                 script {
-                    sh './gradlew clean'
                     applicationVersionGradle = sh(script: './gradlew -q printVersion', returnStdout: true).trim()
-                    env.COMMIT_HASH = gitVars 'commitHash'
-                    env.COMMIT_HASH_SHORT = gitVars 'commitHashShort'
                     env.APPLICATION_VERSION = "${applicationVersionGradle}"
                     if (applicationVersionGradle.endsWith('-SNAPSHOT')) {
                         env.APPLICATION_VERSION = "${applicationVersionGradle}.${env.BUILD_ID}-${env.COMMIT_HASH_SHORT}"
                     }
-                    changeLog = utils.gitVars(env.APPLICATION_NAME).changeLog
+                    changeLog = utils.gitVars(env.APPLICATION_NAME).changeLog.toString()
                     githubStatus 'pending'
-                    slackStatus status: 'started', changeLog: "${changeLog.toString()}"
+                    slackStatus status: 'started', changeLog: "${changeLog}"
                 }
             }
         }
         stage('build') {
             steps {
-                script {
-                    sh './gradlew build -x test'
-                }
+                sh './gradlew build -x test'
             }
         }
         stage('run tests (unit & intergration)') {
             steps {
-                script {
-                    sh './gradlew test'
-                }
+                sh './gradlew test'
                 slackStatus status: 'passed'
             }
         }
         stage('generate executable FAT jar') {
             steps {
-                script {
-                    sh './gradlew shadowJar'
-                }
+                sh './gradlew shadowJar'
             }
         }
         stage('push docker image') {
@@ -97,9 +87,9 @@ pipeline {
             //junit '**/build/test-results/junit-platform/*.xml'
             archive '**/build/libs/*'
             //archive '**/build/install/*'
-            deleteDir()
             githubStatus 'success'
             slackStatus status: 'success'
+            deleteDir()
         }
         failure {
             githubStatus 'failure'
