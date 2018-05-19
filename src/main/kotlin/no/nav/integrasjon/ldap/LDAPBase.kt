@@ -5,8 +5,8 @@ import com.unboundid.util.ssl.SSLUtil
 import com.unboundid.util.ssl.TrustAllTrustManager
 import mu.KotlinLogging
 import no.nav.integrasjon.FasitProperties
-import no.nav.integrasjon.api.v1.ldap.Operation
-import no.nav.integrasjon.api.v1.ldap.UpdateGroupMember
+import no.nav.integrasjon.api.v1.Operation
+import no.nav.integrasjon.api.v1.UpdateGroupMember
 import no.nav.integrasjon.groupDN
 import no.nav.integrasjon.srvUserDN
 import no.nav.integrasjon.userDN
@@ -96,13 +96,23 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
                     )
                     .searchEntries.map { it.getAttribute(config.ldapGroupAttrName).value}
 
-    fun createKafkaGroups(topicName: String): Collection<Pair<String,LDAPResult>> =
+    /**
+     * CreateKafkaGroups
+     * Each topic has 2 groups
+     * - a producer group with members allowed to produce events to topic
+     * - a consumer group with members allowed to consume events from topic
+     *
+     * The result is a collection of data class KafkaGroup
+     */
+    data class KafkaGroup(val name: String, val result: LDAPResult)
+
+    fun createKafkaGroups(topicName: String): Collection<KafkaGroup> =
             listOf(PRODUCER_PREFIX, CONSUMER_PREFIX).map { prefix ->
                 val groupName = toGroupName(prefix,topicName)
                 val groupDN = config.groupDN(groupName)
 
                 try {
-                    Pair(
+                    KafkaGroup(
                             groupName,
                             ldapConnection.add(
                                     AddRequest(
@@ -116,7 +126,7 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
                 }
                 catch (e: LDAPException) {
                     log.error { "Sorry, exception happened - $e" }
-                    Pair(groupName,e.toLDAPResult())
+                    KafkaGroup(groupName,e.toLDAPResult())
                 }
     }
 

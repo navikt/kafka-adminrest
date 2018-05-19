@@ -1,20 +1,14 @@
-package no.nav.integrasjon.api.v1.adminclient
+package no.nav.integrasjon.api.v1
 
-import io.ktor.application.ApplicationCall
 import io.ktor.application.application
 import io.ktor.application.call
 import io.ktor.auth.authenticate
-import io.ktor.http.HttpStatusCode
-import io.ktor.pipeline.PipelineContext
+import io.ktor.auth.authentication
 import io.ktor.request.receive
-import io.ktor.response.respond
 import io.ktor.routing.*
 import kotlinx.coroutines.experimental.runBlocking
+import no.nav.integrasjon.AUTHENTICATION_BASIC
 import no.nav.integrasjon.FasitProperties
-import no.nav.integrasjon.api.v1.ACLS
-import no.nav.integrasjon.api.v1.AnError
-import no.nav.integrasjon.api.v1.BROKERS
-import no.nav.integrasjon.api.v1.TOPICS
 import no.nav.integrasjon.ldap.LDAPBase
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.Config
@@ -27,83 +21,81 @@ import org.apache.kafka.common.resource.ResourceFilter
 import org.apache.kafka.common.resource.ResourceType
 
 // a wrapper for kafka api to be installed as routes
-fun Routing.kafkaAPI(adminClient: AdminClient) {
-
-    getBrokers(adminClient)
-    getBrokerConfig(adminClient)
+fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
 
     getTopics(adminClient)
+    createNewTopic(adminClient, config)
     deleteTopic(adminClient)
 
     getTopicConfig(adminClient)
     updateTopicConfig(adminClient)
 
     getTopicAcls(adminClient)
-    createGroupsAndAcls(adminClient)
-    deleteTopicAcls(adminClient)
-
-    getACLS(adminClient)
-}
-
-fun Routing.kafkaAndLdapAPI(adminClient: AdminClient, config: FasitProperties) {
-
-    createNewTopic(adminClient, config)
+    //getTopicGroups(config) TODO - must implement
+    //deleteTopicAcls(adminClient) // TODO - to be deleted
 
 }
-
-// a wrapper for each call to AdminClient - used in routes
-private suspend fun PipelineContext<Unit, ApplicationCall>.kafka(block: () -> Any) =
-        try {
-            call.respond(block())
-        }
-        catch (e: Exception) {
-            application.environment.log.error("Sorry, exception happened - $e")
-            call.respond(HttpStatusCode.ExceptionFailed, AnError("Sorry, exception happened - $e"))
-        }
-
-/**
- * See https://kafka.apache.org/10/javadoc/index.html?org/apache/kafka/clients/admin/AdminClient.html
- *
- * Implementation of routes below are just using the AdminClient API
- */
-
-fun Routing.getBrokers(adminClient: AdminClient) =
-        get(BROKERS) { kafka { adminClient.describeCluster().nodes().get() } }
-
-
-fun Routing.getBrokerConfig(adminClient: AdminClient) =
-        get("$BROKERS/{brokerID}") {
-            kafka {
-                adminClient.describeConfigs(mutableListOf(ConfigResource(
-                    ConfigResource.Type.BROKER,
-                    call.parameters["brokerID"])))
-                    .values()
-                    .entries
-                    .map { Pair(it.key,it.value.get()) } }
-        }
 
 fun Routing.getTopics(adminClient: AdminClient) =
-        authenticate("basicAuth") { get(TOPICS) { kafka { adminClient.listTopics().listings().get() } } }
+        get(TOPICS) {
+            respondAndCatch {
+                adminClient.listTopics().listings().get()
+            }
+        }
+
 
 /**
- * Observe - json payload is only one new topic at a time
- * Example json payload: {"name":"test7","numPartitions":1,"replicationFactor":1}
+ * Observe - json payload is only one new topic at a time - NewTopic
+ * e.g. {"name":"aTopicName","numPartitions":1,"replicationFactor":1}
  */
 fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
-        authenticate("basicAuth") {
+        authenticate(AUTHENTICATION_BASIC) {
             post(TOPICS) {
-                kafka {
+                respondAndCatch {
                     val newTopic = runBlocking { call.receive<NewTopic>() }
-                    // TODO - should we return new topic config instead? Reroute of use of admin client?
-
+                    val logEntry = "Topic creation by ${this.context.authentication.principal} - $newTopic"
+                    application.environment.log.info(logEntry)
                         adminClient.createTopics(mutableListOf(newTopic))
                                 .values()
-                                .entries
-                                .map { Pair(it.key, it.value.get()) }
+                                .entries.first()
+                                //.map { Pair(it.key, it.value.get()) }
                                 .also { createGroupsAndAcls(adminClient, config, newTopic.name()) }
                 }
             }
         }
+
+private fun createGroupsAndAcls(adminClient: AdminClient, config: FasitProperties, topicName: String) {
+
+    val rsrc = Resource(ResourceType.TOPIC, topicName)
+
+    val ldapGroups = LDAPBase(config).use { ldap -> ldap.createKafkaGroups(topicName) }
+
+    val acls = ldapGroups.map { kafkaGroup ->
+        val principal = "Group:${kafkaGroup.name}"
+        listOf(
+                AclBinding(
+                        rsrc,
+                        AccessControlEntry(
+                                principal,
+                                "*",
+                                AclOperation.WRITE,
+                                AclPermissionType.ALLOW)),
+                AclBinding(
+                        rsrc,
+                        AccessControlEntry(
+                                principal,
+                                "*",
+                                AclOperation.DESCRIBE,
+                                AclPermissionType.ALLOW))
+        )
+    }.flatMap { it }
+
+    adminClient.createAcls(acls)
+            .values()
+            .entries
+            .map { Pair(it.key,it.value.get()) }
+
+}
 
 // TODO - need to clean up properly (delete related ACLs, Groups)
 /**
@@ -112,11 +104,12 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
  */
 fun Routing.deleteTopic(adminClient: AdminClient) =
         delete("$TOPICS/{topicName}") {
-            kafka {
+            respondAndCatch {
                 adminClient.deleteTopics(listOf(call.parameters["topicName"]))
                         .values()
                         .entries
                         .map { Pair(it.key, it.value.get()) }
+                        //.also { deleteGroupsAndAcls() }
             }
         }
 
@@ -127,7 +120,7 @@ fun Routing.deleteTopic(adminClient: AdminClient) =
 
 fun Routing.getTopicConfig(adminClient: AdminClient) =
         get("$TOPICS/{topicName}") {
-            kafka {
+            respondAndCatch {
                 adminClient.describeConfigs(mutableListOf(ConfigResource(
                         ConfigResource.Type.TOPIC,
                         call.parameters["topicName"])))
@@ -137,6 +130,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
             }
         }
 
+// TODO - restrict the update options...
 /**
  * Observe - update of topic config with one ConfigEntry(name, value) at the time
  * Please use getTopicConfig first in order to get an idea of which entry to update
@@ -144,7 +138,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
  */
 fun Routing.updateTopicConfig(adminClient: AdminClient) =
         put("$TOPICS/{topicName}") {
-            kafka {
+            respondAndCatch {
                 val configEntry = runBlocking { call.receive<ConfigEntry>() }
             adminClient.alterConfigs(
                     mutableMapOf(
@@ -160,7 +154,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient) =
 
 fun Routing.getTopicAcls(adminClient: AdminClient) =
         get("$TOPICS/{topicName}/acls") {
-            kafka {
+            respondAndCatch {
                 adminClient.describeAcls(
                         AclBindingFilter(
                                 ResourceFilter(ResourceType.TOPIC, call.parameters["topicName"]),
@@ -185,9 +179,9 @@ private data class ACEntry(
         val producerGroupName: String,
         val consumerGroupName: String)
 
-fun Routing.createGroupsAndAcls(adminClient: AdminClient) =
+/*fun Routing.createGroupsAndAcls(adminClient: AdminClient) =
         post("$TOPICS/{topicName}/acls") {
-            kafka {
+            respondAndCatch {
                 val acEntry = runBlocking { call.receive<ACEntry>() }
                 val rsrc = Resource(ResourceType.TOPIC, call.parameters["topicName"])
 
@@ -227,43 +221,13 @@ fun Routing.createGroupsAndAcls(adminClient: AdminClient) =
                         .entries
                         .map { Pair(it.key,it.value.get()) }
             }
-        }
+        }*/
 
-private fun createGroupsAndAcls(adminClient: AdminClient, config: FasitProperties, topicName: String) {
 
-    val rsrc = Resource(ResourceType.TOPIC, topicName)
 
-    val ldapGroups = LDAPBase(config).use { ldap -> ldap.createKafkaGroups(topicName) }
-
-    val acls = ldapGroups.map {
-        listOf(
-                AclBinding(
-                    rsrc,
-                    AccessControlEntry(
-                        "Group:${it.first}",
-                        "*",
-                        AclOperation.WRITE,
-                        AclPermissionType.ALLOW)),
-                AclBinding(
-                    rsrc,
-                    AccessControlEntry(
-                        "Group:${it.first}",
-                        "*",
-                        AclOperation.DESCRIBE,
-                        AclPermissionType.ALLOW))
-        )
-    }.flatMap { it }
-
-    adminClient.createAcls(acls)
-            .values()
-            .entries
-            .map { Pair(it.key,it.value.get()) }
-
-}
-
-fun Routing.deleteTopicAcls(adminClient: AdminClient) =
+/*fun Routing.deleteTopicAcls(adminClient: AdminClient) =
         delete("$TOPICS/{topicName}/acls") {
-            kafka {
+            respondAndCatch {
                 adminClient.deleteAcls(mutableListOf(AclBindingFilter(
                         ResourceFilter(ResourceType.TOPIC, call.parameters["topicName"]),
                         AccessControlEntryFilter.ANY)))
@@ -271,8 +235,4 @@ fun Routing.deleteTopicAcls(adminClient: AdminClient) =
                         .entries
                         .map { Pair(it.key,it.value.get()) }
             }
-        }
-
-
-fun Routing.getACLS(adminClient: AdminClient) =
-        get(ACLS) { kafka { adminClient.describeAcls(AclBindingFilter.ANY).values().get() } }
+        }*/

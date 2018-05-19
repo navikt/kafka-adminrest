@@ -17,15 +17,17 @@ import no.nav.integrasjon.api.nais.client.getIsAlive
 import no.nav.integrasjon.api.nais.client.getIsReady
 import no.nav.integrasjon.api.nais.client.getPrometheus
 import no.nav.integrasjon.api.v1.API_V1
-import no.nav.integrasjon.api.v1.adminclient.kafkaAPI
-import no.nav.integrasjon.api.v1.adminclient.kafkaAndLdapAPI
-import no.nav.integrasjon.api.v1.ldap.ldapAPI
+import no.nav.integrasjon.api.v1.aclAPI
+import no.nav.integrasjon.api.v1.topicsAPI
+import no.nav.integrasjon.api.v1.brokersAPI
+import no.nav.integrasjon.api.v1.groupsAPI
 import no.nav.integrasjon.ldap.LDAPBase
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.slf4j.event.Level
 import java.util.*
 
+const val AUTHENTICATION_BASIC = "basicAuth"
 
 fun Application.main() {
 
@@ -46,6 +48,10 @@ fun Application.main() {
             return
         }
 
+        /**
+         * All kafka operations are managed via kafka AdminClient
+         * See https://kafka.apache.org/10/javadoc/index.html?org/apache/kafka/clients/admin/AdminClient.html
+         */
         log.info { "Creating kafka admin client" }
 
         AdminClient.create(Properties()
@@ -72,7 +78,7 @@ fun Application.main() {
         level = Level.INFO
         filter { call -> call.request.path().startsWith(API_V1) }
     }
-    install(XForwardedHeadersSupport)
+    //install(XForwardedHeadersSupport) - is this needed, and supported in reverse proxy in matter?
     install(StatusPages) {
         exception<Throwable> { cause ->
             environment.log.error(cause)
@@ -81,7 +87,7 @@ fun Application.main() {
     }
 
     install(Authentication) {
-        basic(name = "basicAuth") {
+        basic(name = AUTHENTICATION_BASIC) {
             realm = "Ktor Server"
             validate { credentials ->
                 LDAPBase(FasitProperties()).use { ldap ->
@@ -102,14 +108,16 @@ fun Application.main() {
 
     log.info { "Installing ktor routes" }
     install(Routing) {
+        // support classic nais requirements
         getIsAlive()
         getIsReady()
         getPrometheus(collectorRegistry)
 
-        kafkaAPI(adminClient)
-        ldapAPI(FasitProperties())
-
-        kafkaAndLdapAPI(adminClient, FasitProperties())
+        // provide the essential, management of kafka environment, topic creation and authorization
+        topicsAPI(adminClient, FasitProperties())
+        brokersAPI(adminClient)
+        aclAPI(adminClient)
+        groupsAPI(FasitProperties())
     }
 }
 
