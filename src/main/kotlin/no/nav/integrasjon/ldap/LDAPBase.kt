@@ -96,23 +96,34 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
                     )
                     .searchEntries.map { it.getAttribute(config.ldapGroupAttrName).value}
 
+
     /**
-     * CreateKafkaGroups
+     * Enum class KafkaGroupType with LDAP group prefix included
      * Each topic has 2 groups
      * - a producer group with members allowed to produce events to topic
      * - a consumer group with members allowed to consume events from topic
-     *
-     * The result is a collection of data class KafkaGroup
      */
-    data class KafkaGroup(val name: String, val result: LDAPResult)
+    enum class KafkaGroupType(val prefix: String) {
+        PRODUCER("KAFKA_PRODUCER_"),
+        CONSUMER("KAFKA_CONSUMER_")
+    }
+
+    /**
+     * data class KafkaGroup as result from a couple of functions
+     */
+    data class KafkaGroup(
+            val groupType: KafkaGroupType,
+            val name: String,
+            val result: LDAPResult)
 
     fun createKafkaGroups(topicName: String): Collection<KafkaGroup> =
-            listOf(PRODUCER_PREFIX, CONSUMER_PREFIX).map { prefix ->
-                val groupName = toGroupName(prefix,topicName)
+            KafkaGroupType.values().map { groupType ->
+                val groupName = toGroupName(groupType.prefix,topicName)
                 val groupDN = config.groupDN(groupName)
 
                 try {
                     KafkaGroup(
+                            groupType,
                             groupName,
                             ldapConnection.add(
                                     AddRequest(
@@ -126,11 +137,24 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
                 }
                 catch (e: LDAPException) {
                     log.error { "Sorry, exception happened - $e" }
-                    KafkaGroup(groupName,e.toLDAPResult())
+                    KafkaGroup(groupType,groupName,e.toLDAPResult())
                 }
-    }
+            }
 
-    fun deleteKafkaGroups(groupName: String): LDAPResult =
+    fun deleteKafkaGroups(topicName: String): Collection<KafkaGroup> =
+            KafkaGroupType.values().map { groupType ->
+                val groupName = toGroupName(groupType.prefix,topicName)
+
+                try {
+                    KafkaGroup(groupType, groupName, deleteKafkaGroup(groupName))
+                }
+                catch (e: LDAPException) {
+                    log.error { "Sorry, exception happened - $e" }
+                    KafkaGroup(groupType,groupName,e.toLDAPResult())
+                }
+            }
+
+    fun deleteKafkaGroup(groupName: String): LDAPResult =
             ldapConnection.delete(
                     DeleteRequest(
                             DN(config.groupDN(groupName))
@@ -166,9 +190,6 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
             )
 
     companion object {
-
-        const val PRODUCER_PREFIX = "KAFKA_PRODUCER_"
-        const val CONSUMER_PREFIX = "KAFKA_CONSUMER_"
 
         val log = KotlinLogging.logger {  }
 

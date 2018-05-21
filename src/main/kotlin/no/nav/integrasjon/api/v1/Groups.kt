@@ -51,7 +51,7 @@ fun Routing.createGroups(config: FasitProperties) =
 fun Routing.deleteGroup(config: FasitProperties) =
         delete("$GROUPS/{groupName}") {
             ldap(config) { lc ->
-                call.parameters["groupName"]?.let { lc.deleteKafkaGroups(it) } ?: emptyList<String>()
+                call.parameters["groupName"]?.let { lc.deleteKafkaGroup(it) } ?: emptyList<String>()
             }
         }
 

@@ -10,10 +10,7 @@ import kotlinx.coroutines.experimental.runBlocking
 import no.nav.integrasjon.AUTHENTICATION_BASIC
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.ldap.LDAPBase
-import org.apache.kafka.clients.admin.AdminClient
-import org.apache.kafka.clients.admin.Config
-import org.apache.kafka.clients.admin.ConfigEntry
-import org.apache.kafka.clients.admin.NewTopic
+import org.apache.kafka.clients.admin.*
 import org.apache.kafka.common.acl.*
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.Resource
@@ -25,7 +22,7 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
 
     getTopics(adminClient)
     createNewTopic(adminClient, config)
-    deleteTopic(adminClient)
+    deleteTopic(adminClient, config)
 
     getTopicConfig(adminClient)
     updateTopicConfig(adminClient)
@@ -43,7 +40,6 @@ fun Routing.getTopics(adminClient: AdminClient) =
             }
         }
 
-
 /**
  * Observe - json payload is only one new topic at a time - NewTopic
  * e.g. {"name":"aTopicName","numPartitions":1,"replicationFactor":1}
@@ -53,63 +49,104 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
             post(TOPICS) {
                 respondAndCatch {
                     val newTopic = runBlocking { call.receive<NewTopic>() }
-                    val logEntry = "Topic creation by ${this.context.authentication.principal} - $newTopic"
+                    val logEntry = "Topic creation request by ${this.context.authentication.principal} - $newTopic"
                     application.environment.log.info(logEntry)
-                        adminClient.createTopics(mutableListOf(newTopic))
-                                .values()
-                                .entries.first()
-                                //.map { Pair(it.key, it.value.get()) }
-                                .also { createGroupsAndAcls(adminClient, config, newTopic.name()) }
+
+                    // create the topic, and if successful, with LDAP groups and ACLs
+                    adminClient.createTopics(mutableListOf(newTopic)).all().get().let {
+
+                        application.environment.log.info("Topic ${newTopic.name()} created")
+
+                        // create kafka groups in ldap
+                        val groupsResult = LDAPBase(config).use { ldap -> ldap.createKafkaGroups(newTopic.name()) }
+
+                        // create ACLs based on kafka groups in LDAP
+                        val rsrc = Resource(ResourceType.TOPIC, newTopic.name())
+                        val acls = groupsResult.map { kafkaGroup ->
+                            val principal = "Group:${kafkaGroup.name}"
+                            val host = "*"
+                            listOf(
+                                    AclBinding(
+                                            rsrc,
+                                            AccessControlEntry(
+                                                    principal,
+                                                    host,
+                                                    when(kafkaGroup.groupType) {
+                                                        LDAPBase.KafkaGroupType.PRODUCER -> AclOperation.WRITE
+                                                        LDAPBase.KafkaGroupType.CONSUMER -> AclOperation.READ
+                                                    },
+                                                    AclPermissionType.ALLOW)),
+                                    AclBinding(
+                                            rsrc,
+                                            AccessControlEntry(
+                                                    principal,
+                                                    host,
+                                                    AclOperation.DESCRIBE,
+                                                    AclPermissionType.ALLOW))
+                            )
+                        }.flatMap { it }
+
+                        application.environment.log.info("Create ACLs request: $acls")
+
+                        val aclsResult = try {
+                            adminClient.createAcls(acls).all().get()
+                            application.environment.log.info("ACLs $acls created")
+                            Pair(acls, "Created")
+                        }
+                        catch (e: Exception) {
+                            Pair(acls, "Failure, $e")
+                        }
+
+                        Triple(Pair("Topic ${newTopic.name()}","Created"), groupsResult, aclsResult)
+                    }
                 }
             }
         }
 
-private fun createGroupsAndAcls(adminClient: AdminClient, config: FasitProperties, topicName: String) {
-
-    val rsrc = Resource(ResourceType.TOPIC, topicName)
-
-    val ldapGroups = LDAPBase(config).use { ldap -> ldap.createKafkaGroups(topicName) }
-
-    val acls = ldapGroups.map { kafkaGroup ->
-        val principal = "Group:${kafkaGroup.name}"
-        listOf(
-                AclBinding(
-                        rsrc,
-                        AccessControlEntry(
-                                principal,
-                                "*",
-                                AclOperation.WRITE,
-                                AclPermissionType.ALLOW)),
-                AclBinding(
-                        rsrc,
-                        AccessControlEntry(
-                                principal,
-                                "*",
-                                AclOperation.DESCRIBE,
-                                AclPermissionType.ALLOW))
-        )
-    }.flatMap { it }
-
-    adminClient.createAcls(acls)
-            .values()
-            .entries
-            .map { Pair(it.key,it.value.get()) }
-
-}
-
-// TODO - need to clean up properly (delete related ACLs, Groups)
 /**
  * Observe 1 - no payload, deletion of just one topic at a time
  * Observe 2 - will take ´a little bit of time´ before the deleted topics is not showing up in topics list
  */
-fun Routing.deleteTopic(adminClient: AdminClient) =
-        delete("$TOPICS/{topicName}") {
-            respondAndCatch {
-                adminClient.deleteTopics(listOf(call.parameters["topicName"]))
-                        .values()
-                        .entries
-                        .map { Pair(it.key, it.value.get()) }
-                        //.also { deleteGroupsAndAcls() }
+fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
+        authenticate(AUTHENTICATION_BASIC) {
+            delete("$TOPICS/{topicName}") {
+                respondAndCatch {
+
+                    // elvis paradox, should not happen because then we should not be here...
+                    val topicName = call.parameters["topicName"] ?: "<no topic>"
+
+                    val logEntry = "Topic deletion request by ${this.context.authentication.principal} - $topicName"
+                    application.environment.log.info(logEntry)
+
+                    // delete ACLs
+                    val aclsDeletion = AclBindingFilter(
+                            ResourceFilter(ResourceType.TOPIC, topicName),
+                            AccessControlEntryFilter.ANY
+                    )
+
+                    application.environment.log.info("Delete ACLs request: $aclsDeletion")
+
+                    val aclsResult = try {
+                        adminClient.deleteAcls(mutableListOf(aclsDeletion)).all().get()
+                        application.environment.log.info("ACLs $aclsDeletion deleted")
+                        Pair(aclsDeletion, "Deleted")
+                    } catch (e: Exception) {
+                        Pair(aclsDeletion, "Failure, $e")
+                    }
+
+                    // delete related kafka ldap groups
+                    val groupsResult = LDAPBase(config).use { ldap -> ldap.deleteKafkaGroups(topicName) }
+
+                    // delete the topic itself
+                    val topicResult = try {
+                        adminClient.deleteTopics(listOf(topicName)).all().get()
+                        Pair("Topic $topicName", "Deleted")
+                    } catch (e: Exception) {
+                        Pair("Topic $topicName", "Failure, $e")
+                    }
+
+                    Triple(topicResult, groupsResult, aclsResult)
+                }
             }
         }
 
@@ -132,7 +169,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
 
 // TODO - restrict the update options...
 /**
- * Observe - update of topic config with one ConfigEntry(name, value) at the time
+ * Observe - update of topic config with one ConfigEntry(name, value) at a time
  * Please use getTopicConfig first in order to get an idea of which entry to update
  * e.g. {"name": "retention.ms","value": "3600000"}
  */
@@ -167,72 +204,3 @@ fun Routing.getTopicAcls(adminClient: AdminClient) =
     @SerializedName("producer") PRODUCER,
     @SerializedName("consumer") CONSUMER
 }*/
-
-/**
- * E.g. {
-"producerGroupName": "User:ktprodTest",
-"consumerGroupName": "User:ktconsTest"
-}
- */
-
-private data class ACEntry(
-        val producerGroupName: String,
-        val consumerGroupName: String)
-
-/*fun Routing.createGroupsAndAcls(adminClient: AdminClient) =
-        post("$TOPICS/{topicName}/acls") {
-            respondAndCatch {
-                val acEntry = runBlocking { call.receive<ACEntry>() }
-                val rsrc = Resource(ResourceType.TOPIC, call.parameters["topicName"])
-
-                val acls = mutableListOf(
-                        AclBinding(
-                                rsrc,
-                                AccessControlEntry(
-                                        acEntry.producerGroupName,
-                                        "*",
-                                        AclOperation.WRITE,
-                                        AclPermissionType.ALLOW)),
-                        AclBinding(
-                                rsrc,
-                                AccessControlEntry(
-                                        acEntry.producerGroupName,
-                                        "*",
-                                        AclOperation.DESCRIBE,
-                                        AclPermissionType.ALLOW)),
-                        AclBinding(
-                                rsrc,
-                                AccessControlEntry(
-                                        acEntry.consumerGroupName,
-                                        "*",
-                                        AclOperation.READ,
-                                        AclPermissionType.ALLOW)),
-                        AclBinding(
-                                rsrc,
-                                AccessControlEntry(
-                                        acEntry.consumerGroupName,
-                                        "*",
-                                        AclOperation.DESCRIBE,
-                                        AclPermissionType.ALLOW))
-                        )
-
-                adminClient.createAcls(acls.toList())
-                        .values()
-                        .entries
-                        .map { Pair(it.key,it.value.get()) }
-            }
-        }*/
-
-
-
-/*fun Routing.deleteTopicAcls(adminClient: AdminClient) =
-        delete("$TOPICS/{topicName}/acls") {
-            respondAndCatch {
-                adminClient.deleteAcls(mutableListOf(AclBindingFilter(
-                        ResourceFilter(ResourceType.TOPIC, call.parameters["topicName"]),
-                        AccessControlEntryFilter.ANY)))
-                        .values()
-                        .entries
-                        .map { Pair(it.key,it.value.get()) }
-            }
-        }*/
