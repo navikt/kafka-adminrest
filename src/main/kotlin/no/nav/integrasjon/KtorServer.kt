@@ -86,9 +86,10 @@ fun Application.main() {
         }
     }
 
+    // TODO - need to verify against LDAP adeo.no
     install(Authentication) {
         basic(name = AUTHENTICATION_BASIC) {
-            realm = "Ktor Server"
+            realm = "kafka-adminrest"
             validate { credentials ->
                 LDAPBase(FasitProperties()).use { ldap ->
                         if (ldap.canUserAuthenticate(credentials.name, credentials.password))

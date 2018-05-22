@@ -11,6 +11,7 @@ import no.nav.integrasjon.AUTHENTICATION_BASIC
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.ldap.LDAPBase
 import org.apache.kafka.clients.admin.*
+import org.apache.kafka.common.KafkaException
 import org.apache.kafka.common.acl.*
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.Resource
@@ -29,8 +30,6 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
 
     getTopicAcls(adminClient)
     //getTopicGroups(config) TODO - must implement
-    //deleteTopicAcls(adminClient) // TODO - to be deleted
-
 }
 
 fun Routing.getTopics(adminClient: AdminClient) =
@@ -119,19 +118,19 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
                     application.environment.log.info(logEntry)
 
                     // delete ACLs
-                    val aclsDeletion = AclBindingFilter(
+                    val acls = AclBindingFilter(
                             ResourceFilter(ResourceType.TOPIC, topicName),
                             AccessControlEntryFilter.ANY
                     )
 
-                    application.environment.log.info("Delete ACLs request: $aclsDeletion")
+                    application.environment.log.info("Delete ACLs request: $acls")
 
                     val aclsResult = try {
-                        adminClient.deleteAcls(mutableListOf(aclsDeletion)).all().get()
-                        application.environment.log.info("ACLs $aclsDeletion deleted")
-                        Pair(aclsDeletion, "Deleted")
+                        adminClient.deleteAcls(mutableListOf(acls)).all().get()
+                        application.environment.log.info("ACLs $acls deleted")
+                        Pair(acls, "Deleted")
                     } catch (e: Exception) {
-                        Pair(aclsDeletion, "Failure, $e")
+                        Pair(acls, "Failure, $e")
                     }
 
                     // delete related kafka ldap groups
@@ -150,41 +149,68 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
             }
         }
 
-/**
- * NB! The AdminClient is listing a config independent of the topic exists or not...
- * TODO - should implement a test for existence
- */
-
 fun Routing.getTopicConfig(adminClient: AdminClient) =
         get("$TOPICS/{topicName}") {
             respondAndCatch {
-                adminClient.describeConfigs(mutableListOf(ConfigResource(
-                        ConfigResource.Type.TOPIC,
-                        call.parameters["topicName"])))
-                        .values()
-                        .entries
-                        .map { Pair(it.key,it.value.get()) }
+
+                // elvis paradox, should not happen because then we should not be here...
+                val topicName = call.parameters["topicName"] ?: "<no topic>"
+
+                // NB! AdminClient is listing a default config independent of topic exists or not, verify!
+                val existingTopics = adminClient.listTopics().listings().get().map { it.name() }
+
+                if (existingTopics.contains(topicName))
+                    adminClient.describeConfigs(
+                            mutableListOf(
+                                    ConfigResource(
+                                            ConfigResource.Type.TOPIC,
+                                            topicName
+                                    )
+                            )
+                    ).all().get()
+                else
+                    Pair("Result", "Topic $topicName does not exist")
             }
         }
 
-// TODO - restrict the update options...
 /**
  * Observe - update of topic config with one ConfigEntry(name, value) at a time
- * Please use getTopicConfig first in order to get an idea of which entry to update
+ * Please use getTopicConfig first in order to get an idea of which entry to update with related unit of value
  * e.g. {"name": "retention.ms","value": "3600000"}
+ *
+ * Observe - only a few entries are allowed to update automatically
  */
+
+enum class AllowedConfigEntries(val entryName: String) {
+    RETENTION_MS("retention.ms")
+    // TODO - will be enhanced with suitable set of config entries
+}
+
 fun Routing.updateTopicConfig(adminClient: AdminClient) =
-        put("$TOPICS/{topicName}") {
-            respondAndCatch {
-                val configEntry = runBlocking { call.receive<ConfigEntry>() }
-            adminClient.alterConfigs(
-                    mutableMapOf(
-                            ConfigResource(
-                                    ConfigResource.Type.TOPIC,
-                                    call.parameters["topicName"]) to Config(listOf(configEntry))))
-                    .values()
-                    .entries
-                    .map { Pair(it.key,it.value.get()) }
+        authenticate(AUTHENTICATION_BASIC) {
+            put("$TOPICS/{topicName}") {
+                respondAndCatch {
+                    val topicName = call.parameters["topicName"] ?: "<no topic>"
+                    val configEntry = runBlocking { call.receive<ConfigEntry>() }
+
+                    // check whether configEntry is allowed
+                    if (!AllowedConfigEntries.values().map { it.entryName }.contains(configEntry.name()))
+                        throw KafkaException("configEntry ${configEntry.name()} is not allowed to update automatically")
+
+                    val logEntry = "Topic config. update request by ${this.context.authentication.principal} - $topicName"
+                    application.environment.log.info(logEntry)
+
+                    val configResource = ConfigResource(ConfigResource.Type.TOPIC, topicName)
+                    val configReq = mapOf(configResource to Config(listOf(configEntry)))
+
+                    application.environment.log.info("Update topic config request: $configReq")
+
+                    // NB! .all is throwing error... Use of future for specific entry instead
+                    adminClient.alterConfigs(configReq)
+                            //.all()
+                            .values()[configResource]
+                            ?.get() ?: Pair("$configEntry","has been updated")
+                }
             }
         }
 
@@ -192,15 +218,29 @@ fun Routing.updateTopicConfig(adminClient: AdminClient) =
 fun Routing.getTopicAcls(adminClient: AdminClient) =
         get("$TOPICS/{topicName}/acls") {
             respondAndCatch {
+
+                // elvis paradox, should not happen because then we should not be here...
+                val topicName = call.parameters["topicName"] ?: "<no topic>"
+
                 adminClient.describeAcls(
                         AclBindingFilter(
-                                ResourceFilter(ResourceType.TOPIC, call.parameters["topicName"]),
-                                AccessControlEntryFilter.ANY))
-                        .values().get()
+                                ResourceFilter(ResourceType.TOPIC, topicName),
+                                AccessControlEntryFilter.ANY)
+                )
+                        .values()
+                        .get()
             }
         }
 
-/*private enum class Role {
-    @SerializedName("producer") PRODUCER,
-    @SerializedName("consumer") CONSUMER
-}*/
+fun Routing.getTopicGroups(adminClient: AdminClient, config: FasitProperties) =
+        get("$TOPICS/{topicName}/groups") {
+            respondAndCatch {
+
+                // elvis paradox, should not happen because then we should not be here...
+                //val topicName = call.parameters["topicName"] ?: "<no topic>"
+
+            }
+        }
+
+
+
