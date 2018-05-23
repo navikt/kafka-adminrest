@@ -29,7 +29,9 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
     updateTopicConfig(adminClient)
 
     getTopicAcls(adminClient)
-    //getTopicGroups(config) TODO - must implement
+
+    getTopicGroups(config)
+    updateTopicGroup(config)
 }
 
 fun Routing.getTopics(adminClient: AdminClient) =
@@ -232,13 +234,35 @@ fun Routing.getTopicAcls(adminClient: AdminClient) =
             }
         }
 
-fun Routing.getTopicGroups(adminClient: AdminClient, config: FasitProperties) =
+fun Routing.getTopicGroups(config: FasitProperties) =
         get("$TOPICS/{topicName}/groups") {
             respondAndCatch {
 
                 // elvis paradox, should not happen because then we should not be here...
-                //val topicName = call.parameters["topicName"] ?: "<no topic>"
+                val topicName = call.parameters["topicName"] ?: "<no topic>"
 
+                LDAPBase(config).use { ldap -> ldap.getKafkaGroupsAndMembers(topicName) }
+            }
+        }
+
+fun Routing.updateTopicGroup(config: FasitProperties) =
+        authenticate(AUTHENTICATION_BASIC) {
+            put("$TOPICS/{topicName}/groups") {
+                respondAndCatch {
+
+                    // elvis paradox, should not happen because then we should not be here...
+                    val topicName = call.parameters["topicName"] ?: "<no topic>"
+                    val updateEntry = runBlocking { call.receive<LDAPBase.UpdateKafkaGroupMember>() }
+                    val groupName = LDAPBase.toGroupName(updateEntry.role.prefix, topicName)
+
+                    val logEntry = "Topic group membership update request by " +
+                            "${this.context.authentication.principal} - $groupName "
+                    application.environment.log.info(logEntry)
+
+                    LDAPBase(config)
+                            .use { ldap -> ldap.updateKafkaGroupMembership(groupName, updateEntry) }
+                            .also { application.environment.log.info("$groupName has been updated") }
+                }
             }
         }
 

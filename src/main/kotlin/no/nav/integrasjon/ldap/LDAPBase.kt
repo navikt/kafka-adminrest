@@ -1,12 +1,11 @@
 package no.nav.integrasjon.ldap
 
+import com.google.gson.annotations.SerializedName
 import com.unboundid.ldap.sdk.*
 import com.unboundid.util.ssl.SSLUtil
 import com.unboundid.util.ssl.TrustAllTrustManager
 import mu.KotlinLogging
 import no.nav.integrasjon.FasitProperties
-import no.nav.integrasjon.api.v1.Operation
-import no.nav.integrasjon.api.v1.UpdateGroupMember
 import no.nav.integrasjon.groupDN
 import no.nav.integrasjon.srvUserDN
 import no.nav.integrasjon.userDN
@@ -104,40 +103,47 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
      * - a consumer group with members allowed to consume events from topic
      */
     enum class KafkaGroupType(val prefix: String) {
-        PRODUCER("KAFKA_PRODUCER_"),
-        CONSUMER("KAFKA_CONSUMER_")
+        @SerializedName("producer") PRODUCER("KAFKA_PRODUCER_"),
+        @SerializedName("consumer") CONSUMER("KAFKA_CONSUMER_")
     }
 
     /**
-     * data class KafkaGroup as result from a couple of functions
+     * Enum class KafkaGroupOperation
+     * ADD - add a new group member
+     * REMOVE - remove a group member from group
+     */
+    enum class KafkaGroupOperation {
+        @SerializedName("add") ADD,
+        @SerializedName("remove") REMOVE
+    }
+
+    /**
+     * data class UpdateKafkaGroupMember
+     */
+    data class UpdateKafkaGroupMember(
+            val role: KafkaGroupType,
+            val operation: KafkaGroupOperation,
+            val memberDN: String)
+
+    /**
+     * data class KafkaGroup as result from some functions
      */
     data class KafkaGroup(
             val groupType: KafkaGroupType,
             val name: String,
+            val members: Collection<String>,
             val result: LDAPResult)
 
     fun createKafkaGroups(topicName: String): Collection<KafkaGroup> =
             KafkaGroupType.values().map { groupType ->
                 val groupName = toGroupName(groupType.prefix,topicName)
-                val groupDN = config.groupDN(groupName)
 
                 try {
-                    KafkaGroup(
-                            groupType,
-                            groupName,
-                            ldapConnection.add(
-                                    AddRequest(
-                                        DN(groupDN),
-                                        newGroupAttr.toMutableList().apply {
-                                            add(Attribute("cn", groupName))
-                                            add(Attribute("sAMAccountName", groupName))
-                                        })
-                                        .also { req -> log.info { "Create group request: $req" } }
-                            ))
+                    KafkaGroup(groupType, groupName, emptyList(), createKafkaGroup(groupName))
                 }
                 catch (e: LDAPException) {
                     log.error { "Sorry, exception happened - $e" }
-                    KafkaGroup(groupType,groupName,e.toLDAPResult())
+                    KafkaGroup(groupType,groupName, emptyList(),e.toLDAPResult())
                 }
             }
 
@@ -146,13 +152,41 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
                 val groupName = toGroupName(groupType.prefix,topicName)
 
                 try {
-                    KafkaGroup(groupType, groupName, deleteKafkaGroup(groupName))
+                    KafkaGroup(groupType, groupName, emptyList(),deleteKafkaGroup(groupName))
                 }
                 catch (e: LDAPException) {
                     log.error { "Sorry, exception happened - $e" }
-                    KafkaGroup(groupType,groupName,e.toLDAPResult())
+                    KafkaGroup(groupType,groupName, emptyList(),e.toLDAPResult())
                 }
             }
+
+    fun getKafkaGroupsAndMembers(topicName: String): Collection<KafkaGroup> =
+            KafkaGroupType.values().map { groupType ->
+                val groupName = toGroupName(groupType.prefix,topicName)
+
+                try {
+                    KafkaGroup(
+                            groupType,
+                            groupName,
+                            getKafkaGroupMembers(groupName),
+                            LDAPResult(0,ResultCode.SUCCESS))
+                }
+                catch (e: LDAPException) {
+                    log.error { "Sorry, exception happened - $e" }
+                    KafkaGroup(groupType,groupName, emptyList(),e.toLDAPResult())
+                }
+            }
+
+    private fun createKafkaGroup(groupName: String): LDAPResult =
+            ldapConnection.add(
+                    AddRequest(
+                            DN(config.groupDN(groupName)),
+                            newGroupAttr.toMutableList().apply {
+                                add(Attribute("cn", groupName))
+                                add(Attribute("sAMAccountName", groupName))
+                            })
+                            .also { req -> log.info { "Create group request: $req" } }
+            )
 
     fun deleteKafkaGroup(groupName: String): LDAPResult =
             ldapConnection.delete(
@@ -172,17 +206,20 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
                             config.ldapGrpMemberAttrName)
                     )
                     .searchEntries
-                    .flatMap { it.getAttribute(config.ldapGrpMemberAttrName).values.toList() }
+                    .flatMap {
+                        it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: emptyList()
+                    }
 
-    fun updateKafkaGroupMembership(groupName: String, updateEntry: UpdateGroupMember): LDAPResult =
+    //TODO - should search for the user, easier use of REST service
+    fun updateKafkaGroupMembership(groupName: String, updateEntry: UpdateKafkaGroupMember): LDAPResult =
             ldapConnection.modify(
                 ModifyRequest(
                         config.groupDN(groupName),
                         Modification(
-                                if (updateEntry.operation == Operation.ADD)
-                                    ModificationType.ADD
-                                else
-                                    ModificationType.DELETE,
+                                when(updateEntry.operation) {
+                                    KafkaGroupOperation.ADD -> ModificationType.ADD
+                                    KafkaGroupOperation.REMOVE -> ModificationType.DELETE
+                                },
                                 config.ldapGrpMemberAttrName,
                                 updateEntry.memberDN
                         )
@@ -193,6 +230,6 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
 
         val log = KotlinLogging.logger {  }
 
-        private fun toGroupName(prefix: String, topicName: String) = "$prefix$topicName"
+        fun toGroupName(prefix: String, topicName: String) = "$prefix$topicName"
     }
 }

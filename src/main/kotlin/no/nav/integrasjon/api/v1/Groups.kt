@@ -1,6 +1,5 @@
 package no.nav.integrasjon.api.v1
 
-import com.google.gson.annotations.SerializedName
 import io.ktor.application.ApplicationCall
 import io.ktor.application.application
 import io.ktor.application.call
@@ -62,18 +61,11 @@ fun Routing.getGroupMembers(config: FasitProperties) =
             }
         }
 
-enum class Operation {
-    @SerializedName("add") ADD,
-    @SerializedName("delete") DELETE
-}
-
-data class UpdateGroupMember(val operation: Operation, val memberDN: String)
-
 fun Routing.updateGroupMembers(config: FasitProperties) =
         put("$GROUPS/{groupName}") {
             ldap(config) {lc ->
 
-                val updateEntry = runBlocking { call.receive<UpdateGroupMember>() }
+                val updateEntry = runBlocking { call.receive<LDAPBase.UpdateKafkaGroupMember>() }
                 val groupName = call.parameters["groupName"] ?: "invalid"
 
                 lc.updateKafkaGroupMembership(groupName, updateEntry)
