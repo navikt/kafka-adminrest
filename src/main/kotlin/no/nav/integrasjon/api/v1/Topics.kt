@@ -9,7 +9,7 @@ import io.ktor.routing.*
 import kotlinx.coroutines.experimental.runBlocking
 import no.nav.integrasjon.AUTHENTICATION_BASIC
 import no.nav.integrasjon.FasitProperties
-import no.nav.integrasjon.ldap.LDAPBase
+import no.nav.integrasjon.ldap.LDAPGroup
 import org.apache.kafka.clients.admin.*
 import org.apache.kafka.common.KafkaException
 import org.apache.kafka.common.acl.*
@@ -59,7 +59,7 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                         application.environment.log.info("Topic ${newTopic.name()} created")
 
                         // create kafka groups in ldap
-                        val groupsResult = LDAPBase(config).use { ldap -> ldap.createKafkaGroups(newTopic.name()) }
+                        val groupsResult = LDAPGroup(config).use { ldap -> ldap.createKafkaGroups(newTopic.name()) }
 
                         // create ACLs based on kafka groups in LDAP
                         val rsrc = Resource(ResourceType.TOPIC, newTopic.name())
@@ -73,8 +73,8 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                                                     principal,
                                                     host,
                                                     when(kafkaGroup.groupType) {
-                                                        LDAPBase.KafkaGroupType.PRODUCER -> AclOperation.WRITE
-                                                        LDAPBase.KafkaGroupType.CONSUMER -> AclOperation.READ
+                                                        LDAPGroup.KafkaGroupType.PRODUCER -> AclOperation.WRITE
+                                                        LDAPGroup.KafkaGroupType.CONSUMER -> AclOperation.READ
                                                     },
                                                     AclPermissionType.ALLOW)),
                                     AclBinding(
@@ -136,7 +136,7 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
                     }
 
                     // delete related kafka ldap groups
-                    val groupsResult = LDAPBase(config).use { ldap -> ldap.deleteKafkaGroups(topicName) }
+                    val groupsResult = LDAPGroup(config).use { ldap -> ldap.deleteKafkaGroups(topicName) }
 
                     // delete the topic itself
                     val topicResult = try {
@@ -241,7 +241,7 @@ fun Routing.getTopicGroups(config: FasitProperties) =
                 // elvis paradox, should not happen because then we should not be here...
                 val topicName = call.parameters["topicName"] ?: "<no topic>"
 
-                LDAPBase(config).use { ldap -> ldap.getKafkaGroupsAndMembers(topicName) }
+                LDAPGroup(config).use { ldap -> ldap.getKafkaGroupsAndMembers(topicName) }
             }
         }
 
@@ -252,14 +252,14 @@ fun Routing.updateTopicGroup(config: FasitProperties) =
 
                     // elvis paradox, should not happen because then we should not be here...
                     val topicName = call.parameters["topicName"] ?: "<no topic>"
-                    val updateEntry = runBlocking { call.receive<LDAPBase.UpdateKafkaGroupMember>() }
-                    val groupName = LDAPBase.toGroupName(updateEntry.role.prefix, topicName)
+                    val updateEntry = runBlocking { call.receive<LDAPGroup.UpdateKafkaGroupMember>() }
+                    val groupName = LDAPGroup.toGroupName(updateEntry.role.prefix, topicName)
 
                     val logEntry = "Topic group membership update request by " +
                             "${this.context.authentication.principal} - $groupName "
                     application.environment.log.info(logEntry)
 
-                    LDAPBase(config)
+                    LDAPGroup(config)
                             .use { ldap -> ldap.updateKafkaGroupMembership(groupName, updateEntry) }
                             .also { application.environment.log.info("$groupName has been updated") }
                 }

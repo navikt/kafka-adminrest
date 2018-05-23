@@ -8,13 +8,12 @@ import mu.KotlinLogging
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.groupDN
 import no.nav.integrasjon.srvUserDN
-import no.nav.integrasjon.userDN
 
 /**
  * A base class for LDAP operations
  */
 
-class LDAPBase(private val config: FasitProperties) : AutoCloseable {
+class LDAPGroup(private val config: FasitProperties) : AutoCloseable {
 
     private val connectOptions = LDAPConnectionOptions().apply {
         connectTimeoutMillis = config.ldapConnTimeout
@@ -66,21 +65,6 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
         log.debug {"Closing ldap connection" }
         ldapConnection.close()
     }
-
-    fun canUserAuthenticate(user: String, pwd: String): Boolean =
-            if (!ldapConnection.isConnected)
-                false
-            else {
-                log.debug { "Trying bind for ${config.userDN(user)} and given password" }
-
-                try {
-                    ldapConnection.bind(config.userDN(user), pwd).resultCode == ResultCode.SUCCESS
-                }
-                catch(e: LDAPException) {
-                    log.error { "Exception occurred during bind - ${e.diagnosticMessage}" }
-                    false
-                }
-            }
 
     fun getKafkaGroups(): Collection<String> =
             ldapConnection
@@ -188,7 +172,7 @@ class LDAPBase(private val config: FasitProperties) : AutoCloseable {
                             .also { req -> log.info { "Create group request: $req" } }
             )
 
-    fun deleteKafkaGroup(groupName: String): LDAPResult =
+    private fun deleteKafkaGroup(groupName: String): LDAPResult =
             ldapConnection.delete(
                     DeleteRequest(
                             DN(config.groupDN(groupName))

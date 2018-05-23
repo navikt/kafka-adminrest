@@ -21,7 +21,7 @@ import no.nav.integrasjon.api.v1.aclAPI
 import no.nav.integrasjon.api.v1.topicsAPI
 import no.nav.integrasjon.api.v1.brokersAPI
 import no.nav.integrasjon.api.v1.groupsAPI
-import no.nav.integrasjon.ldap.LDAPBase
+import no.nav.integrasjon.ldap.LDAPAuthenticate
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.slf4j.event.Level
@@ -91,11 +91,11 @@ fun Application.main() {
         basic(name = AUTHENTICATION_BASIC) {
             realm = "kafka-adminrest"
             validate { credentials ->
-                LDAPBase(FasitProperties()).use { ldap ->
-                        if (ldap.canUserAuthenticate(credentials.name, credentials.password))
-                            UserIdPrincipal(credentials.name)
-                        else
-                            null
+                LDAPAuthenticate().use { ldap ->
+                    if (ldap.canUserAuthenticate(credentials.name, credentials.password))
+                        UserIdPrincipal(credentials.name)
+                    else
+                        null
                 }
             }
         }
