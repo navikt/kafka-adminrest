@@ -18,7 +18,7 @@ import org.apache.kafka.common.resource.Resource
 import org.apache.kafka.common.resource.ResourceFilter
 import org.apache.kafka.common.resource.ResourceType
 
-// a wrapper for kafka api to be installed as routes
+// a wrapper for this api to be installed as routes
 fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
 
     getTopics(adminClient)
@@ -36,8 +36,8 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
 
 fun Routing.getTopics(adminClient: AdminClient) =
         get(TOPICS) {
-            respondAndCatch {
-                adminClient.listTopics().listings().get()
+            respondCatch {
+                adminClient.listTopics().namesToListings().get()
             }
         }
 
@@ -48,7 +48,7 @@ fun Routing.getTopics(adminClient: AdminClient) =
 fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
         authenticate(AUTHENTICATION_BASIC) {
             post(TOPICS) {
-                respondAndCatch {
+                respondCatch {
                     val newTopic = runBlocking { call.receive<NewTopic>() }
                     val logEntry = "Topic creation request by ${this.context.authentication.principal} - $newTopic"
                     application.environment.log.info(logEntry)
@@ -73,8 +73,8 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                                                     principal,
                                                     host,
                                                     when(kafkaGroup.groupType) {
-                                                        LDAPGroup.KafkaGroupType.PRODUCER -> AclOperation.WRITE
-                                                        LDAPGroup.KafkaGroupType.CONSUMER -> AclOperation.READ
+                                                        LDAPGroup.Companion.KafkaGroupType.PRODUCER -> AclOperation.WRITE
+                                                        LDAPGroup.Companion.KafkaGroupType.CONSUMER -> AclOperation.READ
                                                     },
                                                     AclPermissionType.ALLOW)),
                                     AclBinding(
@@ -87,11 +87,11 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                             )
                         }.flatMap { it }
 
-                        application.environment.log.info("Create ACLs request: $acls")
+                        application.environment.log.info("ACLs create request: $acls")
 
                         val aclsResult = try {
                             adminClient.createAcls(acls).all().get()
-                            application.environment.log.info("ACLs $acls created")
+                            application.environment.log.info("ACLs createf - $acls")
                             Pair(acls, "Created")
                         }
                         catch (e: Exception) {
@@ -111,7 +111,7 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
 fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
         authenticate(AUTHENTICATION_BASIC) {
             delete("$TOPICS/{topicName}") {
-                respondAndCatch {
+                respondCatch {
 
                     // elvis paradox, should not happen because then we should not be here...
                     val topicName = call.parameters["topicName"] ?: "<no topic>"
@@ -153,7 +153,7 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
 
 fun Routing.getTopicConfig(adminClient: AdminClient) =
         get("$TOPICS/{topicName}") {
-            respondAndCatch {
+            respondCatch {
 
                 // elvis paradox, should not happen because then we should not be here...
                 val topicName = call.parameters["topicName"] ?: "<no topic>"
@@ -191,7 +191,8 @@ enum class AllowedConfigEntries(val entryName: String) {
 fun Routing.updateTopicConfig(adminClient: AdminClient) =
         authenticate(AUTHENTICATION_BASIC) {
             put("$TOPICS/{topicName}") {
-                respondAndCatch {
+                respondCatch {
+
                     val topicName = call.parameters["topicName"] ?: "<no topic>"
                     val configEntry = runBlocking { call.receive<ConfigEntry>() }
 
@@ -219,7 +220,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient) =
 
 fun Routing.getTopicAcls(adminClient: AdminClient) =
         get("$TOPICS/{topicName}/acls") {
-            respondAndCatch {
+            respondCatch {
 
                 // elvis paradox, should not happen because then we should not be here...
                 val topicName = call.parameters["topicName"] ?: "<no topic>"
@@ -236,7 +237,7 @@ fun Routing.getTopicAcls(adminClient: AdminClient) =
 
 fun Routing.getTopicGroups(config: FasitProperties) =
         get("$TOPICS/{topicName}/groups") {
-            respondAndCatch {
+            respondCatch {
 
                 // elvis paradox, should not happen because then we should not be here...
                 val topicName = call.parameters["topicName"] ?: "<no topic>"
@@ -248,20 +249,19 @@ fun Routing.getTopicGroups(config: FasitProperties) =
 fun Routing.updateTopicGroup(config: FasitProperties) =
         authenticate(AUTHENTICATION_BASIC) {
             put("$TOPICS/{topicName}/groups") {
-                respondAndCatch {
+                respondCatch {
 
                     // elvis paradox, should not happen because then we should not be here...
                     val topicName = call.parameters["topicName"] ?: "<no topic>"
-                    val updateEntry = runBlocking { call.receive<LDAPGroup.UpdateKafkaGroupMember>() }
-                    val groupName = LDAPGroup.toGroupName(updateEntry.role.prefix, topicName)
-
+                    val updateEntry = runBlocking { call.receive<LDAPGroup.Companion.UpdateKafkaGroupMember>() }
                     val logEntry = "Topic group membership update request by " +
-                            "${this.context.authentication.principal} - $groupName "
+                            "${this.context.authentication.principal} - $topicName "
+
                     application.environment.log.info(logEntry)
 
                     LDAPGroup(config)
-                            .use { ldap -> ldap.updateKafkaGroupMembership(groupName, updateEntry) }
-                            .also { application.environment.log.info("$groupName has been updated") }
+                            .use { ldap -> ldap.updateKafkaGroupMembership(topicName, updateEntry) }
+                            .also { application.environment.log.info("$topicName's group has been updated") }
                 }
             }
         }

@@ -10,12 +10,12 @@ import io.ktor.http.*
 import io.ktor.request.path
 import io.ktor.response.*
 import io.ktor.routing.Routing
+import io.ktor.server.engine.ShutDownUrl
 import io.ktor.util.*
 import io.prometheus.client.CollectorRegistry
+import kotlinx.coroutines.experimental.runBlocking
 import mu.KotlinLogging
-import no.nav.integrasjon.api.nais.client.getIsAlive
-import no.nav.integrasjon.api.nais.client.getIsReady
-import no.nav.integrasjon.api.nais.client.getPrometheus
+import no.nav.integrasjon.api.nais.client.naisAPI
 import no.nav.integrasjon.api.v1.API_V1
 import no.nav.integrasjon.api.v1.aclAPI
 import no.nav.integrasjon.api.v1.topicsAPI
@@ -29,29 +29,15 @@ import java.util.*
 
 const val AUTHENTICATION_BASIC = "basicAuth"
 
-fun Application.main() {
+fun Application.kafkaAdminREST() {
 
     val log = KotlinLogging.logger {  }
 
-    log.info { "Starting ktor server" }
+    log.info { "Starting server" }
 
-    log.info { "Checking Fasit properties" }
-    val adminClient = FasitProperties().let { fp ->
+    val fasitProps = FasitProperties()
+    val adminClient = fasitProps.let { fp ->
 
-        if (fp.isEmpty()) {
-            log.error { "Missing fasit properties - $fp" }
-            return
-        }
-
-        if (fp.kafkaSecurityEnabled() && !fp.kafkaSecurityComplete()) {
-            log.error { "Kafka security enabled, but incomplete kafka security settings - $fp" }
-            return
-        }
-
-        /**
-         * All kafka operations are managed via kafka AdminClient
-         * See https://kafka.apache.org/10/javadoc/index.html?org/apache/kafka/clients/admin/AdminClient.html
-         */
         log.info { "Creating kafka admin client" }
 
         AdminClient.create(Properties()
@@ -69,7 +55,7 @@ fun Application.main() {
 
     val collectorRegistry = CollectorRegistry.defaultRegistry
 
-    log.info { "Installing ktor features" }
+    log.info { "Installing features" }
     install(DefaultHeaders)
     install(ConditionalHeaders)
     install(Compression)
@@ -85,13 +71,11 @@ fun Application.main() {
             call.respond(HttpStatusCode.InternalServerError)
         }
     }
-
-    // TODO - need to verify against LDAP adeo.no
     install(Authentication) {
         basic(name = AUTHENTICATION_BASIC) {
             realm = "kafka-adminrest"
             validate { credentials ->
-                LDAPAuthenticate().use { ldap ->
+                LDAPAuthenticate(fasitProps).use { ldap ->
                     if (ldap.canUserAuthenticate(credentials.name, credentials.password))
                         UserIdPrincipal(credentials.name)
                     else
@@ -100,25 +84,22 @@ fun Application.main() {
             }
         }
     }
-
     install(ContentNegotiation) {
         gson {
             serializeNulls()
         }
     }
 
-    log.info { "Installing ktor routes" }
+    log.info { "Installing routes" }
     install(Routing) {
         // support classic nais requirements
-        getIsAlive()
-        getIsReady()
-        getPrometheus(collectorRegistry)
+        naisAPI(adminClient, fasitProps, collectorRegistry)
 
         // provide the essential, management of kafka environment, topic creation and authorization
-        topicsAPI(adminClient, FasitProperties())
+        topicsAPI(adminClient, fasitProps)
         brokersAPI(adminClient)
         aclAPI(adminClient)
-        groupsAPI(FasitProperties())
+        groupsAPI(fasitProps)
     }
 }
 
