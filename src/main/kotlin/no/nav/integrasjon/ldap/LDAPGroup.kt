@@ -6,7 +6,18 @@ import mu.KotlinLogging
 import no.nav.integrasjon.*
 
 /**
- * A base class for LDAP operations
+ * LDAPGroup provides services for LDAP group management
+ * - creation of groups
+ * - deletion of groups
+ * - add or remove group members
+ *
+ * Group management is restriced to Kafka context
+ * - producer - and consumer group per topic, restricted to FasitProperties::ldapGroupBase
+ *
+ * See See https://docs.ldap.com/ldap-sdk/docs/javadoc/overview-summary.html
+ *
+ * Ok, this class can be divided into cleaner classes (pure LDAP group and Kafka context), but
+ * laziness and good-enough is the strongest competitor so far
  */
 
 class LDAPGroup(private val config: FasitProperties) :
@@ -19,7 +30,7 @@ class LDAPGroup(private val config: FasitProperties) :
         val srvUserDN = config.srvUserDN()
         try {
             ldapConnection.bind(srvUserDN,config.ldapPassword)
-            log.debug("Successfully bind of $srvUserDN to $connInfo")
+            log.info {"Successfully bind of $srvUserDN to $connInfo" }
         }
         catch (e: LDAPException) {
             log.error("$EXCEPTION LDAP operations will fail. Bind failure for $srvUserDN to $connInfo - $e")
@@ -27,7 +38,7 @@ class LDAPGroup(private val config: FasitProperties) :
         }
     }
 
-    // Beginning of attributes for group creation
+    // fixed set of attributes for group creation, more will be added - see createKafkaGroup
     private val newGroupAttr = listOf(
             Attribute(
                     "objectClass",
@@ -73,13 +84,22 @@ class LDAPGroup(private val config: FasitProperties) :
             }
 
     fun createKafkaGroups(topicName: String): Collection<KafkaGroup> =
-            groupTypesCatch(topicName, { emptyList() }, { groupName -> createKafkaGroup(groupName) })
+            groupTypesCatch(
+                    topicName,
+                    { emptyList() },
+                    { groupName -> createKafkaGroup(groupName) }
+            )
 
     fun deleteKafkaGroups(topicName: String): Collection<KafkaGroup> =
-            groupTypesCatch(topicName, { emptyList() }, { groupName -> deleteKafkaGroup(groupName) })
+            groupTypesCatch(
+                    topicName,
+                    { emptyList() },
+                    { groupName -> deleteKafkaGroup(groupName) }
+            )
 
     fun getKafkaGroupsAndMembers(topicName: String): Collection<KafkaGroup> =
-            groupTypesCatch(topicName,
+            groupTypesCatch(
+                    topicName,
                     { groupName -> getKafkaGroupMembers(groupName) },
                     { LDAPResult(0,ResultCode.SUCCESS) }
             )
@@ -169,7 +189,7 @@ class LDAPGroup(private val config: FasitProperties) :
                 val memberDN: String)
 
         /**
-         * data class KafkaGroup as result from some functions
+         * data class KafkaGroup as result from functions iterating KafkaGroupType - see groupTypesCatch
          */
         data class KafkaGroup(
                 val groupType: KafkaGroupType,

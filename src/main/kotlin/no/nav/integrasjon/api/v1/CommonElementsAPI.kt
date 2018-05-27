@@ -11,7 +11,7 @@ import no.nav.integrasjon.EXCEPTION
 // route starting point
 internal const val API_V1 = "/api/v1"
 
-// route for brokers and acls in kafka environment, and kafka LDAP groups
+// route for brokers and acls in kafka environment, and LDAP groups
 internal const val BROKERS = "$API_V1/brokers"
 internal const val ACLS = "$API_V1/acls"
 internal const val GROUPS = "$API_V1/groups"

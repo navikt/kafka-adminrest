@@ -15,7 +15,9 @@ import no.nav.integrasjon.ldap.LDAPGroup
  * Groups API
  * just a couple of read only routes
  * - get all kafka groups in LDAP
- * - get config. details for a specific broker
+ * - get members of a specific group
+ *
+ * Observe that 'all' groups is those groups under FasitProperties::ldapGroupBase
  */
 
 // a wrapper for this api to be installed as routes
@@ -58,7 +60,7 @@ fun Routing.getGroups(config: FasitProperties) =
  *
  * See LDAP::getKafkaGroupMembers
  *
- * Returns a collection of String - members of given group
+ * Returns a collection of String - distinguished names for members of given group
  */
 fun Routing.getGroupMembers(config: FasitProperties) =
         get("$GROUPS/{groupName}") {

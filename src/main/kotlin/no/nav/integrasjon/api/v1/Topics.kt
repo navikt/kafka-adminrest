@@ -18,6 +18,22 @@ import org.apache.kafka.common.resource.Resource
 import org.apache.kafka.common.resource.ResourceFilter
 import org.apache.kafka.common.resource.ResourceType
 
+/**
+ * Topic API
+ *
+ * - get all topics (except hidden) in cluster
+ * - create new topic, automatic creation of groups and topic ACLs
+ * - delete topic, automatic deletion of topic ACLs and LDAP groups
+ *
+ * - get topic configuration
+ * - update topic configuration, although, restricted to a few configuration elements
+ *
+ * - get topic access control lists
+ *
+ * - get topic groups
+ * - update topic group membership (add/remove member)
+ */
+
 // a wrapper for this api to be installed as routes
 fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
 
@@ -34,6 +50,15 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
     updateTopicGroup(config)
 }
 
+/**
+ * GET https://<host>/api/v1/topics
+ *
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#listTopics-org.apache.kafka.clients.admin.ListTopicsOptions-
+ *
+ * Returns a map of topic names to org.apache.kafka.clients.admin.TopicListing
+ *
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/TopicListing.html
+ */
 fun Routing.getTopics(adminClient: AdminClient) =
         get(TOPICS) {
             respondCatch {
@@ -42,8 +67,30 @@ fun Routing.getTopics(adminClient: AdminClient) =
         }
 
 /**
+ * POST https://<host>/api/v1/topics
+ *
  * Observe - json payload is only one new topic at a time - NewTopic
- * e.g. {"name":"aTopicName","numPartitions":1,"replicationFactor":1}
+ *
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/NewTopic.html
+ *
+ * e.g. {"name":"aTopicName","numPartitions":3,"replicationFactor":3}
+ *
+ * Observe requirement for authentication, e.g. n145821 and pwd - the classic stuff
+ *
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#createTopics-java.util.Collection-
+ *
+ * Iff topic creation is successful,
+ * - related producer and consumer LDAP groups will be created
+ * - related ACLs will be created, producer group with WRITE&DESCRIBE, consumer group with READ&DESCRIBE
+ *
+ * Returns a triplet<
+ *      Pair<"Topic aName", "Created">,
+ *      Collection<KafkaGroup>,
+ *      Pair<Collection<AclBinding>, "Created">
+ *     >
+ *
+ *  In case of failure for one of the LDAP groups, the LDAPGroup::KafkaGroup.result contains LDAPResult
+ *  In case of failure for ACLs, "Failure, <exception> "instead of "Created"
  */
 fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
         authenticate(AUTHENTICATION_BASIC) {
@@ -91,7 +138,7 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
 
                         val aclsResult = try {
                             adminClient.createAcls(acls).all().get()
-                            application.environment.log.info("ACLs createf - $acls")
+                            application.environment.log.info("ACLs created - $acls")
                             Pair(acls, "Created")
                         }
                         catch (e: Exception) {
@@ -105,8 +152,27 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
         }
 
 /**
- * Observe 1 - no payload, deletion of just one topic at a time
- * Observe 2 - will take ´a little bit of time´ before the deleted topics is not showing up in topics list
+ * DELETE https://<host>/api/v1/topics/{topicName}
+ *
+ * Observe - no json payload, deletion of just one topic at a time
+ * Observe - will take ´a little bit of time´ before the deleted topics is not showing up in topics list
+ * Observe requirement for authentication, e.g. n145821 and pwd - the classic stuff
+ *
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#deleteTopics-java.util.Collection-
+ *
+ * Stepwise
+ * - delete all ACLs related to topic
+ * - delete related producer and consumer LDAP groups
+ * - delete topic
+ *
+ * Returns a triplet<
+ *      Pair<"Topic aName", "Deleted">,
+ *      Collection<KafkaGroup>,
+ *      Pair<Collection<AclBindingFilter>, "Deleted">
+ *     >
+ *
+ *  In case of failure for one of the LDAP groups, the LDAPGroup::KafkaGroup.result contains LDAPResult
+ *  In case of failure for ACLs, "Failure, <exception> "instead of "Deleted"
  */
 fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
         authenticate(AUTHENTICATION_BASIC) {
@@ -125,11 +191,11 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
                             AccessControlEntryFilter.ANY
                     )
 
-                    application.environment.log.info("Delete ACLs request: $acls")
+                    application.environment.log.info("ACLs delete request: $acls")
 
                     val aclsResult = try {
                         adminClient.deleteAcls(mutableListOf(acls)).all().get()
-                        application.environment.log.info("ACLs $acls deleted")
+                        application.environment.log.info("ACLs deleted - $acls")
                         Pair(acls, "Deleted")
                     } catch (e: Exception) {
                         Pair(acls, "Failure, $e")
@@ -151,6 +217,16 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
             }
         }
 
+/**
+ * GET https://<host>/api/v1/topics/{topicName}
+ *
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#describeConfigs-java.util.Collection-
+ *
+ * Returns a map of org.apache.kafka.common.config.ConfigResource to org.apache.kafka.clients.admin.Config
+ *
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/common/config/ConfigResource.html
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/Config.html
+ */
 fun Routing.getTopicConfig(adminClient: AdminClient) =
         get("$TOPICS/{topicName}") {
             respondCatch {
@@ -176,11 +252,19 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
         }
 
 /**
- * Observe - update of topic config with one ConfigEntry(name, value) at a time
- * Please use getTopicConfig first in order to get an idea of which entry to update with related unit of value
+ * PUT https://<host>/api/v1/topics/{topicName}
+ *
+ * Observe - json payload is only one new config entry at a time - ConfigEntry
+ * Observe requirement for authentication, e.g. n145821 and pwd - the classic stuff
+ *
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/ConfigEntry.html
  * e.g. {"name": "retention.ms","value": "3600000"}
  *
- * Observe - only a few entries are allowed to update automatically
+ * Please use getTopicConfig first in order to get an idea of which entry to update with related value of unit
+ *
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#alterConfigs-java.util.Map-
+ *
+ * Returns a Pair<configEntry, "has been updated">
  */
 
 enum class AllowedConfigEntries(val entryName: String) {
@@ -217,7 +301,15 @@ fun Routing.updateTopicConfig(adminClient: AdminClient) =
             }
         }
 
-
+/**
+ * GET https://<host>/api/v1/topics/{topicName}/acls
+ *
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#describeAcls-org.apache.kafka.common.acl.AclBindingFilter-
+ *
+ * Returns a collection of org.apache.kafka.common.acl.AclBinding
+ *
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/common/acl/AclBinding.html
+ */
 fun Routing.getTopicAcls(adminClient: AdminClient) =
         get("$TOPICS/{topicName}/acls") {
             respondCatch {
@@ -235,6 +327,13 @@ fun Routing.getTopicAcls(adminClient: AdminClient) =
             }
         }
 
+/**
+ * GET https://<host>/api/v1/topics/{topicName}/groups
+ *
+ * See LDAPGroup::getKafkaGroupsAndMembers
+ *
+ * Returns a collection of LDAPGroup.Companion.KafkaGroup
+ */
 fun Routing.getTopicGroups(config: FasitProperties) =
         get("$TOPICS/{topicName}/groups") {
             respondCatch {
@@ -246,6 +345,18 @@ fun Routing.getTopicGroups(config: FasitProperties) =
             }
         }
 
+/**
+ * PUT https://<host>/api/v1/topics/{topicName}/groups
+ *
+ * Observe - json payload is only one add/remove member at a time - LDAPGroup.Companion.UpdateKafkaGroupMember
+ * Observe requirement for authentication, e.g. n145821 and pwd - the classic stuff
+ *
+ * e.g. {"role": "producer","operation": "add","memberDN":"uid=srvkafkaproducer,ou=users,dc=security,dc=example,dc=com"}
+ *
+ * See LDAPGroup::updateKafkaGroupMembership
+ *
+ * Returns LDAPResult
+ */
 fun Routing.updateTopicGroup(config: FasitProperties) =
         authenticate(AUTHENTICATION_BASIC) {
             put("$TOPICS/{topicName}/groups") {

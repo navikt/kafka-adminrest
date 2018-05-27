@@ -7,7 +7,9 @@ import mu.KotlinLogging
 import no.nav.integrasjon.EXCEPTION
 
 /**
- * A base class for LDAP operations
+ * LDAPBase provides minimum set of services for LDAP operations
+ * - establish connection to LDAPS endpoint with proper resource management by AutoCloseable
+ * - check if connected
  */
 
 abstract class LDAPBase(val connInfo: LDAPBase.Companion.ConnectionInfo) : AutoCloseable {
@@ -25,7 +27,7 @@ abstract class LDAPBase(val connInfo: LDAPBase.Companion.ConnectionInfo) : AutoC
         // initialize LDAP connection
         try {
             ldapConnection.connect(connInfo.host, connInfo.port)
-            log.debug { "Successfully connected to $connInfo" }
+            log.info { "Successfully connected to $connInfo" }
         }
         catch (e: LDAPException) {
             log.error { "$EXCEPTION LDAP operations against $connInfo will fail - $e" }

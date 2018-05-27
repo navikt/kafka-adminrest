@@ -29,6 +29,11 @@ import java.util.*
 
 const val AUTHENTICATION_BASIC = "basicAuth"
 
+/**
+ * Application.kafkaAdminREST is bootstrapping the already startet Netty server
+ * with suitable set of functionality
+ */
+
 fun Application.kafkaAdminREST() {
 
     val log = KotlinLogging.logger {  }

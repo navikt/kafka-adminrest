@@ -5,7 +5,9 @@ import mu.KotlinLogging
 import no.nav.integrasjon.*
 
 /**
- * LDAPAuthenticate - simple class for LDAP bind verification
+ * LDAPAuthenticate provides only canUserAuthenticate by simple LDAP bind verification
+ *
+ * See https://docs.ldap.com/ldap-sdk/docs/javadoc/overview-summary.html
  */
 
 class LDAPAuthenticate(private val config: FasitProperties) :
@@ -17,7 +19,7 @@ class LDAPAuthenticate(private val config: FasitProperties) :
             else {
                 val connInfo = config.getConnectionInfo(LdapConnectionType.AUTHENTICATION)
                 val userDN = config.userDN(user)
-                log.debug { "Trying bind of $userDN to $connInfo" }
+                log.info { "Trying bind of $userDN to $connInfo" }
 
                 try {
                     ldapConnection.bind(userDN, pwd).resultCode == ResultCode.SUCCESS
@@ -27,7 +29,6 @@ class LDAPAuthenticate(private val config: FasitProperties) :
                     false
                 }
             }
-
 
     companion object {
 

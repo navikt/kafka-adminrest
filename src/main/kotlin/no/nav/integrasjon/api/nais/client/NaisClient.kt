@@ -14,6 +14,15 @@ import no.nav.integrasjon.ldap.LDAPAuthenticate
 import no.nav.integrasjon.ldap.LDAPGroup
 import org.apache.kafka.clients.admin.AdminClient
 
+/**
+ * NAIS API
+ *
+ * supporting the mandatory NAIS services
+ * - getIsAlive
+ * - getIsReady
+ * - getPrometheus
+ */
+
 // a wrapper for this api to be installed as routes
 fun Routing.naisAPI(adminClient: AdminClient, config: FasitProperties, collectorRegistry: CollectorRegistry) {
 
