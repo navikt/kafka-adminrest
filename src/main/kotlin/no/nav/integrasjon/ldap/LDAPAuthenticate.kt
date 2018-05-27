@@ -19,10 +19,11 @@ class LDAPAuthenticate(private val config: FasitProperties) :
             else {
                 val connInfo = config.getConnectionInfo(LdapConnectionType.AUTHENTICATION)
                 val userDN = config.userDN(user)
-                log.info { "Trying bind of $userDN to $connInfo" }
 
                 try {
-                    ldapConnection.bind(userDN, pwd).resultCode == ResultCode.SUCCESS
+                    (ldapConnection.bind(userDN, pwd).resultCode == ResultCode.SUCCESS).also {
+                        if (it) log.info { "Successful bind of $userDN to $connInfo" }
+                    }
                 }
                 catch(e: LDAPException) {
                     log.error { "$EXCEPTION cannot bind $userDN to $connInfo, ${e.diagnosticMessage}" }

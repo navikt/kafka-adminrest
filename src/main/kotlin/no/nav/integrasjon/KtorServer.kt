@@ -10,10 +10,8 @@ import io.ktor.http.*
 import io.ktor.request.path
 import io.ktor.response.*
 import io.ktor.routing.Routing
-import io.ktor.server.engine.ShutDownUrl
 import io.ktor.util.*
 import io.prometheus.client.CollectorRegistry
-import kotlinx.coroutines.experimental.runBlocking
 import mu.KotlinLogging
 import no.nav.integrasjon.api.nais.client.naisAPI
 import no.nav.integrasjon.api.v1.API_V1

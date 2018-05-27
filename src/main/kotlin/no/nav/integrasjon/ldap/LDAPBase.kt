@@ -27,7 +27,7 @@ abstract class LDAPBase(val connInfo: LDAPBase.Companion.ConnectionInfo) : AutoC
         // initialize LDAP connection
         try {
             ldapConnection.connect(connInfo.host, connInfo.port)
-            log.info { "Successfully connected to $connInfo" }
+            log.debug { "Successfully connected to $connInfo" }
         }
         catch (e: LDAPException) {
             log.error { "$EXCEPTION LDAP operations against $connInfo will fail - $e" }

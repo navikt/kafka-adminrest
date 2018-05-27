@@ -269,7 +269,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
 
 enum class AllowedConfigEntries(val entryName: String) {
     RETENTION_MS("retention.ms")
-    // TODO - will be enhanced with suitable set of config entries
+    // will be enhanced with suitable set of config entries
 }
 
 fun Routing.updateTopicConfig(adminClient: AdminClient) =
@@ -351,7 +351,7 @@ fun Routing.getTopicGroups(config: FasitProperties) =
  * Observe - json payload is only one add/remove member at a time - LDAPGroup.Companion.UpdateKafkaGroupMember
  * Observe requirement for authentication, e.g. n145821 and pwd - the classic stuff
  *
- * e.g. {"role": "producer","operation": "add","memberDN":"uid=srvkafkaproducer,ou=users,dc=security,dc=example,dc=com"}
+ * e.g. {"role": "producer","operation": "add","member":"srvkafkaproducer"}
  *
  * See LDAPGroup::updateKafkaGroupMembership
  *

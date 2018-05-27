@@ -11,8 +11,9 @@ import no.nav.integrasjon.*
  * - deletion of groups
  * - add or remove group members
  *
- * Group management is restriced to Kafka context
+ * Group management is restricted to Kafka context
  * - producer - and consumer group per topic, restricted to FasitProperties::ldapGroupBase
+ * - members of producer - or consumer group, restricted to service accounts, FasitProperties::ldapSrvUserBase
  *
  * See See https://docs.ldap.com/ldap-sdk/docs/javadoc/overview-summary.html
  *
@@ -30,7 +31,7 @@ class LDAPGroup(private val config: FasitProperties) :
         val srvUserDN = config.srvUserDN()
         try {
             ldapConnection.bind(srvUserDN,config.ldapPassword)
-            log.info {"Successfully bind of $srvUserDN to $connInfo" }
+            log.debug {"Successfully bind of $srvUserDN to $connInfo" }
         }
         catch (e: LDAPException) {
             log.error("$EXCEPTION LDAP operations will fail. Bind failure for $srvUserDN to $connInfo - $e")
@@ -129,15 +130,16 @@ class LDAPGroup(private val config: FasitProperties) :
                             SearchScope.ONE,
                             Filter.createEqualityFilter(
                                     config.ldapGroupAttrName,
-                                    groupName),
-                            config.ldapGrpMemberAttrName)
+                                    groupName
+                            ),
+                            config.ldapGrpMemberAttrName
                     )
+            )
                     .searchEntries
                     .flatMap {
                         it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: emptyList()
                     }
 
-    //TODO - should search for the user, easier use of REST service
     fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): LDAPResult =
             ldapConnection.modify(
                 ModifyRequest(
@@ -148,10 +150,31 @@ class LDAPGroup(private val config: FasitProperties) :
                                     GroupMemberOperation.REMOVE -> ModificationType.DELETE
                                 },
                                 config.ldapGrpMemberAttrName,
-                                updateEntry.memberDN
+                                getServiceUserDN(updateEntry.member)
                         )
                 ).also { req -> log.info { "Update group membership request: $req" } }
             )
+
+    private fun getServiceUserDN(name: String): String =
+            ldapConnection.search(
+                    SearchRequest(
+                            config.ldapSrvUserBase,
+                            SearchScope.SUB,
+                            Filter.createEqualityFilter(
+                                    config.ldapUserAttrName,
+                                    name
+                            ),
+                            SearchRequest.NO_ATTRIBUTES
+                    )
+            )
+                    .let { searchRes ->
+                        when(searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
+                            true -> searchRes.searchEntries[0].dn
+                            false -> {
+                                log.warn { "Could not find $name anywhere under ${config.ldapSrvUserBase}" }
+                                ""}
+                        }
+                    }
 
     companion object {
 
@@ -186,7 +209,7 @@ class LDAPGroup(private val config: FasitProperties) :
         data class UpdateKafkaGroupMember(
                 val role: KafkaGroupType,
                 val operation: GroupMemberOperation,
-                val memberDN: String)
+                val member: String)
 
         /**
          * data class KafkaGroup as result from functions iterating KafkaGroupType - see groupTypesCatch
