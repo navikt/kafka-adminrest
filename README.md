@@ -4,9 +4,11 @@ Provides a REST interface for
 - List of brokers in kafka cluster and their configuration (Broker API)
 - List of all Access Control Lists in kafka cluster (ACL API)
 - List of all kafka groups and their members (Group API)
-- Topic creation and deletion with automatic handling of groups and acl. Also add/remove of group members (Topic API)
+- Topic creation and deletion with automatic handling of groups and access control lists. 
+Each topic supports add/remove of group members and list/update topic configuration (Topic API)
 
-Please refer to [KafkaPlainSaslServer2AD](https://github.com/navikt/KafkaPlainSaslServer2AD) for customization of Kafka security using LDAP groups for authorization.
+Please refer to [KafkaPlainSaslServer2AD](https://github.com/navikt/KafkaPlainSaslServer2AD) for customization of 
+Kafka security using LDAP groups for authorization.
 
 ## Tools
 - Kotlin
