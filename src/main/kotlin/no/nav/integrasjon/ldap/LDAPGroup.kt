@@ -185,11 +185,14 @@ class LDAPGroup(private val config: FasitProperties) :
         /**
          * Ref. https://social.technet.microsoft.com/Forums/windows/en-US/0d7c1a2d-2bbe-4a54-9d1a-c3cff1871ed6/active-directory-group-name-character-limit?forum=winserverDS
          * The longest CommonName (CN) is limited to 64 characters
-         * Kafka handle ≤ 246 length of topic name
+         * Kafka topic name length must be ≤ 246
+         * The topic name is more restrictice than group name, check only the final group name length
          */
         private const val MAX_GROUPNAME_LENGTH = 64
         fun validGroupLength(topicName: String): Boolean =
                 KafkaGroupType.values().map { it.prefix.length }.max()!! + topicName.length <= MAX_GROUPNAME_LENGTH
+
+        fun maxTopicNameLength(): Int = MAX_GROUPNAME_LENGTH -  KafkaGroupType.values().map { it.prefix.length }.max()!!
 
         /**
          * Enum class KafkaGroupType with LDAP group prefix included

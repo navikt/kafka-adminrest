@@ -11,7 +11,6 @@ import no.nav.integrasjon.AUTHENTICATION_BASIC
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.ldap.LDAPGroup
 import org.apache.kafka.clients.admin.*
-import org.apache.kafka.common.KafkaException
 import org.apache.kafka.common.acl.*
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.Resource
@@ -51,21 +50,6 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
 }
 
 /**
- * Ref. https://social.technet.microsoft.com/Forums/windows/en-US/0d7c1a2d-2bbe-4a54-9d1a-c3cff1871ed6/active-directory-group-name-character-limit?forum=winserverDS
- * The longest CommonName (CN) is limited to 64 characters
- * Kafka handle ≤ 246 length of topic name
- */
-
-// extension function for validating a topic name
-internal fun String.isValid(): Boolean =
-        this.map { c ->
-            when {
-                (c in 'A'..'Z' || c in 'a'..'z' || c == '-' || c in '0'..'9') -> true
-                else -> false
-            }
-        }.all { it } && LDAPGroup.validGroupLength(this)
-
-/**
  * GET https://<host>/api/v1/topics
  *
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#listTopics-org.apache.kafka.clients.admin.ListTopicsOptions-
@@ -84,11 +68,16 @@ fun Routing.getTopics(adminClient: AdminClient) =
 /**
  * POST https://<host>/api/v1/topics
  *
- * Observe - json payload is only one new topic at a time - NewTopic
+ * Observe - json payload is only one new topic at a time - ANewTopic
  *
+ * e.g. {"name":"aTopicName","numPartitions":3}
+ *
+ * Observe that we need to create kafka NewTopic where the missing piece is the replication factor
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/NewTopic.html
  *
- * e.g. {"name":"aTopicName","numPartitions":3,"replicationFactor":3}
+ * The system will get the default.replication.factor from the 1. broker configuration. In that way the replication
+ * factor will be correct across test, preprod and production environment. The latter has higher repl. factor in order
+ * to guarantee HA even if one data center goes down
  *
  * Observe requirement for authentication, e.g. n145821 and pwd - the classic stuff
  *
@@ -106,19 +95,51 @@ fun Routing.getTopics(adminClient: AdminClient) =
  *
  *  In case of failure for one of the LDAP groups, the LDAPGroup::KafkaGroup.result contains LDAPResult
  *  In case of failure for ACLs, "Failure, <exception> "instead of "Created"
- *
- *  TODO - receive topicname and numPartitions only, use default replicationFactor from config
  */
+
+// get the default replication factor from 1st broker configuration. Due to puppet, consistency across brokers in a
+// kafka cluster
+private fun getDefaultReplicationFactor(adminClient: AdminClient): Short =
+        adminClient.describeCluster().nodes().get().first().let { node ->
+            adminClient.describeConfigs(
+                    listOf(
+                            ConfigResource(
+                                    ConfigResource.Type.BROKER,
+                                    node.idString()
+                            )
+                    )
+            ).all().get().values.first().get("default.replication.factor").value().toShort()
+        }
+
+// simplified version of kafka NewTopic
+private data class ANewTopic(val name: String, val numPartitions:Int)
+
+// extension function for validating a topic name and that the future group names are of valid length
+private fun String.isValid(): Boolean =
+        this.map { c ->
+            when {
+                (c in 'A'..'Z' || c in 'a'..'z' || c == '-' || c in '0'..'9') -> true
+                else -> false
+            }
+        }.all { it } && LDAPGroup.validGroupLength(this)
+
+
 fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
         authenticate(AUTHENTICATION_BASIC) {
             post(TOPICS) {
                 respondCatch {
-                    val newTopic = runBlocking { call.receive<NewTopic>() }
+                    val aNewTopic = runBlocking { call.receive<ANewTopic>() }
 
-                    if (!newTopic.name().isValid())
-                        throw Exception(
-                                "Invalid topic name. Must contain [a..z]||[A..Z]||[0..9]||'-' only &&  length ≤ 61"
-                        )
+                    if (!aNewTopic.name.isValid())
+                        throw Exception("Invalid topic name. Must contain [a..z]||[A..Z]||[0..9]||'-' only &&  " +
+                                "length ≤ ${LDAPGroup.maxTopicNameLength()}")
+
+                    // create kafka NewTopic by getting the default replication factor from broker config
+                    val newTopic = NewTopic(
+                            aNewTopic.name,
+                            aNewTopic.numPartitions,
+                            getDefaultReplicationFactor(adminClient)
+                    )
 
                     val logEntry = "Topic creation request by ${this.context.authentication.principal} - $newTopic"
                     application.environment.log.info(logEntry)
