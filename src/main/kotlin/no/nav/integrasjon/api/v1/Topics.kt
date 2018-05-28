@@ -51,6 +51,21 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
 }
 
 /**
+ * Ref. https://social.technet.microsoft.com/Forums/windows/en-US/0d7c1a2d-2bbe-4a54-9d1a-c3cff1871ed6/active-directory-group-name-character-limit?forum=winserverDS
+ * The longest CommonName (CN) is limited to 64 characters
+ * Kafka handle ≤ 246 length of topic name
+ */
+
+// extension function for validating a topic name
+internal fun String.isValid(): Boolean =
+        this.map { c ->
+            when {
+                (c in 'A'..'Z' || c in 'a'..'z' || c == '-' || c in '0'..'9') -> true
+                else -> false
+            }
+        }.all { it } && LDAPGroup.validGroupLength(this)
+
+/**
  * GET https://<host>/api/v1/topics
  *
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#listTopics-org.apache.kafka.clients.admin.ListTopicsOptions-
@@ -91,12 +106,20 @@ fun Routing.getTopics(adminClient: AdminClient) =
  *
  *  In case of failure for one of the LDAP groups, the LDAPGroup::KafkaGroup.result contains LDAPResult
  *  In case of failure for ACLs, "Failure, <exception> "instead of "Created"
+ *
+ *  TODO - receive topicname and numPartitions only, use default replicationFactor from config
  */
 fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
         authenticate(AUTHENTICATION_BASIC) {
             post(TOPICS) {
                 respondCatch {
                     val newTopic = runBlocking { call.receive<NewTopic>() }
+
+                    if (!newTopic.name().isValid())
+                        throw Exception(
+                                "Invalid topic name. Must contain [a..z]||[A..Z]||[0..9]||'-' only &&  length ≤ 61"
+                        )
+
                     val logEntry = "Topic creation request by ${this.context.authentication.principal} - $newTopic"
                     application.environment.log.info(logEntry)
 
@@ -284,7 +307,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient) =
 
                     // check whether configEntry is allowed
                     if (!AllowedConfigEntries.values().map { it.entryName }.contains(configEntry.name()))
-                        throw KafkaException("configEntry ${configEntry.name()} is not allowed to update automatically")
+                        throw Exception("configEntry ${configEntry.name()} is not allowed to update automatically")
 
                     val logEntry = "Topic config. update request by ${this.context.authentication.principal} - $topicName"
                     application.environment.log.info(logEntry)

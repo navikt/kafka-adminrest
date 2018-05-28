@@ -183,14 +183,23 @@ class LDAPGroup(private val config: FasitProperties) :
         private fun toGroupName(prefix: String, topicName: String) = "$prefix$topicName"
 
         /**
+         * Ref. https://social.technet.microsoft.com/Forums/windows/en-US/0d7c1a2d-2bbe-4a54-9d1a-c3cff1871ed6/active-directory-group-name-character-limit?forum=winserverDS
+         * The longest CommonName (CN) is limited to 64 characters
+         * Kafka handle ≤ 246 length of topic name
+         */
+        private const val MAX_GROUPNAME_LENGTH = 64
+        fun validGroupLength(topicName: String): Boolean =
+                KafkaGroupType.values().map { it.prefix.length }.max()!! + topicName.length <= MAX_GROUPNAME_LENGTH
+
+        /**
          * Enum class KafkaGroupType with LDAP group prefix included
          * Each topic has 2 groups
          * - a producer group with members allowed to produce events to topic
          * - a consumer group with members allowed to consume events from topic
          */
         enum class KafkaGroupType(val prefix: String) {
-            @SerializedName("producer") PRODUCER("KAFKA_PRODUCER_"),
-            @SerializedName("consumer") CONSUMER("KAFKA_CONSUMER_")
+            @SerializedName("producer") PRODUCER("KP_"),
+            @SerializedName("consumer") CONSUMER("KC_")
         }
 
         /**
