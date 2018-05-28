@@ -267,9 +267,11 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
  * Returns a Pair<configEntry, "has been updated">
  */
 
+// will be enhanced with suitable set of config entries
 enum class AllowedConfigEntries(val entryName: String) {
-    RETENTION_MS("retention.ms")
-    // will be enhanced with suitable set of config entries
+    RETENTION_MS("retention.ms"),
+    RETENTION_BYTES("retention.bytes"),
+    CLEANUP_POLICY("cleanup.policy")
 }
 
 fun Routing.updateTopicConfig(adminClient: AdminClient) =
