@@ -22,9 +22,9 @@ import no.nav.integrasjon.EXCEPTION
 
 object InMemoryLDAPServer {
 
-    val log = KotlinLogging.logger {  }
-
-    const val LNAME = "LDAPS"
+    const val LPORT = 11636
+    private val log = KotlinLogging.logger {  }
+    private const val LNAME = "LDAPS"
 
     private val imConf = InMemoryDirectoryServerConfig("dc=test,dc=local").apply {
 
@@ -42,7 +42,7 @@ object InMemoryLDAPServer {
                     InMemoryListenerConfig.createLDAPSConfig(
                             LNAME,
                             null,
-                            11636, tlsSF, tlsCF)
+                            LPORT, tlsSF, tlsCF)
             )
 
             setAuthenticationRequiredOperationTypes(OperationType.COMPARE)

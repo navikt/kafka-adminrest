@@ -1,13 +1,9 @@
 package no.nav.integrasjon
 
-import com.unboundid.ldap.sdk.LDAPConnection
-import com.unboundid.util.ssl.SSLUtil
-import com.unboundid.util.ssl.TrustAllTrustManager
 import io.ktor.application.Application
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import mu.KotlinLogging
-import no.nav.integrasjon.ldap.LDAPBase
 
 fun main(args: Array<String>) {
 

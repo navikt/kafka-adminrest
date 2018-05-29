@@ -12,7 +12,7 @@ import no.nav.integrasjon.EXCEPTION
  * - check if connected
  */
 
-abstract class LDAPBase(val connInfo: LDAPBase.Companion.ConnectionInfo) : AutoCloseable {
+abstract class LDAPBase(private val connInfo: LDAPBase.Companion.ConnectionInfo) : AutoCloseable {
 
     private val connectOptions = LDAPConnectionOptions().apply {
         connectTimeoutMillis = connInfo.timeout

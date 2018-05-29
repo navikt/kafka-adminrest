@@ -45,21 +45,6 @@ shadowJar {
     classifier = null
 }
 
-// not working...
-test {
-    exclude "**/ExternalAttachmentToJMSSpec.class"
-    exclude "**/KafkaTopicConsumerSpec.class"
-}
-
-/**
- * The junitPlatformTest not required as long as the class KafkaMetrics is not used
- */
-/*
-junitPlatformTest {
-    jvmArgs "-Dcom.sun.management.jmxremote.port=50367", "-Dcom.sun.management.jmxremote.authenticate=false", "-Dcom.sun.management.jmxremote.ssl=false"
-}
-*/
-
 repositories {
     mavenCentral()
     maven {
