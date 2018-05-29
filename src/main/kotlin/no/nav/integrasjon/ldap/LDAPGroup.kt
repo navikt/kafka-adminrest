@@ -201,8 +201,8 @@ class LDAPGroup(private val config: FasitProperties) :
          * - a consumer group with members allowed to consume events from topic
          */
         enum class KafkaGroupType(val prefix: String) {
-            @SerializedName("producer") PRODUCER("KP_"),
-            @SerializedName("consumer") CONSUMER("KC_")
+            @SerializedName("producer") PRODUCER("KP-"),
+            @SerializedName("consumer") CONSUMER("KC-")
         }
 
         /**

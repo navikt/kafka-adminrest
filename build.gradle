@@ -9,6 +9,7 @@ buildscript {
     ext.prometheus_version = '0.3.0'
     ext.logstash_encoder_version = '4.10'
     ext.fjackson_datatype_version = '2.9.2'
+    ext.unboundid_version = '4.0.6'
 
     dependencies {
         classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.2'
@@ -80,8 +81,8 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     implementation "org.jetbrains.kotlin:kotlin-reflect"
 
-    implementation "org.apache.kafka:kafka-clients:1.0.1"
-    implementation "com.unboundid:unboundid-ldapsdk:4.0.5"
+    implementation "org.apache.kafka:kafka-clients:$kafka_version"
+    implementation "com.unboundid:unboundid-ldapsdk:$unboundid_version"
 
     implementation "io.ktor:ktor-server-netty:$ktor_version"
     implementation "io.ktor:ktor-gson:$ktor_version"
