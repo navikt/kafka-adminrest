@@ -33,13 +33,5 @@ fun main(args: Array<String>) {
 
     // see https://ktor.io/index.html for ktor enlightenment
     // start embedded netty, then fire opp ktor module and wait for connections
-    //embeddedServer(Netty, 8080, module = Application::kafkaAdminREST).start(wait = true)
-
-    LDAPConnection(SSLUtil(TrustAllTrustManager()).createSSLSocketFactory()).apply {
-        connect("localhost",10636)
-    }.use {
-        it.bind("uid=srvkafkabroker,ou=users,dc=security,dc=example,dc=com","broker")
-        System.out.println(it.getSchema().getSchemaEntry().toLDIFString())
-        println(it.getSchema().schemaEntry.toLDIF())
-    }
+    embeddedServer(Netty, 8080, module = Application::kafkaAdminREST).start(wait = true)
 }

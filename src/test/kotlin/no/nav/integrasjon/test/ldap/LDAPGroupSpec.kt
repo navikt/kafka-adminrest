@@ -19,7 +19,7 @@ object LDAPGroupSpec : Spek({
             "uid",
             "localhost",
             11636,
-            "OU=Users,OU=NAV,OU=BusinessUnits,DC=adeo,DC=no",
+            "OU=Users,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
             "localhost",
             11636,
             "OU=ServiceAccounts,DC=test,DC=local",
