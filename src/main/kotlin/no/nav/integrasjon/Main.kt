@@ -10,7 +10,7 @@ fun main(args: Array<String>) {
     val log = KotlinLogging.logger {  }
 
     log.info { "Checking Fasit properties" }
-    FasitProperties().let { fp ->
+    FasitPropFactory.fasitProperties.let { fp ->
         if (!fp.ldapAuthenticationInfoComplete()) {
             log.error { "Incomplete properties for ldap authentication - $fp" }
             return

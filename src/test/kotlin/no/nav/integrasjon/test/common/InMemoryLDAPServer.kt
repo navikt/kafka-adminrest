@@ -38,7 +38,6 @@ object InMemoryLDAPServer {
             ).createSSLServerSocketFactory()
 
             setListenerConfigs(
-                    //InMemoryListenerConfig.createLDAPConfig("LDAP",11389),
                     InMemoryListenerConfig.createLDAPSConfig(
                             LNAME,
                             null,

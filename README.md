@@ -13,17 +13,17 @@ Kafka security using LDAP groups for authorization.
 ## Tools
 - Kotlin
 - Gradle build tool
-- Spek test framework (coming...)
+- Spek test framework for LDAP management. Missing embedded kafka with authentication & authorization for time being
 
 ## Components
 
 1. Ktor using Netty provides the REST interfaces
 2. Kafka AdminClient API v.1.0.1 for kafka interaction
-3. Unboundid LDAP API v.4.0.5 for LDAPS interaction
+3. Unboundid LDAP API v.4.0.6 for LDAPS interaction
 
 ## Testing
 
-Tested on confluent.io version 4.0.0 and Active Directory <some version - to be defined>
+Tested on confluent.io version 4.0.0 and Active Directory verion 69 on 2012 R2
 
 See related [Wiki](https://github.com/navikt/kafka-adminrest/wiki) for quick start and code structure
 

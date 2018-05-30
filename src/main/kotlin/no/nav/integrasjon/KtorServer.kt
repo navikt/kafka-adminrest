@@ -38,7 +38,7 @@ fun Application.kafkaAdminREST() {
 
     log.info { "Starting server" }
 
-    val fasitProps = FasitProperties()
+    val fasitProps = FasitPropFactory.fasitProperties
     val adminClient = fasitProps.let { fp ->
 
         log.info { "Creating kafka admin client" }

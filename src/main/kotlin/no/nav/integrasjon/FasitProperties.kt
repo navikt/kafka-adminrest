@@ -3,6 +3,21 @@ package no.nav.integrasjon
 import no.nav.integrasjon.ldap.LDAPBase
 
 /**
+ * FasitPropFactory is a factory for fasit properties in order to separate test versus normal execution
+ */
+object FasitPropFactory {
+
+    private var fasitProperties_: FasitProperties? = null
+    val fasitProperties: FasitProperties
+        get() {
+            if (fasitProperties_ == null) fasitProperties_ = FasitProperties()
+            return fasitProperties_ ?: throw AssertionError("FasitPropFactory, null for fasitProperties_!")
+        }
+
+    fun setFasitProperties(fp: FasitProperties) { fasitProperties_ = fp }
+}
+
+/**
  * FasitProperties is a data class hosting relevant fasit properties required by this application
  * In addition, some suitable extension functions
  */

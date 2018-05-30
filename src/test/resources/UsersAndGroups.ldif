@@ -79,12 +79,23 @@ dn: ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local
 objectClass: organizationalUnit
 ou: Users
 
+# Add a couple of users for testing authentication
+
 dn: uid=iauth,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local
 objectClass: inetOrgPerson
 objectClass: person
 objectClass: organizationalPerson
 cn: iauth
 uid: iauth
+sn: IntegrationTestAuth
+userPassword: itest
+
+dn: uid=iauth2,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local
+objectClass: inetOrgPerson
+objectClass: person
+objectClass: organizationalPerson
+cn: iauth2
+uid: iauth2
 sn: IntegrationTestAuth
 userPassword: itest
 

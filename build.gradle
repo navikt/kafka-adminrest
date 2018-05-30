@@ -85,6 +85,7 @@ dependencies {
     testCompile "org.jetbrains.spek:spek-api:1.1.5"
     testImplementation "org.amshove.kluent:kluent:1.33"
     testImplementation "no.nav.common:embedded.kafka:$embeddedkafka_version"
+    testImplementation "io.ktor:ktor-server-test-host:$ktor_version"
 
     testRuntimeOnly "org.jetbrains.spek:spek-junit-platform-engine:1.1.5"
 }

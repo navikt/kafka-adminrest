@@ -11,6 +11,7 @@ import org.jetbrains.spek.api.dsl.*
 
 object LDAPGroupSpec : Spek({
 
+
     val fp = FasitProperties(
             "","","","","","","",
             ldapConnTimeout = 250,
@@ -43,65 +44,45 @@ object LDAPGroupSpec : Spek({
 
         context("For a given topic, get prod. and cons. groups with members - getKafkaGroupsAndMembers") {
 
-            "tpc-01".let {
-                it("should return correct info for $it") {
-                    val kGroups = LDAPGroup(fp).use { lc -> lc.getKafkaGroupsAndMembers(it) }
-
-                    kGroups.size shouldEqualTo 2
-                    kGroups.map { it.groupType } shouldContainAll LDAPGroup.Companion.KafkaGroupType.values()
-                    kGroups.flatMap { it.members } shouldEqual emptyList()
-                }
-            }
-
-            "tpc-02".let {
-                it("should return correct info for $it") {
-                    val kGroups = LDAPGroup(fp).use { lc -> lc.getKafkaGroupsAndMembers(it) }
-
-                    kGroups.size shouldEqualTo 2
-                    kGroups.map { it.groupType } shouldContainAll LDAPGroup.Companion.KafkaGroupType.values()
-                    kGroups.flatMap { it.members } shouldContainAll  listOf(
+            val topics = mapOf(
+                    "tpc-01" to emptyList(),
+                    "tpc-02" to listOf(
                             "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
                             "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local"
-                    )
-                }
-            }
-
-            "tpc-03".let {
-                it("should return correct info for $it") {
-                    val kGroups = LDAPGroup(fp).use { lc -> lc.getKafkaGroupsAndMembers(it) }
-
-                    kGroups.size shouldEqualTo 2
-                    kGroups.map { it.groupType } shouldContainAll LDAPGroup.Companion.KafkaGroupType.values()
-                    kGroups.flatMap { it.members } shouldContainAll  listOf(
+                    ),
+                    "tpc-03" to listOf(
                             "uid=srvc01,ou=ServiceAccounts,dc=test,dc=local",
                             "uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local"
                     )
+            )
+
+            topics.forEach { topic, allMembers ->
+                it("should return correct info for topic $topic") {
+                    val kGroups = LDAPGroup(fp).use { lc -> lc.getKafkaGroupsAndMembers(topic) }
+
+                    kGroups.size shouldEqualTo 2
+                    kGroups.map { it.groupType } shouldContainAll LDAPGroup.Companion.KafkaGroupType.values()
+                    kGroups.flatMap { it.members } shouldContainAll allMembers
                 }
+
             }
         }
 
         context("For a given group name, get a list of members") {
 
-            "KP-tpc-01".let {
-                it("should return correct members for $it") {
-                    LDAPGroup(fp).use { lc -> lc.getKafkaGroupMembers(it) } shouldEqual emptyList()
-                }
-            }
+            val groups = mapOf(
+                    "KP-tpc-01" to emptyList(),
+                    "KC-tpc-02" to listOf("uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local"),
+                    "KP-tpc-03" to listOf("uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local")
+            )
 
-            "KC-tpc-02".let {
-                it("should return correct members for $it") {
-                    LDAPGroup(fp).use { lc -> lc.getKafkaGroupMembers(it) } shouldContainAll listOf(
-                            "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local")
-                }
-            }
-
-            "KP-tpc-03".let {
-                it("should return correct members for $it") {
-                    LDAPGroup(fp).use { lc -> lc.getKafkaGroupMembers(it) } shouldContainAll listOf(
-                            "uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local")
+            groups.forEach { group, members ->
+                it("should return $members for group $group") {
+                    LDAPGroup(fp).use { lc -> lc.getKafkaGroupMembers(group) } shouldEqual members
                 }
             }
         }
+
 
         context("Create kafka groups for a topic") {
 
