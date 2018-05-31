@@ -84,7 +84,7 @@ object LDAPGroupSpec : Spek({
         }
 
 
-        context("Create kafka groups for a topic") {
+        context("Create kafka groups for topic tpc-04") {
 
             "tpc-04".let { topic ->
                 it("should return 2 new groups when asking for all kafka groups") {
@@ -103,27 +103,9 @@ object LDAPGroupSpec : Spek({
             }
         }
 
-        context("Delete kafka groups for a topic") {
+        context("Add service users as producer/consumer for topic tpc-04") {
 
             "tpc-04".let { topic ->
-                it("should not return those 2 groups when asking for all kafka groups") {
-                    LDAPGroup(fp).use { lc ->
-                        lc.deleteKafkaGroups(topic)
-                        lc.getKafkaGroups()
-                    } shouldNotContainAny listOf("KP-$topic","KC-$topic")
-                }
-
-                it("should report error when trying to delete non-existing groups") {
-                    LDAPGroup(fp).use { lc ->
-                        lc.deleteKafkaGroups(topic)
-                    }.map { it.result.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true,true)
-                }
-            }
-        }
-
-        context("Add service users as producer/consumer for a topic") {
-
-            "tpc-01".let { topic ->
                 it("should return the added srvp01 producer when getting group members") {
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
@@ -201,9 +183,9 @@ object LDAPGroupSpec : Spek({
             }
         }
 
-        context("Remove service users as producer/consumer for a topic") {
+        context("Remove service users as producer/consumer for topic tpc-04") {
 
-            "tpc-01".let { topic ->
+            "tpc-04".let { topic ->
                 it("should return group members without removed srvp01") {
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
@@ -250,6 +232,25 @@ object LDAPGroupSpec : Spek({
                 }
             }
         }
+
+        context("Delete kafka groups for topic tpc-04") {
+
+            "tpc-04".let { topic ->
+                it("should not return those 2 groups when asking for all kafka groups") {
+                    LDAPGroup(fp).use { lc ->
+                        lc.deleteKafkaGroups(topic)
+                        lc.getKafkaGroups()
+                    } shouldNotContainAny listOf("KP-$topic","KC-$topic")
+                }
+
+                it("should report error when trying to delete non-existing groups") {
+                    LDAPGroup(fp).use { lc ->
+                        lc.deleteKafkaGroups(topic)
+                    }.map { it.result.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true,true)
+                }
+            }
+        }
+
 
         afterGroup { InMemoryLDAPServer.stop() }
     }

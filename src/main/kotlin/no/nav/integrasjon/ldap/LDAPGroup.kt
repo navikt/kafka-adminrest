@@ -141,19 +141,24 @@ class LDAPGroup(private val config: FasitProperties) :
                     }
 
     fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): LDAPResult =
-            ldapConnection.modify(
-                ModifyRequest(
-                        config.groupDN(toGroupName(updateEntry.role.prefix, topicName)),
-                        Modification(
-                                when(updateEntry.operation) {
-                                    GroupMemberOperation.ADD -> ModificationType.ADD
-                                    GroupMemberOperation.REMOVE -> ModificationType.DELETE
-                                },
-                                config.ldapGrpMemberAttrName,
-                                getServiceUserDN(updateEntry.member)
-                        )
-                ).also { req -> log.info { "Update group membership request: $req" } }
-            )
+
+            getServiceUserDN(updateEntry.member).let { srvUserDN ->
+                if (srvUserDN.isEmpty())
+                    throw Exception("Cannot find ${updateEntry.member} under ${config.ldapSrvUserBase}")
+                else
+                    ldapConnection.modify(
+                            ModifyRequest(
+                                    config.groupDN(toGroupName(updateEntry.role.prefix, topicName)),
+                                    Modification(
+                                            when(updateEntry.operation) {
+                                                GroupMemberOperation.ADD -> ModificationType.ADD
+                                                GroupMemberOperation.REMOVE -> ModificationType.DELETE
+                                            },
+                                            config.ldapGrpMemberAttrName,
+                                            srvUserDN)
+                                    )
+                            ).also { req -> log.info { "Update group membership request: $req" } }
+            }
 
     private fun getServiceUserDN(name: String): String =
             ldapConnection.search(
@@ -171,7 +176,7 @@ class LDAPGroup(private val config: FasitProperties) :
                         when(searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
                             true -> searchRes.searchEntries[0].dn
                             false -> {
-                                log.warn { "Could not find $name anywhere under ${config.ldapSrvUserBase}" }
+                                log.error { "Could not find $name anywhere under ${config.ldapSrvUserBase}" }
                                 ""}
                         }
                     }
