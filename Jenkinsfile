@@ -56,7 +56,22 @@ pipeline {
                 nais 'upload'
             }
         }
-        stage('deploy to nais') {
+
+        stage('deploy to test') {
+            environment { FASIT_ENV = 't4' }
+            steps {
+                deployApplication()
+            }
+        }
+
+        stage('deploy to preprod') {
+            environment { FASIT_ENV = 'q4' }
+            steps {
+                deployApplication()
+            }
+        }
+
+        /*stage('deploy to nais') {
             steps {
                 script {
                     def jiraIssueId = nais 'jiraDeploy'
@@ -71,7 +86,9 @@ pipeline {
                     }
                 }
             }
-        }
+        }*/
+
+
     }
     post {
         always {
@@ -96,5 +113,19 @@ pipeline {
             slackStatus status: 'failure'
             deleteDir()
         }
+    }
+}
+
+
+void deployApplication() {
+    def jiraIssueId = nais 'jiraDeploy'
+    slackStatus status: 'deploying', jiraIssueId: "${jiraIssueId}"
+    try {
+        timeout(time: 1, unit: 'HOURS') {
+            input id: "deploy", message: "Waiting for remote Jenkins server to deploy the application..."
+        }
+    } catch (Exception exception) {
+        currentBuild.description = "Deploy failed, see " + currentBuild.description
+        throw exception
     }
 }
