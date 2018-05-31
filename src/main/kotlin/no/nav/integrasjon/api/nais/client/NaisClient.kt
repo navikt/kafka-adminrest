@@ -40,8 +40,8 @@ fun Routing.getIsAlive() =
 fun Routing.getIsReady(adminClient: AdminClient, config: FasitProperties) =
         get("/isReady") {
             respondCatch {
-                if (LDAPGroup(config).use { ldapGroup -> ldapGroup.connectionOk  } &&
-                        LDAPAuthenticate(config).use { ldapAuthenticate -> ldapAuthenticate.connectionOk  } &&
+                if (LDAPGroup(config).use { ldapGroup -> ldapGroup.connectionOk } &&
+                        LDAPAuthenticate(config).use { ldapAuthenticate -> ldapAuthenticate.connectionOk } &&
                         adminClient.listTopics().namesToListings().get().isNotEmpty()
                 )
                     "is ready"

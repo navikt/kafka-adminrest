@@ -5,15 +5,20 @@ import com.unboundid.ldap.sdk.ResultCode
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.ldap.LDAPGroup
 import no.nav.integrasjon.test.common.InMemoryLDAPServer
-import org.amshove.kluent.*
+import org.amshove.kluent.shouldContainAll
+import org.amshove.kluent.shouldEqual
+import org.amshove.kluent.shouldEqualTo
+import org.amshove.kluent.shouldNotBe
+import org.amshove.kluent.shouldNotContainAny
 import org.jetbrains.spek.api.Spek
-import org.jetbrains.spek.api.dsl.*
+import org.jetbrains.spek.api.dsl.context
+import org.jetbrains.spek.api.dsl.describe
+import org.jetbrains.spek.api.dsl.it
 
 object LDAPGroupSpec : Spek({
 
-
     val fp = FasitProperties(
-            "","","","","","","",
+            "", "", "", "", "", "", "",
             ldapConnTimeout = 250,
             ldapUserAttrName = "uid",
             ldapAuthHost = "localhost",
@@ -35,7 +40,7 @@ object LDAPGroupSpec : Spek({
 
         context("Get all objectclass 'group' under ou=kafka - getKafkaGroups") {
 
-            val existingGroups = listOf("KC-tpc-01","KC-tpc-02","KC-tpc-03","KP-tpc-01","KP-tpc-02","KP-tpc-03")
+            val existingGroups = listOf("KC-tpc-01", "KC-tpc-02", "KC-tpc-03", "KP-tpc-01", "KP-tpc-02", "KP-tpc-03")
 
             it("should return $existingGroups") {
                 LDAPGroup(fp).use { lc -> lc.getKafkaGroups() } shouldContainAll existingGroups
@@ -64,7 +69,6 @@ object LDAPGroupSpec : Spek({
                     kGroups.map { it.groupType } shouldContainAll LDAPGroup.Companion.KafkaGroupType.values()
                     kGroups.flatMap { it.members } shouldContainAll allMembers
                 }
-
             }
         }
 
@@ -83,7 +87,6 @@ object LDAPGroupSpec : Spek({
             }
         }
 
-
         context("Create kafka groups for topic tpc-04") {
 
             "tpc-04".let { topic ->
@@ -91,15 +94,14 @@ object LDAPGroupSpec : Spek({
                     LDAPGroup(fp).use { lc ->
                         lc.createKafkaGroups(topic)
                         lc.getKafkaGroups()
-                    } shouldContainAll listOf("KP-$topic","KC-$topic")
+                    } shouldContainAll listOf("KP-$topic", "KC-$topic")
                 }
 
                 it("should report error when trying to create groups that exists") {
                     LDAPGroup(fp).use { lc ->
                         lc.createKafkaGroups(topic)
-                    }.map { it.result.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true,true)
+                    }.map { it.result.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true, true)
                 }
-
             }
         }
 
@@ -165,7 +167,7 @@ object LDAPGroupSpec : Spek({
                 }
 
                 it("should give exception when trying to add existing member") {
-                    val res = try{
+                    val res = try {
                         LDAPGroup(fp).use { lc ->
                             lc.updateKafkaGroupMembership(
                                     topic,
@@ -175,8 +177,7 @@ object LDAPGroupSpec : Spek({
                                             "srvc02"
                                     ))
                         }
-                    }
-                    catch (e: LDAPException) {e.toLDAPResult()}
+                    } catch (e: LDAPException) { e.toLDAPResult() }
 
                     res.resultCode shouldNotBe ResultCode.SUCCESS
                 }
@@ -215,7 +216,7 @@ object LDAPGroupSpec : Spek({
                 }
 
                 it("should give exception when trying to remove non-existing member") {
-                    val res = try{
+                    val res = try {
                         LDAPGroup(fp).use { lc ->
                             lc.updateKafkaGroupMembership(
                                     topic,
@@ -225,8 +226,7 @@ object LDAPGroupSpec : Spek({
                                             "srvc01"
                                     ))
                         }
-                    }
-                    catch (e: LDAPException) {e.toLDAPResult()}
+                    } catch (e: LDAPException) { e.toLDAPResult() }
 
                     res.resultCode shouldNotBe ResultCode.SUCCESS
                 }
@@ -240,17 +240,16 @@ object LDAPGroupSpec : Spek({
                     LDAPGroup(fp).use { lc ->
                         lc.deleteKafkaGroups(topic)
                         lc.getKafkaGroups()
-                    } shouldNotContainAny listOf("KP-$topic","KC-$topic")
+                    } shouldNotContainAny listOf("KP-$topic", "KC-$topic")
                 }
 
                 it("should report error when trying to delete non-existing groups") {
                     LDAPGroup(fp).use { lc ->
                         lc.deleteKafkaGroups(topic)
-                    }.map { it.result.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true,true)
+                    }.map { it.result.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true, true)
                 }
             }
         }
-
 
         afterGroup { InMemoryLDAPServer.stop() }
     }

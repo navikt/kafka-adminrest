@@ -21,7 +21,11 @@ import no.nav.integrasjon.api.v1.TOPICS
 import no.nav.integrasjon.kafkaAdminREST
 import no.nav.integrasjon.ldap.LDAPGroup
 import no.nav.integrasjon.test.common.InMemoryLDAPServer
-import org.amshove.kluent.*
+import org.amshove.kluent.shouldBe
+import org.amshove.kluent.shouldBeEqualTo
+import org.amshove.kluent.shouldContainAll
+import org.amshove.kluent.shouldEqual
+import org.amshove.kluent.shouldEqualTo
 import org.apache.kafka.clients.admin.Config
 import org.apache.kafka.clients.admin.ConfigEntry
 import org.apache.kafka.clients.admin.TopicListing
@@ -41,7 +45,7 @@ import org.jetbrains.spek.api.dsl.on
 object KafkaAdminRestSpec : Spek ({
 
     // Creating topics for predefined kafka groups in LDAP
-    val preTopics = setOf("tpc-01","tpc-02","tpc-03")
+    val preTopics = setOf("tpc-01", "tpc-02", "tpc-03")
 
     // Combining srv users in ServiceAccounts and the node below, ApplAccounts (Basta)
     // to be added and removed from tpc-01
@@ -60,8 +64,8 @@ object KafkaAdminRestSpec : Spek ({
 
     // establish correct set of fasit properties
     val fp = FasitProperties(
-            kCluster.brokersURL,"kafka-adminrest","FALSE",
-            "","","","",
+            kCluster.brokersURL, "kafka-adminrest", "FALSE",
+            "", "", "", "",
             ldapConnTimeout = 250,
             ldapUserAttrName = "uid",
             ldapAuthHost = "localhost",
@@ -134,7 +138,7 @@ object KafkaAdminRestSpec : Spek ({
                             object : TypeToken<Collection<String>>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result shouldContainAll listOf("KC-tpc-01","KC-tpc-02","KC-tpc-03","KP-tpc-01","KP-tpc-02","KP-tpc-03")
+                    result shouldContainAll listOf("KC-tpc-01", "KC-tpc-02", "KC-tpc-03", "KP-tpc-01", "KP-tpc-02", "KP-tpc-03")
                 }
 
                 val groups = mapOf(
@@ -168,9 +172,9 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    val result: Map<String,TopicListing> = Gson().fromJson(
+                    val result: Map<String, TopicListing> = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<Map<String,TopicListing>>() {}.type)
+                            object : TypeToken<Map<String, TopicListing>>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
                     result.keys shouldContainAll preTopics
@@ -185,7 +189,6 @@ object KafkaAdminRestSpec : Spek ({
 
                         call.response.status() shouldBe HttpStatusCode.OK
                     }
-
                 }
 
                 it("should update 'retention.ms' configuration for tpc-03") {
@@ -198,7 +201,7 @@ object KafkaAdminRestSpec : Spek ({
                                 HttpHeaders.Authorization,
                                 "Basic ${encodeBase64("iauth:itest".toByteArray())}")
 
-                        val jsonPayload = Gson().toJson(ConfigEntry("retention.ms","6600666"))
+                        val jsonPayload = Gson().toJson(ConfigEntry("retention.ms", "6600666"))
                         setBody(jsonPayload)
                     }
 
@@ -219,7 +222,7 @@ object KafkaAdminRestSpec : Spek ({
                     result.values.first()["retention.ms"].value() shouldBeEqualTo "6600666"
                 }
 
-                it("should report exception when trying to update config outside white list for tpc-03 "){
+                it("should report exception when trying to update config outside white list for tpc-03 ") {
 
                     val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
                         addHeader(HttpHeaders.Accept, "application/json")
@@ -229,7 +232,7 @@ object KafkaAdminRestSpec : Spek ({
                                 HttpHeaders.Authorization,
                                 "Basic ${encodeBase64("iauth:itest".toByteArray())}")
 
-                        val jsonPayload = Gson().toJson(ConfigEntry("max.message.bytes","51000012"))
+                        val jsonPayload = Gson().toJson(ConfigEntry("max.message.bytes", "51000012"))
                         setBody(jsonPayload)
                     }
 
@@ -257,7 +260,7 @@ object KafkaAdminRestSpec : Spek ({
                             object : TypeToken<List<LDAPGroup.Companion.KafkaGroup>>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.map { it.result.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true,true)
+                    result.map { it.result.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
                 }
 
                 usersToManage.forEach { srvUser, role ->
@@ -296,7 +299,7 @@ object KafkaAdminRestSpec : Spek ({
                             object : TypeToken<List<LDAPGroup.Companion.KafkaGroup>>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.map { it.result.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true,true)
+                    result.map { it.result.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
                     result.flatMap { it.members } shouldContainAll listOf(
                             "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
                             "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local"
@@ -362,7 +365,7 @@ object KafkaAdminRestSpec : Spek ({
                             object : TypeToken<List<LDAPGroup.Companion.KafkaGroup>>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.map { it.result.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true,true)
+                    result.map { it.result.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
                     result.flatMap { it.members }.size shouldEqualTo 0
                 }
 
@@ -393,5 +396,3 @@ object KafkaAdminRestSpec : Spek ({
         }
     }
 })
-
-

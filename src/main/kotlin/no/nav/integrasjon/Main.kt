@@ -7,7 +7,7 @@ import mu.KotlinLogging
 
 fun main(args: Array<String>) {
 
-    val log = KotlinLogging.logger {  }
+    val log = KotlinLogging.logger { }
 
     log.info { "Checking Fasit properties" }
     FasitPropFactory.fasitProperties.let { fp ->

@@ -6,7 +6,9 @@ import io.ktor.application.call
 import io.ktor.http.HttpStatusCode
 import io.ktor.pipeline.PipelineContext
 import io.ktor.response.respond
-import io.ktor.routing.*
+import io.ktor.routing.Routing
+import io.ktor.routing.get
+
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.ldap.LDAPGroup
@@ -29,14 +31,14 @@ fun Routing.groupsAPI(config: FasitProperties) {
 
 // a wrapper for each call to ldap - used in routes
 private suspend fun PipelineContext<Unit, ApplicationCall>.ldapRespondCatch(
-        config: FasitProperties,
-        block: (lc: LDAPGroup) -> Any) =
+    config: FasitProperties,
+    block: (lc: LDAPGroup) -> Any
+) =
         try {
             LDAPGroup(config).use { lc ->
                 call.respond(block(lc))
             }
-        }
-        catch (e: Exception) {
+        } catch (e: Exception) {
             application.environment.log.error(EXCEPTION, e)
             call.respond(HttpStatusCode.ExceptionFailed, AnError("$EXCEPTION$e"))
         }

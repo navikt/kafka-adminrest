@@ -74,7 +74,7 @@ fun FasitProperties.ldapGroupInfoComplete(): Boolean =
 enum class LdapConnectionType { AUTHENTICATION, GROUP }
 
 fun FasitProperties.getConnectionInfo(connType: LdapConnectionType) =
-        when(connType) {
+        when (connType) {
             LdapConnectionType.AUTHENTICATION -> LDAPBase.Companion.ConnectionInfo(
                     ldapAuthHost, ldapAuthPort, ldapConnTimeout
             )

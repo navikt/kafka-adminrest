@@ -3,14 +3,16 @@ package no.nav.integrasjon.test.ldap
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.ldap.LDAPAuthenticate
 import no.nav.integrasjon.test.common.InMemoryLDAPServer
-import org.amshove.kluent.*
+import org.amshove.kluent.shouldEqualTo
 import org.jetbrains.spek.api.Spek
-import org.jetbrains.spek.api.dsl.*
+import org.jetbrains.spek.api.dsl.context
+import org.jetbrains.spek.api.dsl.describe
+import org.jetbrains.spek.api.dsl.it
 
 object LDAPAuthenticateSpec : Spek({
 
     val fp = FasitProperties(
-            "","","","","","","",
+            "", "", "", "", "", "", "",
             ldapConnTimeout = 250,
             ldapUserAttrName = "uid",
             ldapAuthHost = "localhost",
@@ -33,16 +35,16 @@ object LDAPAuthenticateSpec : Spek({
         context("authenticate should work correctly") {
 
             val users = mapOf(
-                    Pair("srvp01","dummy") to false,
-                    Pair("iauth","itest") to true,
-                    Pair("notExisting","wildGuess") to false,
-                    Pair("iauth2","wrongPassword") to false
+                    Pair("srvp01", "dummy") to false,
+                    Pair("iauth", "itest") to true,
+                    Pair("notExisting", "wildGuess") to false,
+                    Pair("iauth2", "wrongPassword") to false
             )
 
             users.forEach { user, result ->
                 it("should return $result for user ${user.first}") {
                     LDAPAuthenticate(fp).use {
-                        lc -> lc.canUserAuthenticate(user.first,user.second)
+                        lc -> lc.canUserAuthenticate(user.first, user.second)
                     } shouldEqualTo result
                 }
             }

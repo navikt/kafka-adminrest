@@ -5,13 +5,25 @@ import io.ktor.application.call
 import io.ktor.auth.authenticate
 import io.ktor.auth.authentication
 import io.ktor.request.receive
-import io.ktor.routing.*
+import io.ktor.routing.Routing
+import io.ktor.routing.get
+import io.ktor.routing.put
+import io.ktor.routing.delete
+import io.ktor.routing.post
 import kotlinx.coroutines.experimental.runBlocking
 import no.nav.integrasjon.AUTHENTICATION_BASIC
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.ldap.LDAPGroup
-import org.apache.kafka.clients.admin.*
-import org.apache.kafka.common.acl.*
+import org.apache.kafka.clients.admin.AdminClient
+import org.apache.kafka.clients.admin.Config
+import org.apache.kafka.clients.admin.ConfigEntry
+import org.apache.kafka.clients.admin.NewTopic
+import org.apache.kafka.common.acl.AccessControlEntry
+import org.apache.kafka.common.acl.AccessControlEntryFilter
+import org.apache.kafka.common.acl.AclBinding
+import org.apache.kafka.common.acl.AclBindingFilter
+import org.apache.kafka.common.acl.AclOperation
+import org.apache.kafka.common.acl.AclPermissionType
 import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.Resource
 import org.apache.kafka.common.resource.ResourceFilter
@@ -112,7 +124,7 @@ private fun getDefaultReplicationFactor(adminClient: AdminClient): Short =
         }
 
 // simplified version of kafka NewTopic
-internal data class ANewTopic(val name: String, val numPartitions:Int)
+internal data class ANewTopic(val name: String, val numPartitions: Int)
 
 // extension function for validating a topic name and that the future group names are of valid length
 private fun String.isValid(): Boolean =
@@ -122,7 +134,6 @@ private fun String.isValid(): Boolean =
                 else -> false
             }
         }.all { it } && LDAPGroup.validGroupLength(this)
-
 
 fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
         authenticate(AUTHENTICATION_BASIC) {
@@ -164,7 +175,7 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                                             AccessControlEntry(
                                                     principal,
                                                     host,
-                                                    when(kafkaGroup.groupType) {
+                                                    when (kafkaGroup.groupType) {
                                                         LDAPGroup.Companion.KafkaGroupType.PRODUCER -> AclOperation.WRITE
                                                         LDAPGroup.Companion.KafkaGroupType.CONSUMER -> AclOperation.READ
                                                     },
@@ -185,12 +196,11 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                             adminClient.createAcls(acls).all().get()
                             application.environment.log.info("ACLs created - $acls")
                             Pair(acls, "Created")
-                        }
-                        catch (e: Exception) {
+                        } catch (e: Exception) {
                             Pair(acls, "Failure, $e")
                         }
 
-                        Triple(Pair("Topic ${newTopic.name()}","Created"), groupsResult, aclsResult)
+                        Triple(Pair("Topic ${newTopic.name()}", "Created"), groupsResult, aclsResult)
                     }
                 }
             }
@@ -341,9 +351,9 @@ fun Routing.updateTopicConfig(adminClient: AdminClient) =
 
                     // NB! .all is throwing error... Use of future for specific entry instead
                     adminClient.alterConfigs(configReq)
-                            //.all()
+                            // .all()
                             .values()[configResource]
-                            ?.get() ?: Pair("$configEntry","has been updated")
+                            ?.get() ?: Pair("$configEntry", "has been updated")
                 }
             }
         }
@@ -423,6 +433,3 @@ fun Routing.updateTopicGroup(config: FasitProperties) =
                 }
             }
         }
-
-
-

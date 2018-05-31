@@ -23,7 +23,7 @@ import no.nav.integrasjon.EXCEPTION
 object InMemoryLDAPServer {
 
     const val LPORT = 11636
-    private val log = KotlinLogging.logger {  }
+    private val log = KotlinLogging.logger { }
     private const val LNAME = "LDAPS"
 
     private val imConf = InMemoryDirectoryServerConfig("dc=test,dc=local").apply {
@@ -47,13 +47,11 @@ object InMemoryLDAPServer {
             setAuthenticationRequiredOperationTypes(OperationType.COMPARE)
             // let the embedded server use identical schema as apache DS configured for AD support (group and sAMAcc..)
             schema = Schema.getSchema("src/test/resources/apacheDS.ldif")
-        }
-        catch (e: Exception) { log.error { "$EXCEPTION$e" } }
+        } catch (e: Exception) { log.error { "$EXCEPTION$e" } }
     }
 
     private val imDS = InMemoryDirectoryServer(imConf).apply {
-        try { importFromLDIF(true, "src/test/resources/UsersAndGroups.ldif") }
-        catch (e: Exception) { log.error { "$EXCEPTION$e" } }
+        try { importFromLDIF(true, "src/test/resources/UsersAndGroups.ldif") } catch (e: Exception) { log.error { "$EXCEPTION$e" } }
     }
 
     fun start() = imDS.startListening(LNAME)

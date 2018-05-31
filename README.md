@@ -12,7 +12,7 @@ Kafka security using LDAP groups for authorization.
 
 ## Tools
 - Kotlin
-- Gradle build tool
+- Gradle build tool with lintKotlin and formatKotlin
 - Spek test framework
 
 ## Components

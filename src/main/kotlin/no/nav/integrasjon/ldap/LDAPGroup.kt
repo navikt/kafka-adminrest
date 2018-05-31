@@ -1,9 +1,26 @@
 package no.nav.integrasjon.ldap
 
 import com.google.gson.annotations.SerializedName
-import com.unboundid.ldap.sdk.*
+import com.unboundid.ldap.sdk.Attribute
+import com.unboundid.ldap.sdk.Filter
+import com.unboundid.ldap.sdk.LDAPException
+import com.unboundid.ldap.sdk.SearchRequest
+import com.unboundid.ldap.sdk.SearchScope
+import com.unboundid.ldap.sdk.LDAPResult
+import com.unboundid.ldap.sdk.ResultCode
+import com.unboundid.ldap.sdk.AddRequest
+import com.unboundid.ldap.sdk.DeleteRequest
+import com.unboundid.ldap.sdk.ModifyRequest
+import com.unboundid.ldap.sdk.Modification
+import com.unboundid.ldap.sdk.ModificationType
+import com.unboundid.ldap.sdk.DN
 import mu.KotlinLogging
-import no.nav.integrasjon.*
+import no.nav.integrasjon.EXCEPTION
+import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.LdapConnectionType
+import no.nav.integrasjon.getConnectionInfo
+import no.nav.integrasjon.srvUserDN
+import no.nav.integrasjon.groupDN
 
 /**
  * LDAPGroup provides services for LDAP group management
@@ -30,10 +47,9 @@ class LDAPGroup(private val config: FasitProperties) :
         val connInfo = config.getConnectionInfo(LdapConnectionType.GROUP)
         val srvUserDN = config.srvUserDN()
         try {
-            ldapConnection.bind(srvUserDN,config.ldapPassword)
-            log.debug {"Successfully bind of $srvUserDN to $connInfo" }
-        }
-        catch (e: LDAPException) {
+            ldapConnection.bind(srvUserDN, config.ldapPassword)
+            log.debug { "Successfully bind of $srvUserDN to $connInfo" }
+        } catch (e: LDAPException) {
             log.error("$EXCEPTION LDAP operations will fail. Bind failure for $srvUserDN to $connInfo - $e")
             ldapConnection.close()
         }
@@ -60,12 +76,13 @@ class LDAPGroup(private val config: FasitProperties) :
                                             "group"),
                                     config.ldapGroupAttrName)
                     )
-                    .searchEntries.map { it.getAttribute(config.ldapGroupAttrName).value}
+                    .searchEntries.map { it.getAttribute(config.ldapGroupAttrName).value }
 
     private fun groupTypesCatch(
-            topicName: String,
-            membBlck: (gn: String) -> Collection<String>,
-            resBlck: (gn: String) -> LDAPResult): Collection<KafkaGroup> =
+        topicName: String,
+        membBlck: (gn: String) -> Collection<String>,
+        resBlck: (gn: String) -> LDAPResult
+    ): Collection<KafkaGroup> =
 
             KafkaGroupType.values().map { groupType ->
                 val groupName = toGroupName(groupType.prefix, topicName)
@@ -77,10 +94,9 @@ class LDAPGroup(private val config: FasitProperties) :
                             groupName.let(membBlck),
                             groupName.let(resBlck)
                     )
-                }
-                catch (e: LDAPException) {
+                } catch (e: LDAPException) {
                     log.error { "$EXCEPTION$e" }
-                    KafkaGroup(groupType,groupName, emptyList(), e.toLDAPResult())
+                    KafkaGroup(groupType, groupName, emptyList(), e.toLDAPResult())
                 }
             }
 
@@ -102,7 +118,7 @@ class LDAPGroup(private val config: FasitProperties) :
             groupTypesCatch(
                     topicName,
                     { groupName -> getKafkaGroupMembers(groupName) },
-                    { LDAPResult(0,ResultCode.SUCCESS) }
+                    { LDAPResult(0, ResultCode.SUCCESS) }
             )
 
     private fun createKafkaGroup(groupName: String): LDAPResult =
@@ -150,7 +166,7 @@ class LDAPGroup(private val config: FasitProperties) :
                             ModifyRequest(
                                     config.groupDN(toGroupName(updateEntry.role.prefix, topicName)),
                                     Modification(
-                                            when(updateEntry.operation) {
+                                            when (updateEntry.operation) {
                                                 GroupMemberOperation.ADD -> ModificationType.ADD
                                                 GroupMemberOperation.REMOVE -> ModificationType.DELETE
                                             },
@@ -173,17 +189,17 @@ class LDAPGroup(private val config: FasitProperties) :
                     )
             )
                     .let { searchRes ->
-                        when(searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
+                        when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
                             true -> searchRes.searchEntries[0].dn
                             false -> {
                                 log.error { "Could not find $name anywhere under ${config.ldapSrvUserBase}" }
-                                ""}
+                                "" }
                         }
                     }
 
     companion object {
 
-        val log = KotlinLogging.logger {  }
+        val log = KotlinLogging.logger { }
 
         private fun toGroupName(prefix: String, topicName: String) = "$prefix$topicName"
 
@@ -197,7 +213,7 @@ class LDAPGroup(private val config: FasitProperties) :
         fun validGroupLength(topicName: String): Boolean =
                 KafkaGroupType.values().map { it.prefix.length }.max()!! + topicName.length <= MAX_GROUPNAME_LENGTH
 
-        fun maxTopicNameLength(): Int = MAX_GROUPNAME_LENGTH -  KafkaGroupType.values().map { it.prefix.length }.max()!!
+        fun maxTopicNameLength(): Int = MAX_GROUPNAME_LENGTH - KafkaGroupType.values().map { it.prefix.length }.max()!!
 
         /**
          * Enum class KafkaGroupType with LDAP group prefix included
@@ -224,17 +240,19 @@ class LDAPGroup(private val config: FasitProperties) :
          * data class UpdateKafkaGroupMember
          */
         data class UpdateKafkaGroupMember(
-                val role: KafkaGroupType,
-                val operation: GroupMemberOperation,
-                val member: String)
+            val role: KafkaGroupType,
+            val operation: GroupMemberOperation,
+            val member: String
+        )
 
         /**
          * data class KafkaGroup as result from functions iterating KafkaGroupType - see groupTypesCatch
          */
         data class KafkaGroup(
-                val groupType: KafkaGroupType,
-                val name: String,
-                val members: Collection<String>,
-                val result: LDAPResult)
+            val groupType: KafkaGroupType,
+            val name: String,
+            val members: Collection<String>,
+            val result: LDAPResult
+        )
     }
 }

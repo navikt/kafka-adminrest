@@ -1,6 +1,9 @@
 package no.nav.integrasjon.ldap
 
-import com.unboundid.ldap.sdk.*
+import com.unboundid.ldap.sdk.DisconnectType
+import com.unboundid.ldap.sdk.LDAPConnection
+import com.unboundid.ldap.sdk.LDAPConnectionOptions
+import com.unboundid.ldap.sdk.LDAPException
 import com.unboundid.util.ssl.SSLUtil
 import com.unboundid.util.ssl.TrustAllTrustManager
 import mu.KotlinLogging
@@ -18,7 +21,7 @@ abstract class LDAPBase(private val connInfo: LDAPBase.Companion.ConnectionInfo)
         connectTimeoutMillis = connInfo.timeout
     }
 
-    //NB! - TrustAllTrustManager is too trusty, but good enough when inside corporate inner zone
+    // NB! - TrustAllTrustManager is too trusty, but good enough when inside corporate inner zone
     protected val ldapConnection = LDAPConnection(
             SSLUtil(TrustAllTrustManager()).createSSLSocketFactory(),
             connectOptions)
@@ -28,8 +31,7 @@ abstract class LDAPBase(private val connInfo: LDAPBase.Companion.ConnectionInfo)
         try {
             ldapConnection.connect(connInfo.host, connInfo.port)
             log.debug { "Successfully connected to $connInfo" }
-        }
-        catch (e: LDAPException) {
+        } catch (e: LDAPException) {
             log.error { "$EXCEPTION LDAP operations against $connInfo will fail - $e" }
             ldapConnection.setDisconnectInfo(
                     DisconnectType.IO_ERROR,
@@ -40,7 +42,7 @@ abstract class LDAPBase(private val connInfo: LDAPBase.Companion.ConnectionInfo)
     val connectionOk = ldapConnection.isConnected
 
     override fun close() {
-        log.debug {"Closing ldap connection $connInfo" }
+        log.debug { "Closing ldap connection $connInfo" }
         ldapConnection.close()
     }
 
@@ -48,6 +50,6 @@ abstract class LDAPBase(private val connInfo: LDAPBase.Companion.ConnectionInfo)
 
         data class ConnectionInfo(val host: String, val port: Int, val timeout: Int = 2_000)
 
-        val log = KotlinLogging.logger {  }
+        val log = KotlinLogging.logger { }
     }
 }

@@ -1,16 +1,24 @@
 package no.nav.integrasjon
 
-import io.ktor.application.*
+import io.ktor.application.Application
+import io.ktor.application.call
+import io.ktor.application.install
 import io.ktor.auth.Authentication
 import io.ktor.auth.UserIdPrincipal
 import io.ktor.auth.basic
-import io.ktor.features.*
+import io.ktor.features.AutoHeadResponse
+import io.ktor.features.CallLogging
+import io.ktor.features.Compression
+import io.ktor.features.ConditionalHeaders
+import io.ktor.features.ContentNegotiation
+import io.ktor.features.DefaultHeaders
+import io.ktor.features.StatusPages
 import io.ktor.gson.gson
-import io.ktor.http.*
+import io.ktor.http.HttpStatusCode
 import io.ktor.request.path
-import io.ktor.response.*
+import io.ktor.response.respond
 import io.ktor.routing.Routing
-import io.ktor.util.*
+import io.ktor.util.error
 import io.prometheus.client.CollectorRegistry
 import mu.KotlinLogging
 import no.nav.integrasjon.api.nais.client.naisAPI
@@ -23,7 +31,7 @@ import no.nav.integrasjon.ldap.LDAPAuthenticate
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.slf4j.event.Level
-import java.util.*
+import java.util.Properties
 
 const val AUTHENTICATION_BASIC = "basicAuth"
 
@@ -34,7 +42,7 @@ const val AUTHENTICATION_BASIC = "basicAuth"
 
 fun Application.kafkaAdminREST() {
 
-    val log = KotlinLogging.logger {  }
+    val log = KotlinLogging.logger { }
 
     log.info { "Starting server" }
 
@@ -67,7 +75,7 @@ fun Application.kafkaAdminREST() {
         level = Level.INFO
         filter { call -> call.request.path().startsWith(API_V1) }
     }
-    //install(XForwardedHeadersSupport) - is this needed, and supported in reverse proxy in matter?
+    // install(XForwardedHeadersSupport) - is this needed, and supported in reverse proxy in matter?
     install(StatusPages) {
         exception<Throwable> { cause ->
             environment.log.error(cause)
@@ -105,5 +113,3 @@ fun Application.kafkaAdminREST() {
         groupsAPI(fasitProps)
     }
 }
-
-

@@ -26,8 +26,7 @@ internal data class AnError(val error: String)
 internal suspend fun PipelineContext<Unit, ApplicationCall>.respondCatch(block: () -> Any) =
         try {
             call.respond(block())
-        }
-        catch (e: Exception) {
+        } catch (e: Exception) {
             application.environment.log.error(EXCEPTION, e)
             call.respond(HttpStatusCode.ExceptionFailed, AnError("$EXCEPTION$e"))
         }

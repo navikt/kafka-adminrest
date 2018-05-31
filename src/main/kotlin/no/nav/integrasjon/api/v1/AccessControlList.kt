@@ -34,4 +34,3 @@ fun Routing.getACLS(adminClient: AdminClient) =
                         .get()
             }
         }
-
