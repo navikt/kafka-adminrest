@@ -58,14 +58,20 @@ pipeline {
         }
 
         stage('deploy to test') {
-            environment { FASIT_ENV = 't4' }
+            environment {
+                FASIT_ENV = 't4'
+                NAMESPACE = 't4'
+            }
             steps {
                 deployApplication()
             }
         }
 
         stage('deploy to preprod') {
-            environment { FASIT_ENV = 'q4' }
+            environment {
+                FASIT_ENV = 'q4'
+                NAMESPACE = 'q4'
+            }
             steps {
                 deployApplication()
             }
