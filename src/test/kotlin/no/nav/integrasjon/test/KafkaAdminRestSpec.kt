@@ -14,6 +14,7 @@ import io.ktor.util.encodeBase64
 import no.nav.common.KafkaEnvironment
 import no.nav.integrasjon.FasitPropFactory
 import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.api.v1.ANewTopic
 import no.nav.integrasjon.api.v1.BROKERS
 import no.nav.integrasjon.api.v1.GROUPS
 import no.nav.integrasjon.api.v1.TOPICS
@@ -47,6 +48,11 @@ object KafkaAdminRestSpec : Spek ({
     val usersToManage = mapOf(
             "srvp01" to LDAPGroup.Companion.KafkaGroupType.PRODUCER,
             "srvc02" to LDAPGroup.Companion.KafkaGroupType.CONSUMER
+    )
+
+    val invalidTopics = mapOf(
+            "invalid_test" to 1,
+            "too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-" to 1
     )
 
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
@@ -358,6 +364,25 @@ object KafkaAdminRestSpec : Spek ({
                     call.response.status() shouldBe HttpStatusCode.OK
                     result.map { it.result.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true,true)
                     result.flatMap { it.members }.size shouldEqualTo 0
+                }
+
+                invalidTopics.forEach { topicName, numPartitions ->
+                    it("should report exception when creating topic $topicName") {
+
+                        val call = handleRequest(HttpMethod.Post, TOPICS) {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                            addHeader(HttpHeaders.ContentType, "application/json")
+                            // relevant user is in the right place in UserAndGroups.ldif
+                            addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("iauth:itest".toByteArray())}")
+
+                            val jsonPayload = Gson().toJson(ANewTopic(topicName, numPartitions))
+                            setBody(jsonPayload)
+                        }
+
+                        call.response.status() shouldBe HttpStatusCode.ExceptionFailed
+                    }
                 }
             }
         }

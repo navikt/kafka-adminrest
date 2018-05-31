@@ -13,7 +13,7 @@ Kafka security using LDAP groups for authorization.
 ## Tools
 - Kotlin
 - Gradle build tool
-- Spek test framework for LDAP management. Missing embedded kafka with authentication & authorization for time being
+- Spek test framework
 
 ## Components
 
@@ -24,6 +24,9 @@ Kafka security using LDAP groups for authorization.
 ## Testing
 
 Tested on confluent.io version 4.0.0 and Active Directory verion 69 on 2012 R2
+
+Automated testing of LDAP management by embedded LDAP server with custom UsersAndGroups.ldif
+Automated testing of (most) Ktor routes by embedded LDAP and embedded kafka cluster 
 
 See related [Wiki](https://github.com/navikt/kafka-adminrest/wiki) for quick start and code structure
 

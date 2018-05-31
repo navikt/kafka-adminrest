@@ -112,7 +112,7 @@ private fun getDefaultReplicationFactor(adminClient: AdminClient): Short =
         }
 
 // simplified version of kafka NewTopic
-private data class ANewTopic(val name: String, val numPartitions:Int)
+internal data class ANewTopic(val name: String, val numPartitions:Int)
 
 // extension function for validating a topic name and that the future group names are of valid length
 private fun String.isValid(): Boolean =
@@ -131,8 +131,9 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                     val aNewTopic = runBlocking { call.receive<ANewTopic>() }
 
                     if (!aNewTopic.name.isValid())
-                        throw Exception("Invalid topic name. Must contain [a..z]||[A..Z]||[0..9]||'-' only &&  " +
-                                "length ≤ ${LDAPGroup.maxTopicNameLength()}")
+                        throw Exception("Invalid topic name - $aNewTopic.name. " +
+                                "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
+                                "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}")
 
                     // create kafka NewTopic by getting the default replication factor from broker config
                     val newTopic = NewTopic(
