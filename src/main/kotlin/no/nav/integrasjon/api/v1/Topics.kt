@@ -62,6 +62,12 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
 }
 
 /**
+ * Feedback from Haagen - see thread
+ * TODO - idempotens, if trying to add existing user, or remove non-existing user to/from group, return 200
+ * TODO - similar thinking in other change-operations
+ */
+
+/**
  * GET https://<host>/api/v1/topics
  *
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#listTopics-org.apache.kafka.clients.admin.ListTopicsOptions-
