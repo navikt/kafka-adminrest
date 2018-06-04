@@ -161,19 +161,21 @@ class LDAPGroup(private val config: FasitProperties) :
             getServiceUserDN(updateEntry.member).let { srvUserDN ->
                 if (srvUserDN.isEmpty())
                     throw Exception("Cannot find ${updateEntry.member} under ${config.ldapSrvUserBase}")
-                else
-                    ldapConnection.modify(
-                            ModifyRequest(
-                                    config.groupDN(toGroupName(updateEntry.role.prefix, topicName)),
-                                    Modification(
-                                            when (updateEntry.operation) {
-                                                GroupMemberOperation.ADD -> ModificationType.ADD
-                                                GroupMemberOperation.REMOVE -> ModificationType.DELETE
-                                            },
-                                            config.ldapGrpMemberAttrName,
-                                            srvUserDN)
-                                    )
-                            ).also { req -> log.info { "Update group membership request: $req" } }
+                else {
+                    val req = ModifyRequest(
+                            config.groupDN(toGroupName(updateEntry.role.prefix, topicName)),
+                            Modification(
+                                    when (updateEntry.operation) {
+                                        GroupMemberOperation.ADD -> ModificationType.ADD
+                                        GroupMemberOperation.REMOVE -> ModificationType.DELETE
+                                    },
+                                    config.ldapGrpMemberAttrName,
+                                    srvUserDN)
+                    )
+                    log.info { "Update group membership request: $req" }
+
+                    ldapConnection.modify(req)
+                }
             }
 
     private fun getServiceUserDN(name: String): String =
