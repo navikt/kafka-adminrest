@@ -1,14 +1,13 @@
 package no.nav.integrasjon.test.ldap
 
-import com.unboundid.ldap.sdk.LDAPException
 import com.unboundid.ldap.sdk.ResultCode
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.ldap.LDAPGroup
 import no.nav.integrasjon.test.common.InMemoryLDAPServer
+import org.amshove.kluent.shouldBe
 import org.amshove.kluent.shouldContainAll
 import org.amshove.kluent.shouldEqual
 import org.amshove.kluent.shouldEqualTo
-import org.amshove.kluent.shouldNotBe
 import org.amshove.kluent.shouldNotContainAny
 import org.jetbrains.spek.api.Spek
 import org.jetbrains.spek.api.dsl.context
@@ -166,20 +165,17 @@ object LDAPGroupSpec : Spek({
                             "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local")
                 }
 
-                it("should give exception when trying to add existing member") {
-                    val res = try {
-                        LDAPGroup(fp).use { lc ->
-                            lc.updateKafkaGroupMembership(
-                                    topic,
-                                    LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                            LDAPGroup.Companion.KafkaGroupType.CONSUMER,
-                                            LDAPGroup.Companion.GroupMemberOperation.ADD,
-                                            "srvc02"
-                                    ))
-                        }
-                    } catch (e: LDAPException) { e.toLDAPResult() }
+                it("should give ok when trying to add existing member") {
 
-                    res.resultCode shouldNotBe ResultCode.SUCCESS
+                    LDAPGroup(fp).use { lc ->
+                        lc.updateKafkaGroupMembership(
+                                topic,
+                                LDAPGroup.Companion.UpdateKafkaGroupMember(
+                                        LDAPGroup.Companion.KafkaGroupType.CONSUMER,
+                                        LDAPGroup.Companion.GroupMemberOperation.ADD,
+                                        "srvc02"
+                                ))
+                    }.resultCode shouldBe ResultCode.SUCCESS
                 }
             }
         }
@@ -215,20 +211,17 @@ object LDAPGroupSpec : Spek({
                             "uid=srvc01,ou=ServiceAccounts,dc=test,dc=local")
                 }
 
-                it("should give exception when trying to remove non-existing member") {
-                    val res = try {
-                        LDAPGroup(fp).use { lc ->
-                            lc.updateKafkaGroupMembership(
-                                    topic,
-                                    LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                            LDAPGroup.Companion.KafkaGroupType.CONSUMER,
-                                            LDAPGroup.Companion.GroupMemberOperation.REMOVE,
-                                            "srvc01"
-                                    ))
-                        }
-                    } catch (e: LDAPException) { e.toLDAPResult() }
+                it("should give ok when trying to remove non-existing member") {
 
-                    res.resultCode shouldNotBe ResultCode.SUCCESS
+                    LDAPGroup(fp).use { lc ->
+                        lc.updateKafkaGroupMembership(
+                                topic,
+                                LDAPGroup.Companion.UpdateKafkaGroupMember(
+                                        LDAPGroup.Companion.KafkaGroupType.CONSUMER,
+                                        LDAPGroup.Companion.GroupMemberOperation.REMOVE,
+                                        "srvc01"
+                                ))
+                    }.resultCode shouldBe ResultCode.SUCCESS
                 }
             }
         }

@@ -9,6 +9,7 @@ import com.unboundid.ldap.sdk.SearchScope
 import com.unboundid.ldap.sdk.LDAPResult
 import com.unboundid.ldap.sdk.ResultCode
 import com.unboundid.ldap.sdk.AddRequest
+import com.unboundid.ldap.sdk.CompareRequest
 import com.unboundid.ldap.sdk.DeleteRequest
 import com.unboundid.ldap.sdk.ModifyRequest
 import com.unboundid.ldap.sdk.Modification
@@ -161,22 +162,39 @@ class LDAPGroup(private val config: FasitProperties) :
             getServiceUserDN(updateEntry.member).let { srvUserDN ->
                 if (srvUserDN.isEmpty())
                     throw Exception("Cannot find ${updateEntry.member} under ${config.ldapSrvUserBase}")
-                else {
-                    val req = ModifyRequest(
-                            config.groupDN(toGroupName(updateEntry.role.prefix, topicName)),
-                            Modification(
-                                    when (updateEntry.operation) {
-                                        GroupMemberOperation.ADD -> ModificationType.ADD
-                                        GroupMemberOperation.REMOVE -> ModificationType.DELETE
-                                    },
-                                    config.ldapGrpMemberAttrName,
-                                    srvUserDN)
-                    )
-                    log.info { "Update group membership request: $req" }
+                else
+                    config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
 
-                    ldapConnection.modify(req)
+                        if (updateEntry.isRedundant(srvUserDN, groupDN))
+                            LDAPResult(0, ResultCode.SUCCESS)
+                        else
+
+                    ldapConnection.modify(
+                            ModifyRequest(
+                                    config.groupDN(toGroupName(updateEntry.role.prefix, topicName)),
+                                    Modification(
+                                            when (updateEntry.operation) {
+                                                GroupMemberOperation.ADD -> ModificationType.ADD
+                                                GroupMemberOperation.REMOVE -> ModificationType.DELETE
+                                            },
+                                            config.ldapGrpMemberAttrName,
+                                            srvUserDN
+                                    )
+                            ).also { req -> log.info { "Update group membership request: $req for $srvUserDN" } }
+                    )
                 }
             }
+
+    private fun UpdateKafkaGroupMember.isRedundant(userDN: String, groupDN: String): Boolean =
+            when (this.operation) {
+                GroupMemberOperation.ADD -> userInGroup(userDN, groupDN)
+                GroupMemberOperation.REMOVE -> !userInGroup(userDN, groupDN)
+            }
+
+    private fun userInGroup(userDN: String, groupDN: String): Boolean =
+                ldapConnection
+                        .compare(CompareRequest(groupDN, config.ldapGrpMemberAttrName, userDN))
+                        .compareMatched()
 
     private fun getServiceUserDN(name: String): String =
             ldapConnection.search(
@@ -193,9 +211,8 @@ class LDAPGroup(private val config: FasitProperties) :
                     .let { searchRes ->
                         when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
                             true -> searchRes.searchEntries[0].dn
-                            false -> {
-                                log.error { "Could not find $name anywhere under ${config.ldapSrvUserBase}" }
-                                "" }
+                            false -> "".also {
+                                log.error { "Could not find $name anywhere under ${config.ldapSrvUserBase}" } }
                         }
                     }
 
