@@ -140,22 +140,7 @@ class LDAPGroup(private val config: FasitProperties) :
                     ).also { req -> log.info { "Delete group request: $req" } }
             )
 
-    fun getKafkaGroupMembers(groupName: String): Collection<String> =
-            ldapConnection.search(
-                    SearchRequest(
-                            config.ldapGroupBase,
-                            SearchScope.ONE,
-                            Filter.createEqualityFilter(
-                                    config.ldapGroupAttrName,
-                                    groupName
-                            ),
-                            config.ldapGrpMemberAttrName
-                    )
-            )
-                    .searchEntries
-                    .flatMap {
-                        it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: emptyList()
-                    }
+    fun getKafkaGroupMembers(groupName: String): Collection<String> = getGroupMembers(groupName)
 
     fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): LDAPResult =
 
@@ -166,7 +151,7 @@ class LDAPGroup(private val config: FasitProperties) :
                     config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
 
                         val req = ModifyRequest(
-                                config.groupDN(toGroupName(updateEntry.role.prefix, topicName)),
+                                groupDN,
                                 Modification(
                                         when (updateEntry.operation) {
                                             GroupMemberOperation.ADD -> ModificationType.ADD
@@ -179,23 +164,25 @@ class LDAPGroup(private val config: FasitProperties) :
 
                         log.info { "Update group membership request: $req for $srvUserDN" }
 
-                        if (updateEntry.isRedundant(srvUserDN, groupDN))
+                        if (updateEntry.isRedundant(srvUserDN, groupDN, toGroupName(updateEntry.role.prefix, topicName)))
                             LDAPResult(0, ResultCode.SUCCESS)
                         else
                             ldapConnection.modify(req)
                 }
             }
 
-    private fun UpdateKafkaGroupMember.isRedundant(userDN: String, groupDN: String): Boolean =
+    private fun UpdateKafkaGroupMember.isRedundant(userDN: String, groupDN: String, groupName: String): Boolean =
             when (this.operation) {
-                GroupMemberOperation.ADD -> userInGroup(userDN, groupDN)
-                GroupMemberOperation.REMOVE -> !userInGroup(userDN, groupDN)
+                // check whether groups is empty or not, otherwise exception from AD - no member value...
+                GroupMemberOperation.ADD -> if (groupEmpty(groupName)) false else userInGroup(userDN, groupDN)
+                GroupMemberOperation.REMOVE -> if (groupEmpty(groupName)) true else !userInGroup(userDN, groupDN)
             }
 
     private fun userInGroup(userDN: String, groupDN: String): Boolean =
-                ldapConnection
-                        .compare(CompareRequest(groupDN, config.ldapGrpMemberAttrName, userDN))
-                        .compareMatched()
+            // careful, AD will raise exception if group is empty, thus, no member attribute issue
+            ldapConnection
+                    .compare(CompareRequest(groupDN, config.ldapGrpMemberAttrName, userDN))
+                    .compareMatched()
 
     private fun getServiceUserDN(name: String): String =
             ldapConnection.search(
@@ -215,6 +202,25 @@ class LDAPGroup(private val config: FasitProperties) :
                             false -> "".also {
                                 log.error { "Could not find $name anywhere under ${config.ldapSrvUserBase}" } }
                         }
+                    }
+
+    private fun groupEmpty(groupName: String): Boolean = getGroupMembers(groupName).isEmpty()
+
+    private fun getGroupMembers(groupName: String): Collection<String> =
+            ldapConnection.search(
+                    SearchRequest(
+                            config.ldapGroupBase,
+                            SearchScope.ONE,
+                            Filter.createEqualityFilter(
+                                    config.ldapGroupAttrName,
+                                    groupName
+                            ),
+                            config.ldapGrpMemberAttrName
+                    )
+            )
+                    .searchEntries
+                    .flatMap {
+                        it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: emptyList()
                     }
 
     companion object {
