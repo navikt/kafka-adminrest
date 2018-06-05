@@ -63,10 +63,7 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
 
 /**
  * Feedback from Haagen - see thread
- * TODO - idempotens, if trying to add existing user, or remove non-existing user to/from group, return 200
- * TODO - similar thinking in other change-operations
- * TODO - check for Content-Type header in change operations
- * TODO - check for Accept header in read operations
+ * TODO - idempotent thinking in other change-operations
  */
 
 /**
@@ -345,12 +342,12 @@ fun Routing.updateTopicConfig(adminClient: AdminClient) =
                     val topicName = call.parameters["topicName"] ?: "<no topic>"
                     val configEntry = runBlocking { call.receive<ConfigEntry>() }
 
+                    val logEntry = "Topic config. update request by ${this.context.authentication.principal} - $topicName"
+                    application.environment.log.info(logEntry)
+
                     // check whether configEntry is allowed
                     if (!AllowedConfigEntries.values().map { it.entryName }.contains(configEntry.name()))
                         throw Exception("configEntry ${configEntry.name()} is not allowed to update automatically")
-
-                    val logEntry = "Topic config. update request by ${this.context.authentication.principal} - $topicName"
-                    application.environment.log.info(logEntry)
 
                     val configResource = ConfigResource(ConfigResource.Type.TOPIC, topicName)
                     val configReq = mapOf(configResource to Config(listOf(configEntry)))

@@ -165,23 +165,24 @@ class LDAPGroup(private val config: FasitProperties) :
                 else
                     config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
 
+                        val req = ModifyRequest(
+                                config.groupDN(toGroupName(updateEntry.role.prefix, topicName)),
+                                Modification(
+                                        when (updateEntry.operation) {
+                                            GroupMemberOperation.ADD -> ModificationType.ADD
+                                            GroupMemberOperation.REMOVE -> ModificationType.DELETE
+                                        },
+                                        config.ldapGrpMemberAttrName,
+                                        srvUserDN
+                                )
+                        )
+
+                        log.info { "Update group membership request: $req for $srvUserDN" }
+
                         if (updateEntry.isRedundant(srvUserDN, groupDN))
                             LDAPResult(0, ResultCode.SUCCESS)
                         else
-
-                    ldapConnection.modify(
-                            ModifyRequest(
-                                    config.groupDN(toGroupName(updateEntry.role.prefix, topicName)),
-                                    Modification(
-                                            when (updateEntry.operation) {
-                                                GroupMemberOperation.ADD -> ModificationType.ADD
-                                                GroupMemberOperation.REMOVE -> ModificationType.DELETE
-                                            },
-                                            config.ldapGrpMemberAttrName,
-                                            srvUserDN
-                                    )
-                            ).also { req -> log.info { "Update group membership request: $req for $srvUserDN" } }
-                    )
+                            ldapConnection.modify(req)
                 }
             }
 
