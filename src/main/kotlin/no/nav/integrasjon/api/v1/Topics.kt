@@ -10,8 +10,10 @@ import io.ktor.routing.get
 import io.ktor.routing.put
 import io.ktor.routing.delete
 import io.ktor.routing.post
+import io.ktor.util.error
 import kotlinx.coroutines.experimental.runBlocking
 import no.nav.integrasjon.AUTHENTICATION_BASIC
+import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.ldap.LDAPGroup
 import org.apache.kafka.clients.admin.AdminClient
@@ -62,11 +64,6 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
 }
 
 /**
- * Feedback from Haagen - see thread
- * TODO - idempotent thinking in other change-operations
- */
-
-/**
  * GET https://<host>/api/v1/topics
  *
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#listTopics-org.apache.kafka.clients.admin.ListTopicsOptions-
@@ -105,13 +102,13 @@ fun Routing.getTopics(adminClient: AdminClient) =
  * - related ACLs will be created, producer group with WRITE&DESCRIBE, consumer group with READ&DESCRIBE
  *
  * Returns a triplet<
- *      Pair<"Topic aName", "Created">,
+ *      Pair<"result", "created topic aName">,
  *      Collection<KafkaGroup>,
- *      Pair<Collection<AclBinding>, "Created">
+ *      Pair<"result", "created Collection<AclBinding>">
  *     >
  *
  *  In case of failure for one of the LDAP groups, the LDAPGroup::KafkaGroup.result contains LDAPResult
- *  In case of failure for ACLs, "Failure, <exception> "instead of "Created"
+ *  In case of failure for Topic, ACLs, second part of Pair will start with "failure ... <exception>"
  */
 
 // get the default replication factor from 1st broker configuration. Due to puppet, consistency across brokers in a
@@ -146,6 +143,9 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                 respondCatch {
                     val aNewTopic = runBlocking { call.receive<ANewTopic>() }
 
+                    val logEntry = "Topic creation request by ${this.context.authentication.principal} - $aNewTopic"
+                    application.environment.log.info(logEntry)
+
                     if (!aNewTopic.name.isValid())
                         throw Exception("Invalid topic name - $aNewTopic.name. " +
                                 "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
@@ -158,55 +158,57 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                             getDefaultReplicationFactor(adminClient)
                     )
 
-                    val logEntry = "Topic creation request by ${this.context.authentication.principal} - $newTopic"
-                    application.environment.log.info(logEntry)
-
-                    // create the topic, and if successful, with LDAP groups and ACLs
-                    adminClient.createTopics(mutableListOf(newTopic)).all().get().let {
-
-                        application.environment.log.info("Topic ${newTopic.name()} created")
-
-                        // create kafka groups in ldap
-                        val groupsResult = LDAPGroup(config).use { ldap -> ldap.createKafkaGroups(newTopic.name()) }
-
-                        // create ACLs based on kafka groups in LDAP
-                        val rsrc = Resource(ResourceType.TOPIC, newTopic.name())
-                        val acls = groupsResult.map { kafkaGroup ->
-                            val principal = "Group:${kafkaGroup.name}"
-                            val host = "*"
-                            listOf(
-                                    AclBinding(
-                                            rsrc,
-                                            AccessControlEntry(
-                                                    principal,
-                                                    host,
-                                                    when (kafkaGroup.groupType) {
-                                                        LDAPGroup.Companion.KafkaGroupType.PRODUCER -> AclOperation.WRITE
-                                                        LDAPGroup.Companion.KafkaGroupType.CONSUMER -> AclOperation.READ
-                                                    },
-                                                    AclPermissionType.ALLOW)),
-                                    AclBinding(
-                                            rsrc,
-                                            AccessControlEntry(
-                                                    principal,
-                                                    host,
-                                                    AclOperation.DESCRIBE,
-                                                    AclPermissionType.ALLOW))
-                            )
-                        }.flatMap { it }
-
-                        application.environment.log.info("ACLs create request: $acls")
-
-                        val aclsResult = try {
-                            adminClient.createAcls(acls).all().get()
-                            application.environment.log.info("ACLs created - $acls")
-                            Pair(acls, "Created")
-                        } catch (e: Exception) {
-                            Pair(acls, "Failure, $e")
-                        }
-
-                        Triple(Pair("Topic ${newTopic.name()}", "Created"), groupsResult, aclsResult)
+                    // create the topic itself
+                    val topicResult = try {
+                        adminClient.createTopics(mutableListOf(newTopic)).all().get()
+                        application.environment.log.info("Topic created - $newTopic")
+                        Pair("result", "created topic $newTopic")
+                    } catch (e: Exception) {
+                        application.environment.log.error("$EXCEPTION topic create request $newTopic - $e")
+                        Pair("result", "failure for topic $newTopic creation, $e")
                     }
+
+                    // create kafka groups in ldap
+                    val groupsResult = LDAPGroup(config).use { ldap -> ldap.createKafkaGroups(newTopic.name()) }
+
+                    // create ACLs based on kafka groups in LDAP
+                    val rsrc = Resource(ResourceType.TOPIC, newTopic.name())
+                    val acls = groupsResult.map { kafkaGroup ->
+                        val principal = "Group:${kafkaGroup.name}"
+                        val host = "*"
+                        listOf(
+                                AclBinding(
+                                        rsrc,
+                                        AccessControlEntry(
+                                                principal,
+                                                host,
+                                                when (kafkaGroup.groupType) {
+                                                    LDAPGroup.Companion.KafkaGroupType.PRODUCER -> AclOperation.WRITE
+                                                    LDAPGroup.Companion.KafkaGroupType.CONSUMER -> AclOperation.READ
+                                                },
+                                                AclPermissionType.ALLOW)),
+                                AclBinding(
+                                        rsrc,
+                                        AccessControlEntry(
+                                                principal,
+                                                host,
+                                                AclOperation.DESCRIBE,
+                                                AclPermissionType.ALLOW))
+                        )
+                    }.flatMap { it }
+
+                    application.environment.log.info("ACLs create request: $acls")
+
+                    val aclsResult = try {
+                        adminClient.createAcls(acls).all().get()
+                        application.environment.log.info("ACLs created - $acls")
+                        Pair("result", "created $acls")
+                    } catch (e: Exception) {
+                        application.environment.log.error("$EXCEPTION ACLs create request $acls - $e")
+                        Pair("result", "failure for $acls creation, $e")
+                    }
+
+                    Triple(topicResult, groupsResult, aclsResult)
                 }
             }
         }
@@ -226,13 +228,13 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
  * - delete topic
  *
  * Returns a triplet<
- *      Pair<"Topic aName", "Deleted">,
+ *      Pair<"result", "deleted topic aName">,
  *      Collection<KafkaGroup>,
- *      Pair<Collection<AclBindingFilter>, "Deleted">
+ *      Pair<"result", "deleted Collection<AclBindingFilter>">
  *     >
  *
  *  In case of failure for one of the LDAP groups, the LDAPGroup::KafkaGroup.result contains LDAPResult
- *  In case of failure for ACLs, "Failure, <exception> "instead of "Deleted"
+ *  In case of failure for Topic, ACLs, second part of Pair will start with "failure ... <exception>"
  */
 fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
         authenticate(AUTHENTICATION_BASIC) {
@@ -256,9 +258,10 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
                     val aclsResult = try {
                         adminClient.deleteAcls(mutableListOf(acls)).all().get()
                         application.environment.log.info("ACLs deleted - $acls")
-                        Pair(acls, "Deleted")
+                        Pair("result", "deleted $acls")
                     } catch (e: Exception) {
-                        Pair(acls, "Failure, $e")
+                        application.environment.log.error("$EXCEPTION ACLs delete request $acls - $e")
+                        Pair("result", "failure for $acls deletion, $e")
                     }
 
                     // delete related kafka ldap groups
@@ -267,9 +270,11 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
                     // delete the topic itself
                     val topicResult = try {
                         adminClient.deleteTopics(listOf(topicName)).all().get()
-                        Pair("Topic $topicName", "Deleted")
+                        application.environment.log.info("Topic deleted - $topicName")
+                        Pair("result", "deleted topic $topicName")
                     } catch (e: Exception) {
-                        Pair("Topic $topicName", "Failure, $e")
+                        application.environment.log.error("$EXCEPTION topic delete request $topicName - $e")
+                        Pair("result", "failure for topic $topicName deletion, $e")
                     }
 
                     Triple(topicResult, groupsResult, aclsResult)
@@ -307,7 +312,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
                             )
                     ).all().get()
                 else
-                    Pair("Result", "Topic $topicName does not exist")
+                    Pair("result", "failure, topic $topicName does not exist")
             }
         }
 
@@ -324,7 +329,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
  *
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#alterConfigs-java.util.Map-
  *
- * Returns a Pair<configEntry, "has been updated">
+ * Returns a Pair<"result", "updated configEntry">
  */
 
 // will be enhanced with suitable set of config entries
@@ -358,7 +363,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient) =
                     adminClient.alterConfigs(configReq)
                             // .all()
                             .values()[configResource]
-                            ?.get() ?: Pair("$configEntry", "has been updated")
+                            ?.get() ?: Pair("result", "updated $configEntry")
                 }
             }
         }

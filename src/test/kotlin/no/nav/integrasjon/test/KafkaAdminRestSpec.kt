@@ -246,7 +246,7 @@ object KafkaAdminRestSpec : Spek ({
                     }
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    call.response.content.toString() shouldBeEqualTo """{"first":"Result","second":"Topic invalid does not exist"}"""
+                    call.response.content.toString() shouldBeEqualTo """{"first":"result","second":"failure, topic invalid does not exist"}"""
                 }
 
                 it("should report groups and members for topic tpc-03") {
