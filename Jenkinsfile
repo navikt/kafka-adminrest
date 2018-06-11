@@ -77,6 +77,15 @@ pipeline {
             }
         }
 
+        stage('deploy to production') {
+            environment {
+                FASIT_ENV = 'p'
+            }
+            steps {
+                deployApplication()
+            }
+        }
+
         /*stage('deploy to nais') {
             steps {
                 script {
