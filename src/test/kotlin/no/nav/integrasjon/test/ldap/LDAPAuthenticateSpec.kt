@@ -32,13 +32,14 @@ object LDAPAuthenticateSpec : Spek({
 
         beforeGroup { InMemoryLDAPServer.start() }
 
-        context("authenticate should work correctly") {
+        context("authenticate should work correctly for NAV ident and srv user") {
 
             val users = mapOf(
-                    Pair("srvp01", "dummy") to false,
+                    Pair("srvp01", "dummy") to true,
                     Pair("iauth", "itest") to true,
                     Pair("notExisting", "wildGuess") to false,
-                    Pair("iauth2", "wrongPassword") to false
+                    Pair("iauth2", "wrongPassword") to false,
+                    Pair("srvc02", "dummy") to true
             )
 
             users.forEach { user, result ->

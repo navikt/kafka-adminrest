@@ -144,7 +144,7 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): LDAPResult =
 
-            getServiceUserDN(updateEntry.member).let { srvUserDN ->
+            getSrvUserDN(updateEntry.member).let { srvUserDN ->
                 if (srvUserDN.isEmpty())
                     throw Exception("Cannot find ${updateEntry.member} under ${config.ldapSrvUserBase}")
                 else
@@ -184,25 +184,7 @@ class LDAPGroup(private val config: FasitProperties) :
                     .compare(CompareRequest(groupDN, config.ldapGrpMemberAttrName, userDN))
                     .compareMatched()
 
-    private fun getServiceUserDN(name: String): String =
-            ldapConnection.search(
-                    SearchRequest(
-                            config.ldapSrvUserBase,
-                            SearchScope.SUB,
-                            Filter.createEqualityFilter(
-                                    config.ldapUserAttrName,
-                                    name
-                            ),
-                            SearchRequest.NO_ATTRIBUTES
-                    )
-            )
-                    .let { searchRes ->
-                        when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
-                            true -> searchRes.searchEntries[0].dn
-                            false -> "".also {
-                                log.error { "Could not find $name anywhere under ${config.ldapSrvUserBase}" } }
-                        }
-                    }
+    private val getSrvUserDN = getDN(config.ldapSrvUserBase, config.ldapUserAttrName)
 
     private fun groupEmpty(groupName: String): Boolean = getGroupMembers(groupName).isEmpty()
 

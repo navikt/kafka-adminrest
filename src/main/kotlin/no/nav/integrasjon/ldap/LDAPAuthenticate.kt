@@ -6,7 +6,6 @@ import mu.KotlinLogging
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.LdapConnectionType
 import no.nav.integrasjon.getConnectionInfo
-import no.nav.integrasjon.userDN
 import no.nav.integrasjon.EXCEPTION
 
 /**
@@ -18,12 +17,15 @@ import no.nav.integrasjon.EXCEPTION
 class LDAPAuthenticate(private val config: FasitProperties) :
         LDAPBase(config.getConnectionInfo(LdapConnectionType.AUTHENTICATION)) {
 
+    private val getNAVUserDN = getDN(config.ldapAuthUserBase, config.ldapUserAttrName)
+    private val getSrvUserDN = getDN(config.ldapSrvUserBase, config.ldapUserAttrName)
+
     fun canUserAuthenticate(user: String, pwd: String): Boolean =
             if (!ldapConnection.isConnected)
                 false
             else {
                 val connInfo = config.getConnectionInfo(LdapConnectionType.AUTHENTICATION)
-                val userDN = config.userDN(user)
+                val userDN = getNAVUserDN(user).let { if (it.isNotEmpty()) it else getSrvUserDN(user) }
 
                 try {
                     (ldapConnection.bind(userDN, pwd).resultCode == ResultCode.SUCCESS).also {

@@ -1,9 +1,13 @@
 package no.nav.integrasjon.ldap
 
 import com.unboundid.ldap.sdk.DisconnectType
+import com.unboundid.ldap.sdk.Filter
 import com.unboundid.ldap.sdk.LDAPConnection
 import com.unboundid.ldap.sdk.LDAPConnectionOptions
 import com.unboundid.ldap.sdk.LDAPException
+import com.unboundid.ldap.sdk.ResultCode
+import com.unboundid.ldap.sdk.SearchRequest
+import com.unboundid.ldap.sdk.SearchScope
 import com.unboundid.util.ssl.SSLUtil
 import com.unboundid.util.ssl.TrustAllTrustManager
 import mu.KotlinLogging
@@ -44,6 +48,26 @@ abstract class LDAPBase(private val connInfo: LDAPBase.Companion.ConnectionInfo)
     override fun close() {
         log.debug { "Closing ldap connection $connInfo" }
         ldapConnection.close()
+    }
+
+    protected fun getDN(searchBase: String, attributeName: String): (String) -> String = { usrName ->
+        ldapConnection.search(
+                SearchRequest(
+                        searchBase,
+                        SearchScope.SUB,
+                        Filter.createEqualityFilter(
+                                attributeName,
+                                usrName
+                        ),
+                        SearchRequest.NO_ATTRIBUTES
+                )
+        )
+                .let { searchRes ->
+                    when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
+                        true -> searchRes.searchEntries[0].dn
+                        false -> ""
+                    }
+                }
     }
 
     companion object {
