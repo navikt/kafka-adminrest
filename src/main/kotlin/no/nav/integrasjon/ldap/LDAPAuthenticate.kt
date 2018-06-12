@@ -7,6 +7,7 @@ import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.LdapConnectionType
 import no.nav.integrasjon.getConnectionInfo
 import no.nav.integrasjon.EXCEPTION
+import no.nav.integrasjon.userDN
 
 /**
  * LDAPAuthenticate provides only canUserAuthenticate by simple LDAP bind verification
@@ -25,7 +26,9 @@ class LDAPAuthenticate(private val config: FasitProperties) :
                 false
             else {
                 val connInfo = config.getConnectionInfo(LdapConnectionType.AUTHENTICATION)
-                val userDN = getNAVUserDN(user).let { if (it.isNotEmpty()) it else getSrvUserDN(user) }
+                // must do binding before search.... reuse of ldap user? To be sorted out
+                // val userDN = getNAVUserDN(user).let { if (it.isNotEmpty()) it else getSrvUserDN(user) }
+                val userDN = config.userDN(user)
 
                 try {
                     (ldapConnection.bind(userDN, pwd).resultCode == ResultCode.SUCCESS).also {

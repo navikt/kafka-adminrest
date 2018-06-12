@@ -5,7 +5,7 @@ buildscript {
     ext.coroutines_version = '0.22.5'
     ext.kotlin_loggin_version = '1.5.3'
     ext.confluent_version = '4.0.0'
-    ext.ktor_version = '0.9.2'
+    ext.ktor_version = '0.9.3-alpha-3'
     ext.prometheus_version = '0.3.0'
     ext.logstash_encoder_version = '4.10'
     ext.fjackson_datatype_version = '2.9.2'
@@ -73,6 +73,7 @@ dependencies {
     implementation "io.ktor:ktor-server-netty:$ktor_version"
     implementation "io.ktor:ktor-gson:$ktor_version"
     implementation "io.ktor:ktor-auth:$ktor_version"
+    implementation "io.ktor:ktor-locations:$ktor_version"
 
     implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$fjackson_datatype_version"
 

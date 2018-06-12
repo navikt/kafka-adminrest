@@ -66,7 +66,7 @@ pipeline {
                 deployApplication()
             }
         }
-/*
+
         stage('deploy to preprod') {
             environment {
                 FASIT_ENV = 'q4'
@@ -85,7 +85,7 @@ pipeline {
                 deployApplication()
             }
         }
-*/
+
         /*stage('deploy to nais') {
             steps {
                 script {

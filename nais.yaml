@@ -43,10 +43,6 @@ fasitResources:
       password: LDAP_PASSWORD
   - alias: kafka-adminrest-aprops
     resourceType: ApplicationProperties
-  exposed:
-  - alias: kafka-adminrest-v1
-    resourceType: restservice
-    path: /api/v1
 
 
 

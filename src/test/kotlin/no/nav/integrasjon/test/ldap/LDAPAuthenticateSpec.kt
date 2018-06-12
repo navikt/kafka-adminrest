@@ -35,11 +35,11 @@ object LDAPAuthenticateSpec : Spek({
         context("authenticate should work correctly for NAV ident and srv user") {
 
             val users = mapOf(
-                    Pair("srvp01", "dummy") to true,
+                    Pair("srvp01", "dummy") to false,
                     Pair("iauth", "itest") to true,
                     Pair("notExisting", "wildGuess") to false,
                     Pair("iauth2", "wrongPassword") to false,
-                    Pair("srvc02", "dummy") to true
+                    Pair("srvc02", "dummy") to false
             )
 
             users.forEach { user, result ->

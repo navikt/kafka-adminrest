@@ -272,7 +272,7 @@ object KafkaAdminRestSpec : Spek ({
                             // relevant user is in the right place in UserAndGroups.ldif
                             addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("srvc02:dummy".toByteArray())}")
+                                    "Basic ${encodeBase64("iauth:itest".toByteArray())}")
 
                             val jsonPayload = Gson().toJson(
                                     LDAPGroup.Companion.UpdateKafkaGroupMember(
