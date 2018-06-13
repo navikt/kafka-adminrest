@@ -1,12 +1,12 @@
 package no.nav.integrasjon.ldap
 
+import com.unboundid.ldap.sdk.DN
 import com.unboundid.ldap.sdk.LDAPException
 import com.unboundid.ldap.sdk.ResultCode
 import mu.KotlinLogging
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.LdapConnectionType
 import no.nav.integrasjon.getConnectionInfo
-import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.userDN
 
 /**
@@ -18,27 +18,38 @@ import no.nav.integrasjon.userDN
 class LDAPAuthenticate(private val config: FasitProperties) :
         LDAPBase(config.getConnectionInfo(LdapConnectionType.AUTHENTICATION)) {
 
-    private val getNAVUserDN = getDN(config.ldapAuthUserBase, config.ldapUserAttrName)
-    private val getSrvUserDN = getDN(config.ldapSrvUserBase, config.ldapUserAttrName)
-
     fun canUserAuthenticate(user: String, pwd: String): Boolean =
-            if (!ldapConnection.isConnected)
-                false
+            if (!ldapConnection.isConnected) false
             else {
-                val connInfo = config.getConnectionInfo(LdapConnectionType.AUTHENTICATION)
-                // must do binding before search.... reuse of ldap user? To be sorted out
-                // val userDN = getNAVUserDN(user).let { if (it.isNotEmpty()) it else getSrvUserDN(user) }
-                val userDN = config.userDN(user)
+                // fold over 3 DNs, NAV ident or service accounts (normal + Basta)
+                addDNs(user).fold(false) { acc, dn -> acc || authenticated(dn, pwd, acc) }.also {
 
-                try {
-                    (ldapConnection.bind(userDN, pwd).resultCode == ResultCode.SUCCESS).also {
-                        if (it) log.info { "Successful bind of $userDN to $connInfo" }
+                    val connInfo = config.getConnectionInfo(LdapConnectionType.AUTHENTICATION)
+
+                    when (it) {
+                        true -> log.info { "Successful bind of $user to $connInfo" }
+                        false -> log.error { "Cannot bind $user to $connInfo" }
                     }
-                } catch (e: LDAPException) {
-                    log.error { "$EXCEPTION cannot bind $userDN to $connInfo, ${e.diagnosticMessage}" }
-                    false
                 }
             }
+
+    // add DNs for both service accounts, including those created in Basta. The order of DNs according to user name
+    private fun addDNs(user: String): List<String> = config.userDN(user).let {
+
+        val rdns = DN(it).rdNs
+        val dnPrefix = rdns[rdns.indices.first]
+        val dnPostfix = "${rdns[rdns.indices.last - 1]},${rdns[rdns.indices.last]}"
+        val srvAccounts = listOf("OU=ApplAccounts,OU=ServiceAccounts", "OU=ServiceAccounts")
+        val regEx = """^[a-zA-Z]\d{6}$""".toRegex() // matching NAV ident
+
+        if (regEx.matches(user)) listOf(it)
+        else srvAccounts.map { "$dnPrefix,$it,$dnPostfix" }
+    }
+
+    private fun authenticated(dn: String, pwd: String, alreadyAuthenticated: Boolean): Boolean =
+            if (alreadyAuthenticated) true
+            else
+                try { (ldapConnection.bind(dn, pwd).resultCode == ResultCode.SUCCESS) } catch (e: LDAPException) { false }
 
     companion object {
 

@@ -80,6 +80,8 @@ pipeline {
         stage('deploy to production') {
             environment {
                 FASIT_ENV = 'p'
+                NAMESPACE = 'default'
+
             }
             steps {
                 deployApplication()

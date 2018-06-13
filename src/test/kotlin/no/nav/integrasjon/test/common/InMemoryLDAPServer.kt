@@ -44,7 +44,14 @@ object InMemoryLDAPServer {
                             LPORT, tlsSF, tlsCF)
             )
 
-            setAuthenticationRequiredOperationTypes(OperationType.COMPARE)
+            // require authentication for most operations except bind
+            setAuthenticationRequiredOperationTypes(
+                    OperationType.COMPARE,
+                    OperationType.SEARCH,
+                    OperationType.ADD,
+                    OperationType.MODIFY,
+                    OperationType.DELETE
+                    )
             // let the embedded server use identical schema as apache DS configured for AD support (group and sAMAcc..)
             schema = Schema.getSchema("src/test/resources/apacheDS.ldif")
         } catch (e: Exception) { log.error { "$EXCEPTION$e" } }

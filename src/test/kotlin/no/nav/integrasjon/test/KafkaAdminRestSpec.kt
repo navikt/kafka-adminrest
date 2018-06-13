@@ -199,7 +199,7 @@ object KafkaAdminRestSpec : Spek ({
                         // relevant user is in the right place in UserAndGroups.ldif
                         addHeader(
                                 HttpHeaders.Authorization,
-                                "Basic ${encodeBase64("iauth:itest".toByteArray())}")
+                                "Basic ${encodeBase64("n000001:itest".toByteArray())}")
 
                         val jsonPayload = Gson().toJson(ConfigEntry("retention.ms", "6600666"))
                         setBody(jsonPayload)
@@ -230,7 +230,7 @@ object KafkaAdminRestSpec : Spek ({
                         // relevant user is in the right place in UserAndGroups.ldif
                         addHeader(
                                 HttpHeaders.Authorization,
-                                "Basic ${encodeBase64("iauth:itest".toByteArray())}")
+                                "Basic ${encodeBase64("N000001:itest".toByteArray())}")
 
                         val jsonPayload = Gson().toJson(ConfigEntry("max.message.bytes", "51000012"))
                         setBody(jsonPayload)
@@ -272,7 +272,7 @@ object KafkaAdminRestSpec : Spek ({
                             // relevant user is in the right place in UserAndGroups.ldif
                             addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("iauth:itest".toByteArray())}")
+                                    "Basic ${encodeBase64("n000002:itest".toByteArray())}")
 
                             val jsonPayload = Gson().toJson(
                                     LDAPGroup.Companion.UpdateKafkaGroupMember(
@@ -314,7 +314,7 @@ object KafkaAdminRestSpec : Spek ({
                         // relevant user is in the right place in UserAndGroups.ldif
                         addHeader(
                                 HttpHeaders.Authorization,
-                                "Basic ${encodeBase64("iauth:itest".toByteArray())}")
+                                "Basic ${encodeBase64("n000002:itest".toByteArray())}")
 
                         val jsonPayload = Gson().toJson(
                                 LDAPGroup.Companion.UpdateKafkaGroupMember(
@@ -338,7 +338,7 @@ object KafkaAdminRestSpec : Spek ({
                             // relevant user is in the right place in UserAndGroups.ldif
                             addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("iauth:itest".toByteArray())}")
+                                    "Basic ${encodeBase64("srvc02:dummy".toByteArray())}")
 
                             val jsonPayload = Gson().toJson(
                                     LDAPGroup.Companion.UpdateKafkaGroupMember(
@@ -378,7 +378,7 @@ object KafkaAdminRestSpec : Spek ({
                             // relevant user is in the right place in UserAndGroups.ldif
                             addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("iauth:itest".toByteArray())}")
+                                    "Basic ${encodeBase64("srvp01:dummy".toByteArray())}")
 
                             val jsonPayload = Gson().toJson(ANewTopic(topicName, numPartitions))
                             setBody(jsonPayload)

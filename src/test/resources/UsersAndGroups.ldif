@@ -81,7 +81,7 @@ ou: Users
 
 # Add a couple of users for testing authentication
 
-dn: uid=iauth,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local
+dn: uid=n000001,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local
 objectClass: inetOrgPerson
 objectClass: person
 objectClass: organizationalPerson
@@ -90,7 +90,7 @@ uid: iauth
 sn: IntegrationTestAuth
 userPassword: itest
 
-dn: uid=iauth2,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local
+dn: uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local
 objectClass: inetOrgPerson
 objectClass: person
 objectClass: organizationalPerson

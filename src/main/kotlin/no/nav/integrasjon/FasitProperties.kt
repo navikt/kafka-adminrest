@@ -35,12 +35,12 @@ data class FasitProperties(
     val ldapConnTimeout: Int = System.getenv("LDAP_CONNTIMEOUT")?.toInt() ?: 2_000,
     val ldapUserAttrName: String = System.getenv("LDAP_USERATTRNAME")?.toString() ?: "",
 
-    // ldap authentication details
+    // ldap authentication details - production LDAP
     val ldapAuthHost: String = System.getenv("LDAP_AUTH_HOST")?.toString() ?: "",
     val ldapAuthPort: Int = System.getenv("LDAP_AUTH_PORT")?.toInt() ?: 0,
     val ldapAuthUserBase: String = System.getenv("LDAP_AUTH_USERBASE")?.toString() ?: "",
 
-    // ldap details for managing ldap groups
+    // ldap details for managing ldap groups - different LDAP servers (test, preprod, production)
     val ldapHost: String = System.getenv("LDAP_HOST")?.toString() ?: "",
     val ldapPort: Int = System.getenv("LDAP_PORT")?.toInt() ?: 0,
 
