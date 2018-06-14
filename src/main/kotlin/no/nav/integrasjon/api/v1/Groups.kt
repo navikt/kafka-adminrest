@@ -4,13 +4,16 @@ import io.ktor.application.ApplicationCall
 import io.ktor.application.application
 import io.ktor.application.call
 import io.ktor.http.HttpStatusCode
+import io.ktor.locations.Location
 import io.ktor.pipeline.PipelineContext
 import io.ktor.response.respond
 import io.ktor.routing.Routing
-import io.ktor.routing.get
-
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
 import no.nav.integrasjon.ldap.LDAPGroup
 
 /**
@@ -29,6 +32,8 @@ fun Routing.groupsAPI(config: FasitProperties) {
     getGroupMembers(config)
 }
 
+private const val swGroup = "Groups"
+
 // a wrapper for each call to ldap - used in routes
 private suspend fun PipelineContext<Unit, ApplicationCall>.ldapRespondCatch(
     config: FasitProperties,
@@ -44,31 +49,31 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.ldapRespondCatch(
         }
 
 /**
- * GET https://<host>/api/v1/groups
- *
  * See LDAPGroup::getKafkaGroups
- *
- * Returns a collection of String - group names
  */
+
+@Group(swGroup)
+@Location(GROUPS)
+class Groups
+
+data class GroupsModel(val groups: List<String>)
+
 fun Routing.getGroups(config: FasitProperties) =
-        get(GROUPS) {
-            ldapRespondCatch(config) { lc ->
-                lc.getKafkaGroups()
-            }
+        get<Groups>("all groups".responds(ok<GroupsModel>())) {
+            ldapRespondCatch(config) { lc -> lc.getKafkaGroups() }
         }
 
 /**
- * GET https://<host>/api/v1/groups/{groupName}
- *
  * See LDAP::getKafkaGroupMembers
- *
- * Returns a collection of String - distinguished names for members of given group
  */
+
+@Group(swGroup)
+@Location("$GROUPS/{groupName}")
+data class AGroup(val groupName: String)
+
+data class GroupMembersModel(val members: List<String>)
+
 fun Routing.getGroupMembers(config: FasitProperties) =
-        get("$GROUPS/{groupName}") {
-            ldapRespondCatch(config) { lc ->
-                call.parameters["groupName"]?.let { groupName ->
-                    lc.getKafkaGroupMembers(groupName)
-                } ?: emptyList<String>()
-            }
+        get<AGroup>("members in a group".responds(ok<GroupMembersModel>())) { group ->
+            ldapRespondCatch(config) { lc -> lc.getKafkaGroupMembers(group.groupName) }
         }

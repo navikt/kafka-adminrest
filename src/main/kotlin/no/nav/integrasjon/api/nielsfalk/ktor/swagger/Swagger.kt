@@ -2,10 +2,9 @@
 
 package no.nav.integrasjon.api.nielsfalk.ktor.swagger
 
-/**
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
-import io.ktor.locations.location
+import io.ktor.locations.Location
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -55,8 +54,8 @@ class Contact(
 
 class Operation(
     metadata: Metadata,
-    location: location,
-    group: group?,
+    location: Location,
+    group: Group?,
     method: HttpMethod,
     locationType: KClass<*>,
     entityType: KClass<*>
@@ -84,7 +83,7 @@ class Operation(
     }.toMap()
 }
 
-private fun group.toList(): List<Tag> {
+private fun Group.toList(): List<Tag> {
     return listOf(Tag(name))
 }
 
@@ -99,7 +98,7 @@ private fun KClass<*>.bodyParameter() =
                 `in` = ParameterInputType.body
         )
 
-fun <LOCATION : Any, BODY_TYPE : Any> Metadata.applyOperations(location: location, group: group?, method: HttpMethod, locationType: KClass<LOCATION>, entityType: KClass<BODY_TYPE>) {
+fun <LOCATION : Any, BODY_TYPE : Any> Metadata.applyOperations(location: Location, group: Group?, method: HttpMethod, locationType: KClass<LOCATION>, entityType: KClass<BODY_TYPE>) {
     swagger.paths
             .getOrPut(location.path) { mutableMapOf() }
             .put(method.value.toLowerCase(),
@@ -183,8 +182,8 @@ open class Property(
 
 inline fun <reified LOCATION : Any, reified ENTITY_TYPE : Any> Metadata.apply(method: HttpMethod) {
     val clazz = LOCATION::class.java
-    val location = clazz.getAnnotation(location::class.java)
-    val tags = clazz.getAnnotation(group::class.java)
+    val location = clazz.getAnnotation(Location::class.java)
+    val tags = clazz.getAnnotation(Group::class.java)
     applyResponseDefinitions()
     applyOperations(location, tags, method, LOCATION::class, ENTITY_TYPE::class)
 }
@@ -202,6 +201,4 @@ private fun addDefinition(kClass: KClass<*>) {
 
 private fun KClass<*>.modelName(): ModelName = simpleName ?: toString()
 
-annotation class group(val name: String)
-
- */
+annotation class Group(val name: String)

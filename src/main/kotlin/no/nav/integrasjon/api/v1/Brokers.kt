@@ -1,9 +1,15 @@
 package no.nav.integrasjon.api.v1
 
 import io.ktor.application.call
+import io.ktor.locations.Location
 import io.ktor.routing.Routing
-import io.ktor.routing.get
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
 import org.apache.kafka.clients.admin.AdminClient
+import org.apache.kafka.clients.admin.ConfigEntry
+import org.apache.kafka.common.Node
 import org.apache.kafka.common.config.ConfigResource
 
 /**
@@ -20,17 +26,20 @@ fun Routing.brokersAPI(adminClient: AdminClient) {
     getBrokerConfig(adminClient)
 }
 
+private const val swGroup = "Brokers"
+
 /**
- * GET https://<host>/api/v1/brokers
- *
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#describeCluster--
- *
- * Returns a collection of org.apache.kafka.common.Node
- *
- * See https://kafka.apache.org/10/javadoc/org/apache/kafka/common/Node.html
  */
+
+@Group(swGroup)
+@Location(BROKERS)
+class Brokers
+
+data class BrokersModel(val brokers: List<Node>)
+
 fun Routing.getBrokers(adminClient: AdminClient) =
-        get(BROKERS) {
+        get<Brokers>("all brokers".responds(ok<BrokersModel>())) {
             respondCatch {
                 adminClient.describeCluster()
                         .nodes()
@@ -39,16 +48,17 @@ fun Routing.getBrokers(adminClient: AdminClient) =
         }
 
 /**
- * GET https://<host>/api/v1/brokers/{brokerID}
- *
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#describeConfigs-java.util.Collection-
- *
- * Returns a map of org.apache.kafka.clients.admin.Config for the given resource
- *
- * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/Config.html
  */
+
+@Group(swGroup)
+@Location("$BROKERS/{brokerID}")
+data class ABroker(val brokerID: String)
+
+data class BrokerConfigModel(val config: List<ConfigEntry>)
+
 fun Routing.getBrokerConfig(adminClient: AdminClient) =
-        get("$BROKERS/{brokerID}") {
+        get<ABroker>("a broker configuration".responds(ok<BrokerConfigModel>())) {
             respondCatch {
                 adminClient.describeConfigs(
                         listOf(
@@ -60,5 +70,6 @@ fun Routing.getBrokerConfig(adminClient: AdminClient) =
                 )
                         .all()
                         .get()
+                        .entries.first().value.entries()
             }
         }

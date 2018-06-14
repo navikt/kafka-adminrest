@@ -1,5 +1,5 @@
 package no.nav.integrasjon.api.nielsfalk.ktor.swagger
-/**
+
 import io.ktor.application.ApplicationCall
 import io.ktor.content.URIFileContent
 import io.ktor.response.respond
@@ -10,7 +10,6 @@ import io.ktor.response.respond
 class SwaggerUi {
 
     private val notFound = mutableListOf<String>()
-
     private val content = mutableMapOf<String, URIFileContent>()
 
     suspend fun serve(filename: String?, call: ApplicationCall) {
@@ -28,28 +27,3 @@ class SwaggerUi {
         }
     }
 }
-
-/*
-private val contentTypes = mapOf(
-        "html" to Html,
-        "css" to CSS,
-        "js" to JavaScript,
-        "json" to ContentType.Application.Json.withCharset(Charsets.UTF_8),
-        "png" to PNG)
-
-private class ResourceContent(val resource: URL) : URIFileContent(resource) {
-    private val bytes by lazy { resource.readBytes() }
-
-    override val headers by lazy {
-        Headers.build {
-            val extension = resource.file.substring(resource.file.lastIndexOf('.') + 1)
-            contentType(contentTypes[extension] ?: Html)
-            contentLength(bytes.size.toLong())
-        }
-    }
-
-    //override fun bytes(): ByteArray = bytes
-    override fun toString() = "ResourceContent \"$resource\""
-}
-*/
-*/

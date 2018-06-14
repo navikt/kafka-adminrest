@@ -23,12 +23,12 @@ import no.nav.integrasjon.ldap.LDAPGroup
 import no.nav.integrasjon.test.common.InMemoryLDAPServer
 import org.amshove.kluent.shouldBe
 import org.amshove.kluent.shouldBeEqualTo
+import org.amshove.kluent.shouldBeGreaterThan
 import org.amshove.kluent.shouldContainAll
 import org.amshove.kluent.shouldEqual
 import org.amshove.kluent.shouldEqualTo
 import org.apache.kafka.clients.admin.Config
 import org.apache.kafka.clients.admin.ConfigEntry
-import org.apache.kafka.clients.admin.TopicListing
 import org.apache.kafka.common.Node
 import org.jetbrains.spek.api.Spek
 import org.jetbrains.spek.api.dsl.given
@@ -116,12 +116,12 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    val result: Map<String, Config> = Gson().fromJson(
+                    val result: List<ConfigEntry> = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<Map<String, Config>>() {}.type)
+                            object : TypeToken<List<ConfigEntry>>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.keys.toString() shouldBeEqualTo "[ConfigResource{type=BROKER, name='0'}]"
+                    result.size shouldBeGreaterThan 5
                 }
             }
 
@@ -172,12 +172,12 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    val result: Map<String, TopicListing> = Gson().fromJson(
+                    val result: List<String> = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<Map<String, TopicListing>>() {}.type)
+                            object : TypeToken<List<String>>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.keys shouldContainAll preTopics
+                    result shouldContainAll preTopics
                 }
 
                 preTopics.forEach { topic ->

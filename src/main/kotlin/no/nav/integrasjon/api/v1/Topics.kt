@@ -4,17 +4,21 @@ import io.ktor.application.application
 import io.ktor.application.call
 import io.ktor.auth.authenticate
 import io.ktor.auth.authentication
+import io.ktor.locations.Location
 import io.ktor.request.receive
 import io.ktor.routing.Routing
 import io.ktor.routing.get
 import io.ktor.routing.put
 import io.ktor.routing.delete
 import io.ktor.routing.post
-import io.ktor.util.error
 import kotlinx.coroutines.experimental.runBlocking
 import no.nav.integrasjon.AUTHENTICATION_BASIC
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
 import no.nav.integrasjon.ldap.LDAPGroup
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.Config
@@ -63,19 +67,22 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
     updateTopicGroup(config)
 }
 
+private const val swGroup = "Topics"
+
 /**
- * GET https://<host>/api/v1/topics
- *
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#listTopics-org.apache.kafka.clients.admin.ListTopicsOptions-
- *
- * Returns a map of topic names to org.apache.kafka.clients.admin.TopicListing
- *
- * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/TopicListing.html
  */
+
+@Group(swGroup)
+@Location(TOPICS)
+class Topics
+
+data class TopicsModel(val topics: List<String>)
+
 fun Routing.getTopics(adminClient: AdminClient) =
-        get(TOPICS) {
+        get<Topics>("all topics".responds(ok<TopicsModel>())) {
             respondCatch {
-                adminClient.listTopics().namesToListings().get()
+                adminClient.listTopics().names().get()
             }
         }
 

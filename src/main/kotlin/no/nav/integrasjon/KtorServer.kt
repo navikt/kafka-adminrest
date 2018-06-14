@@ -15,13 +15,20 @@ import io.ktor.features.DefaultHeaders
 import io.ktor.features.StatusPages
 import io.ktor.gson.gson
 import io.ktor.http.HttpStatusCode
+import io.ktor.locations.Locations
 import io.ktor.request.path
 import io.ktor.response.respond
+import io.ktor.response.respondRedirect
 import io.ktor.routing.Routing
+import io.ktor.routing.get
 import io.ktor.util.error
 import io.prometheus.client.CollectorRegistry
 import mu.KotlinLogging
 import no.nav.integrasjon.api.nais.client.naisAPI
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Contact
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Information
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.SwaggerUi
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.swagger
 import no.nav.integrasjon.api.v1.API_V1
 import no.nav.integrasjon.api.v1.aclAPI
 import no.nav.integrasjon.api.v1.topicsAPI
@@ -100,9 +107,30 @@ fun Application.kafkaAdminREST() {
             serializeNulls()
         }
     }
+    install(Locations)
+
+    // prepare for swagger
+    swagger.info = Information(
+            version = "0.52",
+            title = "Kafka self service API",
+            description = "[kafka-adminrest](https://github.com/navikt/kafka-adminrest)",
+            contact = Contact(
+                    name = "Torstein Nesby, Trong Huu Nguyen",
+                    url = "https://github.com/navikt/kafka-adminrest")
+    )
+
+    val ui = SwaggerUi()
 
     log.info { "Installing routes" }
     install(Routing) {
+
+        // swagger triggering
+        get(API_V1) { call.respondRedirect("$API_V1/apidocs/index.html?url=swagger.json") }
+        get("$API_V1/apidocs/{fileName}") {
+            val filename = call.parameters["fileName"]
+            if (filename == "swagger.json") call.respond(swagger) else ui.serve(filename, call)
+        }
+
         // support classic nais requirements
         naisAPI(adminClient, fasitProps, collectorRegistry)
 

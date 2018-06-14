@@ -1,8 +1,13 @@
 package no.nav.integrasjon.api.v1
 
+import io.ktor.locations.Location
 import io.ktor.routing.Routing
-import io.ktor.routing.get
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
 import org.apache.kafka.clients.admin.AdminClient
+import org.apache.kafka.common.acl.AclBinding
 import org.apache.kafka.common.acl.AclBindingFilter
 
 /**
@@ -18,16 +23,17 @@ fun Routing.aclAPI(adminClient: AdminClient) {
 }
 
 /**
- * GET https://<host>/api/v1/acls
- *
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#describeAcls-org.apache.kafka.common.acl.AclBindingFilter-
- *
- * Returns a collection of org.apache.kafka.common.acl.AclBinding
- *
- * See https://kafka.apache.org/10/javadoc/org/apache/kafka/common/acl/AclBinding.html
  */
+
+@Group("Access Control List")
+@Location(ACLS)
+class Acls
+
+data class AclsModel(val acls: List<AclBinding>)
+
 fun Routing.getACLS(adminClient: AdminClient) =
-        get(ACLS) {
+        get<Acls>("all access control lists".responds(ok<AclsModel>())) {
             respondCatch {
                 adminClient.describeAcls(AclBindingFilter.ANY)
                         .values()
