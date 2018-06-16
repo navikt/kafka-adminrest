@@ -197,10 +197,13 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun userIsManager(topicName: String, userName: String): Boolean =
             toGroupName(KafkaGroupType.MANAGER.prefix, topicName).let { groupName ->
-            userInGroup(
-                    resolveUserDN(userName),
-                    config.groupDN(toGroupName(KafkaGroupType.MANAGER.prefix, topicName)),
-                    groupName)
+
+                if (groupName in getKafkaGroupNames())
+                    userInGroup(
+                            resolveUserDN(userName),
+                            config.groupDN(toGroupName(KafkaGroupType.MANAGER.prefix, topicName)),
+                            groupName)
+                else false
             }
 
     /**
