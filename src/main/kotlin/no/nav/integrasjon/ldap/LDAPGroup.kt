@@ -224,7 +224,9 @@ class LDAPGroup(private val config: FasitProperties) :
      */
     private val searchInKafkaNode = searchXInY(config.ldapGroupBase, SearchScope.ONE)
     private val searchInServiceAccountsNode = searchXInY(config.ldapSrvUserBase, SearchScope.SUB)
-    private val searchInUserAccountsNode = searchXInY(config.ldapAuthUserBase, SearchScope.SUB)
+    private val searchInUserAccountsNode = searchXInY(
+            inheritDNTail(config.ldapSrvUserBase, config.ldapAuthUserBase),
+            SearchScope.SUB)
 
     /**
      * Level 2 - Search functions getting attributes, based on search functions locked to nodes
@@ -274,6 +276,20 @@ class LDAPGroup(private val config: FasitProperties) :
 
     private fun resolveUserDN(userName: String) =
             if (isNAVIdent(userName)) getUserDN(userName) else getServiceUserDN(userName)
+
+    private fun inheritDNTail(srcDN: String, trgDN: String): String {
+
+        val uRDNS = DN(trgDN).rdNs
+        val sRDNS = DN(srcDN).rdNs
+
+        val uInd = uRDNS.indices
+        val sInd = sRDNS.indices
+
+        uRDNS[uInd.last - 1] = sRDNS[sInd.last - 1]
+        uRDNS[uInd.last] = sRDNS[sInd.last]
+
+        return uRDNS.joinToString(",")
+    }
 
     companion object {
 
