@@ -1,23 +1,19 @@
 package no.nav.integrasjon.api.v1
 
 import io.ktor.application.application
-import io.ktor.application.call
-import io.ktor.auth.authenticate
 import io.ktor.auth.authentication
 import io.ktor.locations.Location
-import io.ktor.request.receive
 import io.ktor.routing.Routing
-import io.ktor.routing.get
-import io.ktor.routing.put
-import io.ktor.routing.delete
-import io.ktor.routing.post
-import kotlinx.coroutines.experimental.runBlocking
-import no.nav.integrasjon.AUTHENTICATION_BASIC
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.BasicAuthSecurity
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.delete
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.failed
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.post
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.put
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
 import no.nav.integrasjon.ldap.LDAPGroup
 import org.apache.kafka.clients.admin.AdminClient
@@ -34,6 +30,8 @@ import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.Resource
 import org.apache.kafka.common.resource.ResourceFilter
 import org.apache.kafka.common.resource.ResourceType
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.securityAndReponds
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.unAuthorized
 
 /**
  * Topic API
@@ -75,47 +73,24 @@ private const val swGroup = "Topics"
 
 @Group(swGroup)
 @Location(TOPICS)
-class Topics
+class GetTopics
 
-data class TopicsModel(val topics: List<String>)
+data class GetTopicsModel(val topics: List<String>)
 
 fun Routing.getTopics(adminClient: AdminClient) =
-        get<Topics>("all topics".responds(ok<TopicsModel>())) {
+        get<GetTopics>("all topics".responds(ok<GetTopicsModel>(), failed<AnError>())) {
             respondCatch {
-                adminClient.listTopics().names().get()
+                GetTopicsModel(adminClient.listTopics().names().get().toList())
             }
         }
 
 /**
- * POST https://<host>/api/v1/topics
- *
- * Observe - json payload is only one new topic at a time - ANewTopic
- *
- * e.g. {"name":"aTopicName","numPartitions":3}
- *
- * Observe that we need to create kafka NewTopic where the missing piece is the replication factor
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/NewTopic.html
  *
  * The system will get the default.replication.factor from the 1. broker configuration. In that way the replication
  * factor will be correct across test, preprod and production environment. The latter has higher repl. factor in order
  * to guarantee HA even if one data center goes down
  *
- * Observe requirement for authentication, e.g. n145821 and pwd - the classic stuff
- *
- * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#createTopics-java.util.Collection-
- *
- * Iff topic creation is successful,
- * - related producer and consumer LDAP groups will be created
- * - related ACLs will be created, producer group with WRITE&DESCRIBE, consumer group with READ&DESCRIBE
- *
- * Returns a triplet<
- *      Pair<"result", "created topic aName">,
- *      Collection<KafkaGroup>,
- *      Pair<"result", "created Collection<AclBinding>">
- *     >
- *
- *  In case of failure for one of the LDAP groups, the LDAPGroup::KafkaGroup.result contains LDAPResult
- *  In case of failure for Topic, ACLs, second part of Pair will start with "failure ... <exception>"
  */
 
 // get the default replication factor from 1st broker configuration. Due to puppet, consistency across brokers in a
@@ -132,9 +107,6 @@ private fun getDefaultReplicationFactor(adminClient: AdminClient): Short =
             ).all().get().values.first().get("default.replication.factor").value().toShort()
         }
 
-// simplified version of kafka NewTopic
-internal data class ANewTopic(val name: String, val numPartitions: Int)
-
 // extension function for validating a topic name and that the future group names are of valid length
 private fun String.isValid(): Boolean =
         this.map { c ->
@@ -144,199 +116,198 @@ private fun String.isValid(): Boolean =
             }
         }.all { it } && LDAPGroup.validGroupLength(this)
 
+@Group(swGroup)
+@Location(TOPICS)
+class PostTopic
+data class PostTopicBody(val name: String, val numPartitions: Int = 1)
+
+data class PostTopicModel(
+    val topicStatus: String,
+    val groupsStatus: List<LDAPGroup.Companion.KafkaGroup>,
+    val aclStatus: String
+)
+
 fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
-        authenticate(AUTHENTICATION_BASIC) {
-            post(TOPICS) {
-                respondCatch {
-                    val aNewTopic = runBlocking { call.receive<ANewTopic>() }
-
-                    val logEntry = "Topic creation request by ${this.context.authentication.principal} - $aNewTopic"
-                    application.environment.log.info(logEntry)
-
-                    if (!aNewTopic.name.isValid())
-                        throw Exception("Invalid topic name - $aNewTopic.name. " +
-                                "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
-                                "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}")
-
-                    // create kafka NewTopic by getting the default replication factor from broker config
-                    val newTopic = NewTopic(
-                            aNewTopic.name,
-                            aNewTopic.numPartitions,
-                            getDefaultReplicationFactor(adminClient)
-                    )
-
-                    // create the topic itself
-                    val topicResult = try {
-                        adminClient.createTopics(mutableListOf(newTopic)).all().get()
-                        application.environment.log.info("Topic created - $newTopic")
-                        Pair("result", "created topic $newTopic")
-                    } catch (e: Exception) {
-                        application.environment.log.error("$EXCEPTION topic create request $newTopic - $e")
-                        Pair("result", "failure for topic $newTopic creation, $e")
-                    }
-
-                    // create kafka groups in ldap
-                    val groupsResult = LDAPGroup(config).use { ldap -> ldap.createKafkaGroups(newTopic.name()) }
-
-                    // create ACLs based on kafka groups in LDAP
-                    val rsrc = Resource(ResourceType.TOPIC, newTopic.name())
-                    val acls = groupsResult.map { kafkaGroup ->
-                        val principal = "Group:${kafkaGroup.name}"
-                        val host = "*"
-                        listOf(
-                                AclBinding(
-                                        rsrc,
-                                        AccessControlEntry(
-                                                principal,
-                                                host,
-                                                when (kafkaGroup.groupType) {
-                                                    LDAPGroup.Companion.KafkaGroupType.PRODUCER -> AclOperation.WRITE
-                                                    LDAPGroup.Companion.KafkaGroupType.CONSUMER -> AclOperation.READ
-                                                },
-                                                AclPermissionType.ALLOW)),
-                                AclBinding(
-                                        rsrc,
-                                        AccessControlEntry(
-                                                principal,
-                                                host,
-                                                AclOperation.DESCRIBE,
-                                                AclPermissionType.ALLOW))
-                        )
-                    }.flatMap { it }
-
-                    application.environment.log.info("ACLs create request: $acls")
-
-                    val aclsResult = try {
-                        adminClient.createAcls(acls).all().get()
-                        application.environment.log.info("ACLs created - $acls")
-                        Pair("result", "created $acls")
-                    } catch (e: Exception) {
-                        application.environment.log.error("$EXCEPTION ACLs create request $acls - $e")
-                        Pair("result", "failure for $acls creation, $e")
-                    }
-
-                    Triple(topicResult, groupsResult, aclsResult)
-                }
-            }
-        }
-
-/**
- * DELETE https://<host>/api/v1/topics/{topicName}
- *
- * Observe - no json payload, deletion of just one topic at a time
- * Observe - will take ´a little bit of time´ before the deleted topics is not showing up in topics list
- * Observe requirement for authentication, e.g. n145821 and pwd - the classic stuff
- *
- * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#deleteTopics-java.util.Collection-
- *
- * Stepwise
- * - delete all ACLs related to topic
- * - delete related producer and consumer LDAP groups
- * - delete topic
- *
- * Returns a triplet<
- *      Pair<"result", "deleted topic aName">,
- *      Collection<KafkaGroup>,
- *      Pair<"result", "deleted Collection<AclBindingFilter>">
- *     >
- *
- *  In case of failure for one of the LDAP groups, the LDAPGroup::KafkaGroup.result contains LDAPResult
- *  In case of failure for Topic, ACLs, second part of Pair will start with "failure ... <exception>"
- */
-fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
-        authenticate(AUTHENTICATION_BASIC) {
-            delete("$TOPICS/{topicName}") {
-                respondCatch {
-
-                    // elvis paradox, should not happen because then we should not be here...
-                    val topicName = call.parameters["topicName"] ?: "<no topic>"
-
-                    val logEntry = "Topic deletion request by ${this.context.authentication.principal} - $topicName"
-                    application.environment.log.info(logEntry)
-
-                    // delete ACLs
-                    val acls = AclBindingFilter(
-                            ResourceFilter(ResourceType.TOPIC, topicName),
-                            AccessControlEntryFilter.ANY
-                    )
-
-                    application.environment.log.info("ACLs delete request: $acls")
-
-                    val aclsResult = try {
-                        adminClient.deleteAcls(mutableListOf(acls)).all().get()
-                        application.environment.log.info("ACLs deleted - $acls")
-                        Pair("result", "deleted $acls")
-                    } catch (e: Exception) {
-                        application.environment.log.error("$EXCEPTION ACLs delete request $acls - $e")
-                        Pair("result", "failure for $acls deletion, $e")
-                    }
-
-                    // delete related kafka ldap groups
-                    val groupsResult = LDAPGroup(config).use { ldap -> ldap.deleteKafkaGroups(topicName) }
-
-                    // delete the topic itself
-                    val topicResult = try {
-                        adminClient.deleteTopics(listOf(topicName)).all().get()
-                        application.environment.log.info("Topic deleted - $topicName")
-                        Pair("result", "deleted topic $topicName")
-                    } catch (e: Exception) {
-                        application.environment.log.error("$EXCEPTION topic delete request $topicName - $e")
-                        Pair("result", "failure for topic $topicName deletion, $e")
-                    }
-
-                    Triple(topicResult, groupsResult, aclsResult)
-                }
-            }
-        }
-
-/**
- * GET https://<host>/api/v1/topics/{topicName}
- *
- * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#describeConfigs-java.util.Collection-
- *
- * Returns a map of org.apache.kafka.common.config.ConfigResource to org.apache.kafka.clients.admin.Config
- *
- * See https://kafka.apache.org/10/javadoc/org/apache/kafka/common/config/ConfigResource.html
- * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/Config.html
- */
-fun Routing.getTopicConfig(adminClient: AdminClient) =
-        get("$TOPICS/{topicName}") {
+        post<PostTopic, PostTopicBody>(
+                "new topic".securityAndReponds(
+                        BasicAuthSecurity(),
+                        ok<PostTopicModel>(),
+                        failed<AnError>(),
+                        unAuthorized<Unit>())) { _, body ->
             respondCatch {
 
-                // elvis paradox, should not happen because then we should not be here...
-                val topicName = call.parameters["topicName"] ?: "<no topic>"
+                val logEntry = "Topic creation request by ${this.context.authentication.principal} - $body"
+                application.environment.log.info(logEntry)
+
+                if (!body.name.isValid())
+                    throw Exception("Invalid topic name - $body.name. " +
+                            "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
+                            "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}")
+
+                // create kafka NewTopic by getting the default replication factor from broker config
+                val newTopic = NewTopic(
+                        body.name,
+                        body.numPartitions,
+                        getDefaultReplicationFactor(adminClient)
+                )
+
+                // create the topic itself
+                val topicResult = try {
+                    adminClient.createTopics(mutableListOf(newTopic)).all().get()
+                    application.environment.log.info("Topic created - $newTopic")
+                    "created topic $newTopic"
+                } catch (e: Exception) {
+                    application.environment.log.error("$EXCEPTION topic create request $newTopic - $e")
+                    "failure for topic $newTopic creation, $e"
+                }
+
+                // create kafka groups in ldap
+                val groupsResult = LDAPGroup(config).use { ldap -> ldap.createKafkaGroups(newTopic.name()) }
+
+                // create ACLs based on kafka groups in LDAP
+                val rsrc = Resource(ResourceType.TOPIC, newTopic.name())
+                val acls = groupsResult.map { kafkaGroup ->
+                    val principal = "Group:${kafkaGroup.name}"
+                    val host = "*"
+                    listOf(
+                            AclBinding(
+                                    rsrc,
+                                    AccessControlEntry(
+                                            principal,
+                                            host,
+                                            when (kafkaGroup.type) {
+                                                LDAPGroup.Companion.KafkaGroupType.PRODUCER -> AclOperation.WRITE
+                                                LDAPGroup.Companion.KafkaGroupType.CONSUMER -> AclOperation.READ
+                                            },
+                                            AclPermissionType.ALLOW)),
+                            AclBinding(
+                                    rsrc,
+                                    AccessControlEntry(
+                                            principal,
+                                            host,
+                                            AclOperation.DESCRIBE,
+                                            AclPermissionType.ALLOW))
+                    )
+                }.flatMap { it }
+
+                application.environment.log.info("ACLs create request: $acls")
+
+                val aclsResult = try {
+                    adminClient.createAcls(acls).all().get()
+                    application.environment.log.info("ACLs created - $acls")
+                    "created $acls"
+                } catch (e: Exception) {
+                    application.environment.log.error("$EXCEPTION ACLs create request $acls - $e")
+                    "failure for $acls creation, $e"
+                }
+
+                PostTopicModel(topicResult, groupsResult, aclsResult)
+            }
+        }
+
+/**
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#deleteTopics-java.util.Collection-
+ */
+@Group(swGroup)
+@Location("$TOPICS/{topicName}")
+data class DeleteTopic(val topicName: String)
+
+data class DeleteTopicModel(
+    val topicStatus: String,
+    val groupsStatus: List<LDAPGroup.Companion.KafkaGroup>,
+    val aclStatus: String
+)
+
+fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
+        delete<DeleteTopic>(
+                "a topic".securityAndReponds(
+                        BasicAuthSecurity(),
+                        ok<DeleteTopicModel>(),
+                        failed<AnError>(),
+                        unAuthorized<Unit>()
+                )) { param ->
+            respondCatch {
+
+                val topicName = param.topicName
+
+                val logEntry = "Topic deletion request by ${this.context.authentication.principal} - $topicName"
+                application.environment.log.info(logEntry)
+
+                // delete ACLs
+                val acls = AclBindingFilter(
+                        ResourceFilter(ResourceType.TOPIC, topicName),
+                        AccessControlEntryFilter.ANY
+                )
+
+                application.environment.log.info("ACLs delete request: $acls")
+
+                val aclsResult = try {
+                    adminClient.deleteAcls(mutableListOf(acls)).all().get()
+                    application.environment.log.info("ACLs deleted - $acls")
+                    "deleted $acls"
+                } catch (e: Exception) {
+                    application.environment.log.error("$EXCEPTION ACLs delete request $acls - $e")
+                    "failure for $acls deletion, $e"
+                }
+
+                // delete related kafka ldap groups
+                val groupsResult = LDAPGroup(config).use { ldap -> ldap.deleteKafkaGroups(topicName) }
+
+                // delete the topic itself
+                val topicResult = try {
+                    adminClient.deleteTopics(listOf(topicName)).all().get()
+                    application.environment.log.info("Topic deleted - $topicName")
+                    "deleted topic $topicName"
+                } catch (e: Exception) {
+                    application.environment.log.error("$EXCEPTION topic delete request $topicName - $e")
+                    "failure for topic $topicName deletion, $e"
+                }
+
+                DeleteTopicModel(topicResult, groupsResult, aclsResult)
+            }
+        }
+
+/**
+ * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#describeConfigs-java.util.Collection-
+ */
+
+@Group(swGroup)
+@Location("$TOPICS/{topicName}")
+data class GetTopicConfig(val topicName: String)
+
+data class GetTopicConfigModel(val name: String, val config: List<ConfigEntry>)
+
+fun Routing.getTopicConfig(adminClient: AdminClient) =
+        get<GetTopicConfig>("a topic's configuration".responds(
+                ok<GetTopicConfigModel>(),
+                failed<AnError>())) { param ->
+            respondCatch {
+
+                val topicName = param.topicName
 
                 // NB! AdminClient is listing a default config independent of topic exists or not, verify!
                 val existingTopics = adminClient.listTopics().listings().get().map { it.name() }
 
                 if (existingTopics.contains(topicName))
-                    adminClient.describeConfigs(
-                            mutableListOf(
-                                    ConfigResource(
-                                            ConfigResource.Type.TOPIC,
-                                            topicName
+                    GetTopicConfigModel(
+                            topicName,
+                            adminClient.describeConfigs(
+                                    mutableListOf(
+                                            ConfigResource(
+                                                    ConfigResource.Type.TOPIC,
+                                                    topicName
+                                            )
                                     )
-                            )
-                    ).all().get()
+                            ).all().get().values.first().entries().toList()
+                    )
                 else
-                    Pair("result", "failure, topic $topicName does not exist")
+                    throw Exception( "failure, topic $topicName does not exist")
             }
         }
 
 /**
- * PUT https://<host>/api/v1/topics/{topicName}
- *
- * Observe - json payload is only one new config entry at a time - ConfigEntry
- * Observe requirement for authentication, e.g. n145821 and pwd - the classic stuff
- *
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/ConfigEntry.html
  * e.g. {"name": "retention.ms","value": "3600000"}
- *
- * Please use getTopicConfig first in order to get an idea of which entry to update with related value of unit
- *
- * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#alterConfigs-java.util.Map-
- *
- * Returns a Pair<"result", "updated configEntry">
  */
 
 // will be enhanced with suitable set of config entries
@@ -346,107 +317,145 @@ enum class AllowedConfigEntries(val entryName: String) {
     CLEANUP_POLICY("cleanup.policy")
 }
 
+@Group(swGroup)
+@Location("$TOPICS/{topicName}")
+data class PutTopicConfigEntry(val topicName: String)
+data class PutTopicConfigEntryBody(val configentry: AllowedConfigEntries, val value: String)
+
+data class PutTopicConfigEntryModel(
+    val name: String,
+    val configentry: AllowedConfigEntries,
+    val status: String
+)
+
 fun Routing.updateTopicConfig(adminClient: AdminClient) =
-        authenticate(AUTHENTICATION_BASIC) {
-            put("$TOPICS/{topicName}") {
-                respondCatch {
+        put<PutTopicConfigEntry, PutTopicConfigEntryBody>("a configuration entry for a topic".securityAndReponds(
+                BasicAuthSecurity(),
+                ok<PutTopicConfigEntryModel>(),
+                failed<AnError>(),
+                unAuthorized<Unit>()
+        )) { param, body ->
+            respondCatch {
 
-                    val topicName = call.parameters["topicName"] ?: "<no topic>"
-                    val configEntry = runBlocking { call.receive<ConfigEntry>() }
+                val topicName = param.topicName
+                val configEntry = ConfigEntry(body.configentry.entryName, body.value)
 
-                    val logEntry = "Topic config. update request by ${this.context.authentication.principal} - $topicName"
-                    application.environment.log.info(logEntry)
+                val logEntry = "Topic config. update request by ${this.context.authentication.principal} - $topicName"
+                application.environment.log.info(logEntry)
 
-                    // check whether configEntry is allowed
-                    if (!AllowedConfigEntries.values().map { it.entryName }.contains(configEntry.name()))
-                        throw Exception("configEntry ${configEntry.name()} is not allowed to update automatically")
+                // check whether configEntry is allowed
+                if (!AllowedConfigEntries.values().map { it.entryName }.contains(configEntry.name()))
+                    throw Exception("configEntry ${configEntry.name()} is not allowed to update automatically")
 
-                    val configResource = ConfigResource(ConfigResource.Type.TOPIC, topicName)
-                    val configReq = mapOf(configResource to Config(listOf(configEntry)))
+                val configResource = ConfigResource(ConfigResource.Type.TOPIC, topicName)
+                val configReq = mapOf(configResource to Config(listOf(configEntry)))
 
-                    application.environment.log.info("Update topic config request: $configReq")
+                application.environment.log.info("Update topic config request: $configReq")
 
-                    // NB! .all is throwing error... Use of future for specific entry instead
-                    adminClient.alterConfigs(configReq)
-                            // .all()
-                            .values()[configResource]
-                            ?.get() ?: Pair("result", "updated $configEntry")
-                }
+                // NB! .all is throwing error... Use of future for specific entry instead
+                adminClient.alterConfigs(configReq)
+                        // .all()
+                        .values()[configResource]
+                        ?.get() ?: PutTopicConfigEntryModel(topicName, body.configentry, "updated with ${body.value}")
             }
         }
 
 /**
- * GET https://<host>/api/v1/topics/{topicName}/acls
- *
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#describeAcls-org.apache.kafka.common.acl.AclBindingFilter-
- *
- * Returns a collection of org.apache.kafka.common.acl.AclBinding
- *
- * See https://kafka.apache.org/10/javadoc/org/apache/kafka/common/acl/AclBinding.html
  */
+
+@Group(swGroup)
+@Location("$TOPICS/{topicName}/acls")
+data class GetTopicACL(val topicName: String)
+
+data class GetTopicACLModel(val name: String, val acls: List<AclBinding>)
+
 fun Routing.getTopicAcls(adminClient: AdminClient) =
-        get("$TOPICS/{topicName}/acls") {
+        get<GetTopicACL>("a topic's access control lists".responds(ok<GetTopicACLModel>(), failed<AnError>())) { param ->
             respondCatch {
 
-                // elvis paradox, should not happen because then we should not be here...
-                val topicName = call.parameters["topicName"] ?: "<no topic>"
+                val topicName = param.topicName
 
-                adminClient.describeAcls(
-                        AclBindingFilter(
-                                ResourceFilter(ResourceType.TOPIC, topicName),
-                                AccessControlEntryFilter.ANY)
+                GetTopicACLModel(
+                        topicName,
+                        adminClient.describeAcls(
+                                AclBindingFilter(
+                                        ResourceFilter(ResourceType.TOPIC, topicName),
+                                        AccessControlEntryFilter.ANY)
+                        )
+                                .values()
+                                .get().toList()
                 )
-                        .values()
-                        .get()
             }
         }
 
 /**
- * GET https://<host>/api/v1/topics/{topicName}/groups
- *
  * See LDAPGroup::getKafkaGroupsAndMembers
- *
- * Returns a collection of LDAPGroup.Companion.KafkaGroup
  */
+
+@Group(swGroup)
+@Location("$TOPICS/{topicName}/groups")
+data class GetTopicGroups(val topicName: String)
+
+data class GetTopicGroupsModel(val name: String, val groups: List<LDAPGroup.Companion.KafkaGroup>)
+
 fun Routing.getTopicGroups(config: FasitProperties) =
-        get("$TOPICS/{topicName}/groups") {
+        get<GetTopicGroups>("a topic's groups".responds(ok<GetTopicGroupsModel>(), failed<AnError>())) { param ->
             respondCatch {
 
-                // elvis paradox, should not happen because then we should not be here...
-                val topicName = call.parameters["topicName"] ?: "<no topic>"
+                val topicName = param.topicName
 
-                LDAPGroup(config).use { ldap -> ldap.getKafkaGroupsAndMembers(topicName) }
+                GetTopicGroupsModel(
+                        topicName,
+                        LDAPGroup(config).use { ldap -> ldap.getKafkaGroupsAndMembers(topicName) }
+                )
             }
         }
 
 /**
- * PUT https://<host>/api/v1/topics/{topicName}/groups
- *
- * Observe - json payload is only one add/remove member at a time - LDAPGroup.Companion.UpdateKafkaGroupMember
- * Observe requirement for authentication, e.g. n145821 and pwd - the classic stuff
- *
- * e.g. {"role": "producer","operation": "add","member":"srvkafkaproducer"}
- *
  * See LDAPGroup::updateKafkaGroupMembership
- *
- * Returns LDAPResult
  */
+
+@Group(swGroup)
+@Location("$TOPICS/{topicName}/groups")
+data class PutTopicGMember(val topicName: String)
+
+data class PutTopicGMemberModel(
+    val name: String,
+    val updaterequest: LDAPGroup.Companion.UpdateKafkaGroupMember,
+    val status: LDAPGroup.Companion.SLDAPResult
+)
+
 fun Routing.updateTopicGroup(config: FasitProperties) =
-        authenticate(AUTHENTICATION_BASIC) {
-            put("$TOPICS/{topicName}/groups") {
-                respondCatch {
+        put<PutTopicGMember, LDAPGroup.Companion.UpdateKafkaGroupMember>("".securityAndReponds(
+                BasicAuthSecurity(),
+                ok<PutTopicGMemberModel>(),
+                failed<AnError>(),
+                unAuthorized<Unit>()
+        )) { param, body ->
+            respondCatch {
 
-                    // elvis paradox, should not happen because then we should not be here...
-                    val topicName = call.parameters["topicName"] ?: "<no topic>"
-                    val updateEntry = runBlocking { call.receive<LDAPGroup.Companion.UpdateKafkaGroupMember>() }
-                    val logEntry = "Topic group membership update request by " +
-                            "${this.context.authentication.principal} - $topicName "
+                val topicName = param.topicName
+                // val updateEntry = runBlocking { call.receive<LDAPGroup.Companion.UpdateKafkaGroupMember>() }
+                val logEntry = "Topic group membership update request by " +
+                        "${this.context.authentication.principal} - $topicName "
 
-                    application.environment.log.info(logEntry)
+                application.environment.log.info(logEntry)
 
-                    LDAPGroup(config)
-                            .use { ldap -> ldap.updateKafkaGroupMembership(topicName, updateEntry) }
-                            .also { application.environment.log.info("$topicName's group has been updated") }
-                }
+                LDAPGroup(config)
+                        .use { ldap ->
+
+                            PutTopicGMemberModel(
+                                    topicName,
+                                    body,
+                                    ldap.updateKafkaGroupMembership(topicName,
+                                            LDAPGroup.Companion.UpdateKafkaGroupMember(
+                                                    body.role,
+                                                    body.operation,
+                                                    body.member
+                                            ))
+                            )
+                        }
+                        .also { application.environment.log.info("$topicName's group has been updated") }
             }
         }

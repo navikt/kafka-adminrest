@@ -5,7 +5,7 @@ import io.ktor.content.URIFileContent
 import io.ktor.response.respond
 
 /**
- * @author Niels Falk
+ * @author Niels Falk, changed by Torstein Nesby
  */
 class SwaggerUi {
 

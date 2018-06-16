@@ -1,9 +1,9 @@
 package no.nav.integrasjon.api.v1
 
-import io.ktor.application.call
 import io.ktor.locations.Location
 import io.ktor.routing.Routing
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.failed
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
@@ -34,16 +34,18 @@ private const val swGroup = "Brokers"
 
 @Group(swGroup)
 @Location(BROKERS)
-class Brokers
+class GetBrokers
 
-data class BrokersModel(val brokers: List<Node>)
+data class GetBrokersModel(val brokers: List<Node>)
 
 fun Routing.getBrokers(adminClient: AdminClient) =
-        get<Brokers>("all brokers".responds(ok<BrokersModel>())) {
+        get<GetBrokers>("all brokers".responds(ok<GetBrokersModel>(), failed<AnError>())) {
             respondCatch {
-                adminClient.describeCluster()
-                        .nodes()
-                        .get()
+                GetBrokersModel(
+                        adminClient.describeCluster()
+                            .nodes()
+                            .get().toList()
+                )
             }
         }
 
@@ -53,23 +55,21 @@ fun Routing.getBrokers(adminClient: AdminClient) =
 
 @Group(swGroup)
 @Location("$BROKERS/{brokerID}")
-data class ABroker(val brokerID: String)
+data class GetBrokerConfig(val brokerID: String)
 
-data class BrokerConfigModel(val config: List<ConfigEntry>)
+data class GetBrokerConfigModel(val id: String, val config: List<ConfigEntry>)
 
 fun Routing.getBrokerConfig(adminClient: AdminClient) =
-        get<ABroker>("a broker configuration".responds(ok<BrokerConfigModel>())) {
+        get<GetBrokerConfig>("a broker configuration".responds(ok<GetBrokerConfigModel>(), failed<AnError>())) { broker ->
             respondCatch {
-                adminClient.describeConfigs(
-                        listOf(
-                                ConfigResource(
-                                        ConfigResource.Type.BROKER,
-                                        call.parameters["brokerID"]
-                                )
+                GetBrokerConfigModel(
+                        broker.brokerID,
+                        adminClient.describeConfigs(
+                                listOf(ConfigResource(ConfigResource.Type.BROKER, broker.brokerID))
                         )
+                                .all()
+                                .get()
+                                .entries.first().value.entries().toList()
                 )
-                        .all()
-                        .get()
-                        .entries.first().value.entries()
             }
         }

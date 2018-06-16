@@ -27,13 +27,13 @@ import mu.KotlinLogging
 import no.nav.integrasjon.api.nais.client.naisAPI
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Contact
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Information
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Swagger
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.SwaggerUi
-import no.nav.integrasjon.api.nielsfalk.ktor.swagger.swagger
 import no.nav.integrasjon.api.v1.API_V1
-import no.nav.integrasjon.api.v1.aclAPI
 import no.nav.integrasjon.api.v1.topicsAPI
 import no.nav.integrasjon.api.v1.brokersAPI
 import no.nav.integrasjon.api.v1.groupsAPI
+import no.nav.integrasjon.api.v1.aclAPI
 import no.nav.integrasjon.ldap.LDAPAuthenticate
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -41,6 +41,18 @@ import org.slf4j.event.Level
 import java.util.Properties
 
 const val AUTHENTICATION_BASIC = "basicAuth"
+
+val swagger = Swagger(
+        info = Information(
+                version = "0.52",
+                title = "Kafka self service API",
+                description = "[kafka-adminrest](https://github.com/navikt/kafka-adminrest)",
+                contact = Contact(
+                    name = "Torstein Nesby, Trong Huu Nguyen",
+                    url = "https://github.com/navikt/kafka-adminrest",
+                    email = "")
+        )
+)
 
 /**
  * Application.kafkaAdminREST is bootstrapping the already startet Netty server
@@ -109,26 +121,16 @@ fun Application.kafkaAdminREST() {
     }
     install(Locations)
 
-    // prepare for swagger
-    swagger.info = Information(
-            version = "0.52",
-            title = "Kafka self service API",
-            description = "[kafka-adminrest](https://github.com/navikt/kafka-adminrest)",
-            contact = Contact(
-                    name = "Torstein Nesby, Trong Huu Nguyen",
-                    url = "https://github.com/navikt/kafka-adminrest")
-    )
-
-    val ui = SwaggerUi()
+    val swaggerUI = SwaggerUi()
 
     log.info { "Installing routes" }
     install(Routing) {
 
-        // swagger triggering
+        // swagger UI trigger routes
         get(API_V1) { call.respondRedirect("$API_V1/apidocs/index.html?url=swagger.json") }
         get("$API_V1/apidocs/{fileName}") {
-            val filename = call.parameters["fileName"]
-            if (filename == "swagger.json") call.respond(swagger) else ui.serve(filename, call)
+            val fileName = call.parameters["fileName"]
+            if (fileName == "swagger.json") call.respond(swagger) else swaggerUI.serve(fileName, call)
         }
 
         // support classic nais requirements

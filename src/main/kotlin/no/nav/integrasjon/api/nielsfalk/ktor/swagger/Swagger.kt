@@ -2,9 +2,10 @@
 
 package no.nav.integrasjon.api.nielsfalk.ktor.swagger
 
-import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
+import mu.KotlinLogging
+import no.nav.integrasjon.swagger
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -15,8 +16,10 @@ import kotlin.reflect.KType
 import kotlin.reflect.full.memberProperties
 
 /**
- * @author Niels Falk
+ * @author Niels Falk, changed by Torstein Nesby
  */
+val log = KotlinLogging.logger { }
+
 typealias ModelName = String
 typealias PropertyName = String
 typealias Path = String
@@ -26,42 +29,42 @@ typealias MethodName = String
 typealias HttpStatus = String
 typealias Methods = MutableMap<MethodName, Operation>
 
-val swagger = Swagger()
+data class SecurityType(val type: String)
 
-class Swagger {
-    val swagger = "2.0"
-    var info: Information? = null
-    val paths: Paths = mutableMapOf()
-    val definitions: Definitions = mutableMapOf()
-}
+data class Swagger(
+    val swagger: String = "2.0",
+    val info: Information,
+    val paths: Paths = mutableMapOf(),
+    val definitions: Definitions = mutableMapOf(),
+    val securityDefinitions: Map<String, SecurityType> = mapOf("basicAuth" to SecurityType("basic"))
+)
 
-class Information(
-    val description: String? = null,
-    val version: String? = null,
-    val title: String? = null,
-    val contact: Contact? = null
+data class Information(
+    val description: String,
+    val version: String,
+    val title: String,
+    val contact: Contact
+)
+
+data class Contact(
+    val name: String,
+    val url: String,
+    val email: String
 )
 
 data class Tag(
     val name: String
 )
 
-class Contact(
-    val name: String? = null,
-    val url: String? = null,
-    val email: String? = null
-)
-
 class Operation(
     metadata: Metadata,
     location: Location,
     group: Group?,
-    method: HttpMethod,
     locationType: KClass<*>,
     entityType: KClass<*>
 ) {
     val tags = group?.toList()
-    val summary = metadata.summary ?: "${method.value} ${location.path}"
+    val summary = metadata.summary
     val parameters = mutableListOf<Parameter>().apply {
         if (entityType != Unit::class) {
             addDefinition(entityType)
@@ -81,14 +84,30 @@ class Operation(
         addDefinition(kClass)
         status.value.toString() to Response(status, kClass)
     }.toMap()
+
+    val security = when (metadata.security) {
+        is NoSecurity -> metadata.security.secSetting
+        is BasicAuthSecurity -> metadata.security.secSetting
+    }
 }
 
 private fun Group.toList(): List<Tag> {
     return listOf(Tag(name))
 }
 
-fun <T, R> KProperty1<T, R>.toParameter(path: String, inputType: ParameterInputType = if (path.contains("{$name}")) ParameterInputType.path else ParameterInputType.query): Parameter {
-    return Parameter(toModelProperty(), name, inputType, required = !returnType.isMarkedNullable)
+fun <T, R> KProperty1<T, R>.toParameter(
+    path: String,
+    inputType: ParameterInputType =
+            if (path.contains("{$name}"))
+                ParameterInputType.path
+            else
+                ParameterInputType.query
+): Parameter {
+    return Parameter(
+            toModelProperty(),
+            name,
+            inputType,
+            required = !returnType.isMarkedNullable)
 }
 
 private fun KClass<*>.bodyParameter() =
@@ -97,13 +116,6 @@ private fun KClass<*>.bodyParameter() =
                 description = modelName(),
                 `in` = ParameterInputType.body
         )
-
-fun <LOCATION : Any, BODY_TYPE : Any> Metadata.applyOperations(location: Location, group: Group?, method: HttpMethod, locationType: KClass<LOCATION>, entityType: KClass<BODY_TYPE>) {
-    swagger.paths
-            .getOrPut(location.path) { mutableMapOf() }
-            .put(method.value.toLowerCase(),
-                    Operation(this, location, group, method, locationType, entityType))
-}
 
 class Response(httpStatusCode: HttpStatusCode, kClass: KClass<*>) {
     val description = if (kClass == Unit::class) httpStatusCode.description else kClass.responseDescription()
@@ -118,13 +130,13 @@ class Parameter(
     property: Property,
     val name: String,
     val `in`: ParameterInputType,
-    val description: String = property.description ?: name,
+    val description: String = property.description,
     val required: Boolean = true,
     val type: String? = property.type,
     val format: String? = property.format,
     val enum: List<String>? = property.enum,
     val items: Property? = property.items,
-    val schema: ModelReference? = property.`$ref`?.let { ModelReference(it) }
+    val schema: ModelReference? = property.`$ref`.let { ModelReference(it) }
 )
 
 enum class ParameterInputType {
@@ -173,27 +185,17 @@ private fun KClass<*>.referenceProperty(): Property =
 
 open class Property(
     val type: String?,
-    val format: String? = null,
+    val format: String = "",
     val enum: List<String>? = null,
     val items: Property? = null,
-    val description: String? = null,
-    val `$ref`: String? = null
+    val description: String = "",
+    val `$ref`: String = ""
 )
 
-inline fun <reified LOCATION : Any, reified ENTITY_TYPE : Any> Metadata.apply(method: HttpMethod) {
-    val clazz = LOCATION::class.java
-    val location = clazz.getAnnotation(Location::class.java)
-    val tags = clazz.getAnnotation(Group::class.java)
-    applyResponseDefinitions()
-    applyOperations(location, tags, method, LOCATION::class, ENTITY_TYPE::class)
-}
-
-fun Metadata.applyResponseDefinitions() =
-        responses.values.forEach { addDefinition(it) }
-
-private fun addDefinition(kClass: KClass<*>) {
+fun addDefinition(kClass: KClass<*>) {
     if (kClass != Unit::class) {
         swagger.definitions.computeIfAbsent(kClass.modelName()) {
+            log.info { "Generating swagger spec for model $it" }
             ModelData(kClass)
         }
     }

@@ -1,11 +1,16 @@
 package no.nav.integrasjon.api.v1
 
+import io.ktor.application.application
+import io.ktor.auth.authentication
 import io.ktor.locations.Location
 import io.ktor.routing.Routing
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.BasicAuthSecurity
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.failed
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
-import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.securityAndReponds
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.unAuthorized
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.common.acl.AclBinding
 import org.apache.kafka.common.acl.AclBindingFilter
@@ -22,21 +27,33 @@ fun Routing.aclAPI(adminClient: AdminClient) {
     getACLS(adminClient)
 }
 
+private const val swGroup = "Access Control Lists"
+
 /**
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#describeAcls-org.apache.kafka.common.acl.AclBindingFilter-
  */
 
-@Group("Access Control List")
+@Group(swGroup)
 @Location(ACLS)
-class Acls
+class XGetACL
 
-data class AclsModel(val acls: List<AclBinding>)
+data class XGetACLModel(val acls: List<AclBinding>)
 
 fun Routing.getACLS(adminClient: AdminClient) =
-        get<Acls>("all access control lists".responds(ok<AclsModel>())) {
+        get<XGetACL>("all access control lists".securityAndReponds(
+                BasicAuthSecurity(),
+                ok<XGetACLModel>(),
+                failed<AnError>(),
+                unAuthorized<Unit>())) {
             respondCatch {
-                adminClient.describeAcls(AclBindingFilter.ANY)
-                        .values()
-                        .get()
+
+                val logEntry = "All ACLS view request by ${this.context.authentication.principal}"
+                application.environment.log.info(logEntry)
+
+                XGetACLModel(
+                    adminClient.describeAcls(AclBindingFilter.ANY)
+                            .values()
+                            .get().toList()
+                    )
             }
         }

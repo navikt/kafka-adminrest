@@ -11,6 +11,7 @@ import io.ktor.routing.Routing
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.failed
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
@@ -54,13 +55,15 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.ldapRespondCatch(
 
 @Group(swGroup)
 @Location(GROUPS)
-class Groups
+class GetGroups
 
-data class GroupsModel(val groups: List<String>)
+data class GetGroupsModel(val groups: List<String>)
 
 fun Routing.getGroups(config: FasitProperties) =
-        get<Groups>("all groups".responds(ok<GroupsModel>())) {
-            ldapRespondCatch(config) { lc -> lc.getKafkaGroups() }
+        get<GetGroups>("all groups".responds(ok<GetGroupsModel>(), failed<AnError>())) {
+            ldapRespondCatch(config) { lc ->
+                GetGroupsModel(lc.getKafkaGroups().toList())
+            }
         }
 
 /**
@@ -69,11 +72,13 @@ fun Routing.getGroups(config: FasitProperties) =
 
 @Group(swGroup)
 @Location("$GROUPS/{groupName}")
-data class AGroup(val groupName: String)
+data class GetGroupMembers(val groupName: String)
 
-data class GroupMembersModel(val members: List<String>)
+data class GetGroupMembersModel(val name: String, val members: List<String>)
 
 fun Routing.getGroupMembers(config: FasitProperties) =
-        get<AGroup>("members in a group".responds(ok<GroupMembersModel>())) { group ->
-            ldapRespondCatch(config) { lc -> lc.getKafkaGroupMembers(group.groupName) }
+        get<GetGroupMembers>("members in a group".responds(ok<GetGroupMembersModel>(), failed<AnError>())) { group ->
+            ldapRespondCatch(config) { lc ->
+                GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
+            }
         }

@@ -81,9 +81,9 @@ class LDAPGroup(private val config: FasitProperties) :
 
     private fun groupTypesCatch(
         topicName: String,
-        membBlck: (gn: String) -> Collection<String>,
-        resBlck: (gn: String) -> LDAPResult
-    ): Collection<KafkaGroup> =
+        membBlck: (gn: String) -> List<String>,
+        resBlck: (gn: String) -> SLDAPResult
+    ): List<KafkaGroup> =
 
             KafkaGroupType.values().map { groupType ->
                 val groupName = toGroupName(groupType.prefix, topicName)
@@ -97,32 +97,32 @@ class LDAPGroup(private val config: FasitProperties) :
                     )
                 } catch (e: LDAPException) {
                     log.error { "$EXCEPTION$e" }
-                    KafkaGroup(groupType, groupName, emptyList(), e.toLDAPResult())
+                    KafkaGroup(groupType, groupName, emptyList(), e.toLDAPResult().simplify())
                 }
             }
 
-    fun createKafkaGroups(topicName: String): Collection<KafkaGroup> =
+    fun createKafkaGroups(topicName: String): List<KafkaGroup> =
             groupTypesCatch(
                     topicName,
                     { emptyList() },
                     { groupName -> createKafkaGroup(groupName) }
             )
 
-    fun deleteKafkaGroups(topicName: String): Collection<KafkaGroup> =
+    fun deleteKafkaGroups(topicName: String): List<KafkaGroup> =
             groupTypesCatch(
                     topicName,
                     { emptyList() },
                     { groupName -> deleteKafkaGroup(groupName) }
             )
 
-    fun getKafkaGroupsAndMembers(topicName: String): Collection<KafkaGroup> =
+    fun getKafkaGroupsAndMembers(topicName: String): List<KafkaGroup> =
             groupTypesCatch(
                     topicName,
                     { groupName -> getKafkaGroupMembers(groupName) },
-                    { LDAPResult(0, ResultCode.SUCCESS) }
+                    { LDAPResult(0, ResultCode.SUCCESS).simplify() }
             )
 
-    private fun createKafkaGroup(groupName: String): LDAPResult =
+    private fun createKafkaGroup(groupName: String): SLDAPResult =
             ldapConnection.add(
                     AddRequest(
                             DN(config.groupDN(groupName)),
@@ -131,18 +131,18 @@ class LDAPGroup(private val config: FasitProperties) :
                                 add(Attribute("sAMAccountName", groupName))
                             })
                             .also { req -> log.info { "Create group request: $req" } }
-            )
+            ).simplify()
 
-    private fun deleteKafkaGroup(groupName: String): LDAPResult =
+    private fun deleteKafkaGroup(groupName: String): SLDAPResult =
             ldapConnection.delete(
                     DeleteRequest(
                             DN(config.groupDN(groupName))
                     ).also { req -> log.info { "Delete group request: $req" } }
-            )
+            ).simplify()
 
-    fun getKafkaGroupMembers(groupName: String): Collection<String> = getGroupMembers(groupName)
+    fun getKafkaGroupMembers(groupName: String): List<String> = getGroupMembers(groupName)
 
-    fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): LDAPResult =
+    fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): SLDAPResult =
 
             getSrvUserDN(updateEntry.member).let { srvUserDN ->
                 if (srvUserDN.isEmpty())
@@ -165,9 +165,9 @@ class LDAPGroup(private val config: FasitProperties) :
                         log.info { "Update group membership request: $req for $srvUserDN" }
 
                         if (updateEntry.isRedundant(srvUserDN, groupDN, toGroupName(updateEntry.role.prefix, topicName)))
-                            LDAPResult(0, ResultCode.SUCCESS)
+                            LDAPResult(0, ResultCode.SUCCESS).simplify()
                         else
-                            ldapConnection.modify(req)
+                            ldapConnection.modify(req).simplify()
                 }
             }
 
@@ -188,7 +188,7 @@ class LDAPGroup(private val config: FasitProperties) :
 
     private fun groupEmpty(groupName: String): Boolean = getGroupMembers(groupName).isEmpty()
 
-    private fun getGroupMembers(groupName: String): Collection<String> =
+    private fun getGroupMembers(groupName: String): List<String> =
             ldapConnection.search(
                     SearchRequest(
                             config.ldapGroupBase,
@@ -230,8 +230,8 @@ class LDAPGroup(private val config: FasitProperties) :
          * - a consumer group with members allowed to consume events from topic
          */
         enum class KafkaGroupType(val prefix: String) {
-            @SerializedName("producer") PRODUCER("KP-"),
-            @SerializedName("consumer") CONSUMER("KC-")
+            @SerializedName("PRODUCER") PRODUCER("KP-"),
+            @SerializedName("CONSUMER") CONSUMER("KC-")
         }
 
         /**
@@ -240,8 +240,8 @@ class LDAPGroup(private val config: FasitProperties) :
          * REMOVE - remove a group member from group
          */
         enum class GroupMemberOperation {
-            @SerializedName("add") ADD,
-            @SerializedName("remove") REMOVE
+            @SerializedName("ADD") ADD,
+            @SerializedName("REMOVE") REMOVE
         }
 
         /**
@@ -254,13 +254,20 @@ class LDAPGroup(private val config: FasitProperties) :
         )
 
         /**
+         * A simpler version of LDAPResult, giving kafka API the resultCode and diagnostic message
+         */
+        data class SLDAPResult(val resultCode: ResultCode, val message: String)
+
+        fun LDAPResult.simplify(): SLDAPResult = SLDAPResult(this.resultCode, this.diagnosticMessage ?: "")
+
+        /**
          * data class KafkaGroup as result from functions iterating KafkaGroupType - see groupTypesCatch
          */
         data class KafkaGroup(
-            val groupType: KafkaGroupType,
+            val type: KafkaGroupType,
             val name: String,
-            val members: Collection<String>,
-            val result: LDAPResult
+            val members: List<String>,
+            val ldapResult: SLDAPResult
         )
     }
 }

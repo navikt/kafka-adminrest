@@ -65,7 +65,7 @@ object LDAPGroupSpec : Spek({
                     val kGroups = LDAPGroup(fp).use { lc -> lc.getKafkaGroupsAndMembers(topic) }
 
                     kGroups.size shouldEqualTo 2
-                    kGroups.map { it.groupType } shouldContainAll LDAPGroup.Companion.KafkaGroupType.values()
+                    kGroups.map { it.type } shouldContainAll LDAPGroup.Companion.KafkaGroupType.values()
                     kGroups.flatMap { it.members } shouldContainAll allMembers
                 }
             }
@@ -99,7 +99,7 @@ object LDAPGroupSpec : Spek({
                 it("should report error when trying to create groups that exists") {
                     LDAPGroup(fp).use { lc ->
                         lc.createKafkaGroups(topic)
-                    }.map { it.result.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true, true)
+                    }.map { it.ldapResult.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true, true)
                 }
             }
         }
@@ -239,7 +239,7 @@ object LDAPGroupSpec : Spek({
                 it("should report error when trying to delete non-existing groups") {
                     LDAPGroup(fp).use { lc ->
                         lc.deleteKafkaGroups(topic)
-                    }.map { it.result.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true, true)
+                    }.map { it.ldapResult.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true, true)
                 }
             }
         }

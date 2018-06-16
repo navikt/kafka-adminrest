@@ -14,22 +14,28 @@ import io.ktor.util.encodeBase64
 import no.nav.common.KafkaEnvironment
 import no.nav.integrasjon.FasitPropFactory
 import no.nav.integrasjon.FasitProperties
-import no.nav.integrasjon.api.v1.ANewTopic
+import no.nav.integrasjon.api.v1.AllowedConfigEntries
 import no.nav.integrasjon.api.v1.BROKERS
 import no.nav.integrasjon.api.v1.GROUPS
+import no.nav.integrasjon.api.v1.GetBrokerConfigModel
+import no.nav.integrasjon.api.v1.GetBrokersModel
+import no.nav.integrasjon.api.v1.GetGroupMembersModel
+import no.nav.integrasjon.api.v1.GetGroupsModel
+import no.nav.integrasjon.api.v1.GetTopicConfigModel
+import no.nav.integrasjon.api.v1.GetTopicGroupsModel
+import no.nav.integrasjon.api.v1.GetTopicsModel
+import no.nav.integrasjon.api.v1.PostTopicBody
+import no.nav.integrasjon.api.v1.PutTopicConfigEntryBody
 import no.nav.integrasjon.api.v1.TOPICS
 import no.nav.integrasjon.kafkaAdminREST
 import no.nav.integrasjon.ldap.LDAPGroup
 import no.nav.integrasjon.test.common.InMemoryLDAPServer
 import org.amshove.kluent.shouldBe
 import org.amshove.kluent.shouldBeEqualTo
-import org.amshove.kluent.shouldBeGreaterThan
 import org.amshove.kluent.shouldContainAll
 import org.amshove.kluent.shouldEqual
 import org.amshove.kluent.shouldEqualTo
-import org.apache.kafka.clients.admin.Config
 import org.apache.kafka.clients.admin.ConfigEntry
-import org.apache.kafka.common.Node
 import org.jetbrains.spek.api.Spek
 import org.jetbrains.spek.api.dsl.given
 import org.jetbrains.spek.api.dsl.it
@@ -102,12 +108,12 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    val result: Collection<Node> = Gson().fromJson(
+                    val result: GetBrokersModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<Collection<Node>>() {}.type)
+                            object : TypeToken<GetBrokersModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.size shouldEqualTo kCluster.serverPark.brokers.size
+                    result.brokers.size shouldEqualTo kCluster.serverPark.brokers.size
                 }
 
                 it("should return configuration for broker 0") {
@@ -116,12 +122,12 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    val result: List<ConfigEntry> = Gson().fromJson(
+                    val result: GetBrokerConfigModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<List<ConfigEntry>>() {}.type)
+                            object : TypeToken<GetBrokerConfigModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.size shouldBeGreaterThan 5
+                    result.id shouldBeEqualTo "0"
                 }
             }
 
@@ -133,12 +139,12 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    val result: Collection<String> = Gson().fromJson(
+                    val result: GetGroupsModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<Collection<String>>() {}.type)
+                            object : TypeToken<GetGroupsModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result shouldContainAll listOf("KC-tpc-01", "KC-tpc-02", "KC-tpc-03", "KP-tpc-01", "KP-tpc-02", "KP-tpc-03")
+                    result.groups shouldContainAll listOf("KC-tpc-01", "KC-tpc-02", "KC-tpc-03", "KP-tpc-01", "KP-tpc-02", "KP-tpc-03")
                 }
 
                 val groups = mapOf(
@@ -154,12 +160,12 @@ object KafkaAdminRestSpec : Spek ({
                             addHeader(HttpHeaders.Accept, "application/json")
                         }
 
-                        val result: Collection<String> = Gson().fromJson(
+                        val result: GetGroupMembersModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<Collection<String>>() {}.type)
+                                object : TypeToken<GetGroupMembersModel>() {}.type)
 
                         call.response.status() shouldBe HttpStatusCode.OK
-                        result shouldContainAll members
+                        result.members shouldContainAll members
                     }
                 }
             }
@@ -172,12 +178,12 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    val result: List<String> = Gson().fromJson(
+                    val result: GetTopicsModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<List<String>>() {}.type)
+                            object : TypeToken<GetTopicsModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result shouldContainAll preTopics
+                    result.topics shouldContainAll preTopics
                 }
 
                 preTopics.forEach { topic ->
@@ -201,7 +207,8 @@ object KafkaAdminRestSpec : Spek ({
                                 HttpHeaders.Authorization,
                                 "Basic ${encodeBase64("n000001:itest".toByteArray())}")
 
-                        val jsonPayload = Gson().toJson(ConfigEntry("retention.ms", "6600666"))
+                        val jsonPayload = Gson().toJson(
+                                PutTopicConfigEntryBody(AllowedConfigEntries.RETENTION_BYTES, "6600666"))
                         setBody(jsonPayload)
                     }
 
@@ -214,12 +221,12 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    val result: Map<String, Config> = Gson().fromJson(
+                    val result: GetTopicConfigModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<Map<String, Config>>() {}.type)
+                            object : TypeToken<GetTopicConfigModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.values.first()["retention.ms"].value() shouldBeEqualTo "6600666"
+                    result.config.find { it.name() == "retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
                 }
 
                 it("should report exception when trying to update config outside white list for tpc-03 ") {
@@ -245,8 +252,8 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    call.response.status() shouldBe HttpStatusCode.OK
-                    call.response.content.toString() shouldBeEqualTo """{"first":"result","second":"failure, topic invalid does not exist"}"""
+                    call.response.status() shouldBe HttpStatusCode.ExceptionFailed
+                    call.response.content.toString() shouldBeEqualTo """{"error":"Sorry, exception happened - java.lang.Exception: failure, topic invalid does not exist"}"""
                 }
 
                 it("should report groups and members for topic tpc-03") {
@@ -255,12 +262,12 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    val result: List<LDAPGroup.Companion.KafkaGroup> = Gson().fromJson(
+                    val result: GetTopicGroupsModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<List<LDAPGroup.Companion.KafkaGroup>>() {}.type)
+                            object : TypeToken<GetTopicGroupsModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.map { it.result.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
+                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
                 }
 
                 usersToManage.forEach { srvUser, role ->
@@ -294,13 +301,13 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    val result: List<LDAPGroup.Companion.KafkaGroup> = Gson().fromJson(
+                    val result: GetTopicGroupsModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<List<LDAPGroup.Companion.KafkaGroup>>() {}.type)
+                            object : TypeToken<GetTopicGroupsModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.map { it.result.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
-                    result.flatMap { it.members } shouldContainAll listOf(
+                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
+                    result.groups.flatMap { it.members } shouldContainAll listOf(
                             "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
                             "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local"
                     )
@@ -360,13 +367,13 @@ object KafkaAdminRestSpec : Spek ({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    val result: List<LDAPGroup.Companion.KafkaGroup> = Gson().fromJson(
+                    val result: GetTopicGroupsModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<List<LDAPGroup.Companion.KafkaGroup>>() {}.type)
+                            object : TypeToken<GetTopicGroupsModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.map { it.result.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
-                    result.flatMap { it.members }.size shouldEqualTo 0
+                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
+                    result.groups.flatMap { it.members }.size shouldEqualTo 0
                 }
 
                 invalidTopics.forEach { topicName, numPartitions ->
@@ -380,7 +387,7 @@ object KafkaAdminRestSpec : Spek ({
                                     HttpHeaders.Authorization,
                                     "Basic ${encodeBase64("srvp01:dummy".toByteArray())}")
 
-                            val jsonPayload = Gson().toJson(ANewTopic(topicName, numPartitions))
+                            val jsonPayload = Gson().toJson(PostTopicBody(topicName, numPartitions))
                             setBody(jsonPayload)
                         }
 
