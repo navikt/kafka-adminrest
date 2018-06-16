@@ -36,10 +36,11 @@ object LDAPAuthenticateSpec : Spek({
 
             val users = mapOf(
                     Pair("srvp01", "dummy") to true,
-                    Pair("n000001", "itest") to true,
+                    Pair("n000001", "itest1") to true,
                     Pair("notExisting", "wildGuess") to false,
-                    Pair("iauth2", "wrongPassword") to false,
-                    Pair("srvc02", "dummy") to true
+                    Pair("n000002", "wrongPassword") to false,
+                    Pair("srvc02", "dummy") to true,
+                    Pair("n145821", "itest3") to true
             )
 
             users.forEach { user, result ->

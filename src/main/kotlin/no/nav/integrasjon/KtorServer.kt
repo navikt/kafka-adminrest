@@ -44,7 +44,7 @@ const val AUTHENTICATION_BASIC = "basicAuth"
 
 val swagger = Swagger(
         info = Information(
-                version = "0.52",
+                version = "0.51-SNAPSHOT",
                 title = "Kafka self service API",
                 description = "[kafka-adminrest](https://github.com/navikt/kafka-adminrest)",
                 contact = Contact(

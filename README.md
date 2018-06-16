@@ -20,6 +20,7 @@ Kafka security using LDAP groups for authorization.
 1. Ktor using Netty provides the REST interfaces
 2. Kafka AdminClient API v.1.0.1 for kafka interaction
 3. Unboundid LDAP API v.4.0.6 for LDAPS interaction
+4. Swagger documentation automatically generated for each endpoint
 
 ## Testing
 
@@ -29,6 +30,8 @@ Automated testing of LDAP management by embedded LDAP server with custom UsersAn
 Automated testing of (most) Ktor routes by embedded LDAP and embedded kafka cluster 
 
 See related [Wiki](https://github.com/navikt/kafka-adminrest/wiki) for quick start and code structure
+
+See also swagger documentation at host:port/api/v1 
 
 ## Build 
 

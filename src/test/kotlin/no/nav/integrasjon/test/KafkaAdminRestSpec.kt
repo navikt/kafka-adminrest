@@ -205,7 +205,7 @@ object KafkaAdminRestSpec : Spek ({
                         // relevant user is in the right place in UserAndGroups.ldif
                         addHeader(
                                 HttpHeaders.Authorization,
-                                "Basic ${encodeBase64("n000001:itest".toByteArray())}")
+                                "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
 
                         val jsonPayload = Gson().toJson(
                                 PutTopicConfigEntryBody(AllowedConfigEntries.RETENTION_BYTES, "6600666"))
@@ -237,7 +237,7 @@ object KafkaAdminRestSpec : Spek ({
                         // relevant user is in the right place in UserAndGroups.ldif
                         addHeader(
                                 HttpHeaders.Authorization,
-                                "Basic ${encodeBase64("N000001:itest".toByteArray())}")
+                                "Basic ${encodeBase64("N145821:itest3".toByteArray())}")
 
                         val jsonPayload = Gson().toJson(ConfigEntry("max.message.bytes", "51000012"))
                         setBody(jsonPayload)
@@ -267,7 +267,7 @@ object KafkaAdminRestSpec : Spek ({
                             object : TypeToken<GetTopicGroupsModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
+                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
                 }
 
                 usersToManage.forEach { srvUser, role ->
@@ -279,7 +279,7 @@ object KafkaAdminRestSpec : Spek ({
                             // relevant user is in the right place in UserAndGroups.ldif
                             addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("n000002:itest".toByteArray())}")
+                                    "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
 
                             val jsonPayload = Gson().toJson(
                                     LDAPGroup.Companion.UpdateKafkaGroupMember(
@@ -306,10 +306,11 @@ object KafkaAdminRestSpec : Spek ({
                             object : TypeToken<GetTopicGroupsModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
+                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
                     result.groups.flatMap { it.members } shouldContainAll listOf(
                             "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
-                            "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local"
+                            "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local",
+                            "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
                     )
                 }
 
@@ -321,7 +322,7 @@ object KafkaAdminRestSpec : Spek ({
                         // relevant user is in the right place in UserAndGroups.ldif
                         addHeader(
                                 HttpHeaders.Authorization,
-                                "Basic ${encodeBase64("n000002:itest".toByteArray())}")
+                                "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
 
                         val jsonPayload = Gson().toJson(
                                 LDAPGroup.Companion.UpdateKafkaGroupMember(
@@ -345,7 +346,7 @@ object KafkaAdminRestSpec : Spek ({
                             // relevant user is in the right place in UserAndGroups.ldif
                             addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("srvc02:dummy".toByteArray())}")
+                                    "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
 
                             val jsonPayload = Gson().toJson(
                                     LDAPGroup.Companion.UpdateKafkaGroupMember(
@@ -372,8 +373,8 @@ object KafkaAdminRestSpec : Spek ({
                             object : TypeToken<GetTopicGroupsModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true)
-                    result.groups.flatMap { it.members }.size shouldEqualTo 0
+                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
+                    result.groups.flatMap { it.members }.size shouldEqualTo 1
                 }
 
                 invalidTopics.forEach { topicName, numPartitions ->

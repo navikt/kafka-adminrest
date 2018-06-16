@@ -49,14 +49,15 @@ object LDAPGroupSpec : Spek({
         context("For a given topic, get prod. and cons. groups with members - getKafkaGroupsAndMembers") {
 
             val topics = mapOf(
-                    "tpc-01" to emptyList(),
+                    "tpc-01" to listOf("uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"),
                     "tpc-02" to listOf(
                             "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
                             "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local"
                     ),
                     "tpc-03" to listOf(
                             "uid=srvc01,ou=ServiceAccounts,dc=test,dc=local",
-                            "uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local"
+                            "uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
+                            "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
                     )
             )
 
@@ -64,7 +65,7 @@ object LDAPGroupSpec : Spek({
                 it("should return correct info for topic $topic") {
                     val kGroups = LDAPGroup(fp).use { lc -> lc.getKafkaGroupsAndMembers(topic) }
 
-                    kGroups.size shouldEqualTo 2
+                    kGroups.size shouldEqualTo LDAPGroup.Companion.KafkaGroupType.values().size
                     kGroups.map { it.type } shouldContainAll LDAPGroup.Companion.KafkaGroupType.values()
                     kGroups.flatMap { it.members } shouldContainAll allMembers
                 }
@@ -91,14 +92,14 @@ object LDAPGroupSpec : Spek({
             "tpc-04".let { topic ->
                 it("should return 2 new groups when asking for all kafka groups") {
                     LDAPGroup(fp).use { lc ->
-                        lc.createKafkaGroups(topic)
+                        lc.createKafkaGroups(topic, "n145821")
                         lc.getKafkaGroups()
-                    } shouldContainAll listOf("KP-$topic", "KC-$topic")
+                    } shouldContainAll listOf("KP-$topic", "KC-$topic", "KM-$topic")
                 }
 
                 it("should report error when trying to create groups that exists") {
                     LDAPGroup(fp).use { lc ->
-                        lc.createKafkaGroups(topic)
+                        lc.createKafkaGroups(topic, "n145821")
                     }.map { it.ldapResult.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true, true)
                 }
             }
@@ -229,17 +230,33 @@ object LDAPGroupSpec : Spek({
         context("Delete kafka groups for topic tpc-04") {
 
             "tpc-04".let { topic ->
-                it("should not return those 2 groups when asking for all kafka groups") {
+                it("should not return those 3 groups when asking for all kafka groups") {
                     LDAPGroup(fp).use { lc ->
                         lc.deleteKafkaGroups(topic)
                         lc.getKafkaGroups()
-                    } shouldNotContainAny listOf("KP-$topic", "KC-$topic")
+                    } shouldNotContainAny listOf("KP-$topic", "KC-$topic", "KM-$topic")
                 }
 
                 it("should report error when trying to delete non-existing groups") {
                     LDAPGroup(fp).use { lc ->
                         lc.deleteKafkaGroups(topic)
                     }.map { it.ldapResult.resultCode != ResultCode.SUCCESS } shouldContainAll listOf(true, true)
+                }
+            }
+        }
+
+        context("Verify management access for topics") {
+            val topics = mapOf(
+                    Pair("tpc-01", "n000002") to true,
+                    Pair("tpc-02", "n141414") to false,
+                    Pair("tpc-03", "n145821") to true
+            )
+
+            topics.forEach { pair, result ->
+                it("should return isManager is $result for topic $pair") {
+                    val isMng = LDAPGroup(fp).use { lc -> lc.userIsManager(pair.first, pair.second) }
+
+                    isMng shouldEqualTo result
                 }
             }
         }

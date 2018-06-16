@@ -21,8 +21,8 @@ class LDAPAuthenticate(private val config: FasitProperties) :
     fun canUserAuthenticate(user: String, pwd: String): Boolean =
             if (!ldapConnection.isConnected) false
             else {
-                // fold over 3 DNs, NAV ident or service accounts (normal + Basta)
-                addDNs(user).fold(false) { acc, dn -> acc || authenticated(dn, pwd, acc) }.also {
+                // fold over resolved DNs, NAV ident or service accounts (normal + Basta)
+                resolveDNs(user).fold(false) { acc, dn -> acc || authenticated(dn, pwd, acc) }.also {
 
                     val connInfo = config.getConnectionInfo(LdapConnectionType.AUTHENTICATION)
 
@@ -33,16 +33,15 @@ class LDAPAuthenticate(private val config: FasitProperties) :
                 }
             }
 
-    // add DNs for both service accounts, including those created in Basta. The order of DNs according to user name
-    private fun addDNs(user: String): List<String> = config.userDN(user).let {
+    // resolve DNs for both service accounts, including those created in Basta. The order of DNs according to user name
+    private fun resolveDNs(user: String): List<String> = config.userDN(user).let {
 
         val rdns = DN(it).rdNs
         val dnPrefix = rdns[rdns.indices.first]
         val dnPostfix = "${rdns[rdns.indices.last - 1]},${rdns[rdns.indices.last]}"
         val srvAccounts = listOf("OU=ApplAccounts,OU=ServiceAccounts", "OU=ServiceAccounts")
-        val regEx = """^[a-zA-Z]\d{6}$""".toRegex() // matching NAV ident
 
-        if (regEx.matches(user)) listOf(it)
+        if (isNAVIdent(user)) listOf(it)
         else srvAccounts.map { "$dnPrefix,$it,$dnPostfix" }
     }
 

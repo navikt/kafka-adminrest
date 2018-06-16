@@ -1,7 +1,10 @@
 package no.nav.integrasjon.api.v1
 
 import io.ktor.application.application
+import io.ktor.application.call
+import io.ktor.auth.UserIdPrincipal
 import io.ktor.auth.authentication
+import io.ktor.auth.principal
 import io.ktor.locations.Location
 import io.ktor.routing.Routing
 import no.nav.integrasjon.EXCEPTION
@@ -57,7 +60,7 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
     deleteTopic(adminClient, config)
 
     getTopicConfig(adminClient)
-    updateTopicConfig(adminClient)
+    updateTopicConfig(adminClient, config)
 
     getTopicAcls(adminClient)
 
@@ -129,14 +132,16 @@ data class PostTopicModel(
 
 fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
         post<PostTopic, PostTopicBody>(
-                "new topic".securityAndReponds(
-                        BasicAuthSecurity(),
-                        ok<PostTopicModel>(),
-                        failed<AnError>(),
-                        unAuthorized<Unit>())) { _, body ->
+                "new topic. The authenticated user becomes member of KM-{newTopic}. Please add other team members"
+                        .securityAndReponds(
+                                BasicAuthSecurity(),
+                                ok<PostTopicModel>(),
+                                failed<AnError>(),
+                                unAuthorized<Unit>())) { _, body ->
             respondCatch {
 
-                val logEntry = "Topic creation request by ${this.context.authentication.principal} - $body"
+                val currentUser = call.principal<UserIdPrincipal>()!!.name
+                val logEntry = "Topic creation request by $currentUser - $body"
                 application.environment.log.info(logEntry)
 
                 if (!body.name.isValid())
@@ -162,11 +167,13 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                 }
 
                 // create kafka groups in ldap
-                val groupsResult = LDAPGroup(config).use { ldap -> ldap.createKafkaGroups(newTopic.name()) }
+                val groupsResult = LDAPGroup(config).use { ldap ->
+                    ldap.createKafkaGroups(newTopic.name(), currentUser)
+                }
 
-                // create ACLs based on kafka groups in LDAP
+                // create ACLs based on kafka groups in LDAP, except manager group KM-
                 val rsrc = Resource(ResourceType.TOPIC, newTopic.name())
-                val acls = groupsResult.map { kafkaGroup ->
+                val acls = groupsResult.filter { it.type != LDAPGroup.Companion.KafkaGroupType.MANAGER }.map { kafkaGroup ->
                     val principal = "Group:${kafkaGroup.name}"
                     val host = "*"
                     listOf(
@@ -178,6 +185,7 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                                             when (kafkaGroup.type) {
                                                 LDAPGroup.Companion.KafkaGroupType.PRODUCER -> AclOperation.WRITE
                                                 LDAPGroup.Companion.KafkaGroupType.CONSUMER -> AclOperation.READ
+                                                else -> AclOperation.READ // should never be here
                                             },
                                             AclPermissionType.ALLOW)),
                             AclBinding(
@@ -220,7 +228,7 @@ data class DeleteTopicModel(
 
 fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
         delete<DeleteTopic>(
-                "a topic".securityAndReponds(
+                "a topic. Only members in KM-{topicName} are authorized".securityAndReponds(
                         BasicAuthSecurity(),
                         ok<DeleteTopicModel>(),
                         failed<AnError>(),
@@ -228,42 +236,57 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
                 )) { param ->
             respondCatch {
 
+                val currentUser = call.principal<UserIdPrincipal>()!!.name
                 val topicName = param.topicName
 
-                val logEntry = "Topic deletion request by ${this.context.authentication.principal} - $topicName"
+                val logEntry = "Topic deletion request by $currentUser - $topicName"
                 application.environment.log.info(logEntry)
 
-                // delete ACLs
-                val acls = AclBindingFilter(
-                        ResourceFilter(ResourceType.TOPIC, topicName),
-                        AccessControlEntryFilter.ANY
-                )
+                val authorized = LDAPGroup(config).use { ldap -> ldap.userIsManager(topicName, currentUser) }
 
-                application.environment.log.info("ACLs delete request: $acls")
+                if (authorized) {
 
-                val aclsResult = try {
-                    adminClient.deleteAcls(mutableListOf(acls)).all().get()
-                    application.environment.log.info("ACLs deleted - $acls")
-                    "deleted $acls"
-                } catch (e: Exception) {
-                    application.environment.log.error("$EXCEPTION ACLs delete request $acls - $e")
-                    "failure for $acls deletion, $e"
+                    application.environment.log.info("$currentUser is manager of $topicName")
+
+                    // delete ACLs
+                    val acls = AclBindingFilter(
+                            ResourceFilter(ResourceType.TOPIC, topicName),
+                            AccessControlEntryFilter.ANY
+                    )
+
+                    application.environment.log.info("ACLs delete request: $acls")
+
+                    val aclsResult = try {
+                        adminClient.deleteAcls(mutableListOf(acls)).all().get()
+                        application.environment.log.info("ACLs deleted - $acls")
+                        "deleted $acls"
+                    } catch (e: Exception) {
+                        application.environment.log.error("$EXCEPTION ACLs delete request $acls - $e")
+                        "failure for $acls deletion, $e"
+                    }
+
+                    // delete related kafka ldap groups
+                    val groupsResult = LDAPGroup(config).use { ldap -> ldap.deleteKafkaGroups(topicName) }
+
+                    // delete the topic itself
+                    val topicResult = try {
+                        adminClient.deleteTopics(listOf(topicName)).all().get()
+                        application.environment.log.info("Topic deleted - $topicName")
+                        "deleted topic $topicName"
+                    } catch (e: Exception) {
+                        application.environment.log.error("$EXCEPTION topic delete request $topicName - $e")
+                        "failure for topic $topicName deletion, $e"
+                    }
+                    DeleteTopicModel(topicResult, groupsResult, aclsResult)
+                } else {
+
+                    application.environment.log.info("$currentUser is NOT manager of $topicName")
+
+                    DeleteTopicModel(
+                            "Not authorized",
+                            listOf(LDAPGroup.Companion.KafkaGroup()),
+                            "Not authorized")
                 }
-
-                // delete related kafka ldap groups
-                val groupsResult = LDAPGroup(config).use { ldap -> ldap.deleteKafkaGroups(topicName) }
-
-                // delete the topic itself
-                val topicResult = try {
-                    adminClient.deleteTopics(listOf(topicName)).all().get()
-                    application.environment.log.info("Topic deleted - $topicName")
-                    "deleted topic $topicName"
-                } catch (e: Exception) {
-                    application.environment.log.error("$EXCEPTION topic delete request $topicName - $e")
-                    "failure for topic $topicName deletion, $e"
-                }
-
-                DeleteTopicModel(topicResult, groupsResult, aclsResult)
             }
         }
 
@@ -328,8 +351,9 @@ data class PutTopicConfigEntryModel(
     val status: String
 )
 
-fun Routing.updateTopicConfig(adminClient: AdminClient) =
-        put<PutTopicConfigEntry, PutTopicConfigEntryBody>("a configuration entry for a topic".securityAndReponds(
+fun Routing.updateTopicConfig(adminClient: AdminClient, config: FasitProperties) =
+        put<PutTopicConfigEntry, PutTopicConfigEntryBody>(
+                "a configuration entry for a topic. Only members in KM-{topicName} are authorized".securityAndReponds(
                 BasicAuthSecurity(),
                 ok<PutTopicConfigEntryModel>(),
                 failed<AnError>(),
@@ -337,26 +361,39 @@ fun Routing.updateTopicConfig(adminClient: AdminClient) =
         )) { param, body ->
             respondCatch {
 
+                val currentUser = call.principal<UserIdPrincipal>()!!.name
                 val topicName = param.topicName
-                val configEntry = ConfigEntry(body.configentry.entryName, body.value)
 
-                val logEntry = "Topic config. update request by ${this.context.authentication.principal} - $topicName"
+                val logEntry = "Topic config. update request by $currentUser - $topicName"
                 application.environment.log.info(logEntry)
 
-                // check whether configEntry is allowed
-                if (!AllowedConfigEntries.values().map { it.entryName }.contains(configEntry.name()))
-                    throw Exception("configEntry ${configEntry.name()} is not allowed to update automatically")
+                val authorized = LDAPGroup(config).use { ldap -> ldap.userIsManager(topicName, currentUser) }
 
-                val configResource = ConfigResource(ConfigResource.Type.TOPIC, topicName)
-                val configReq = mapOf(configResource to Config(listOf(configEntry)))
+                if (authorized) {
 
-                application.environment.log.info("Update topic config request: $configReq")
+                    application.environment.log.info("$currentUser is manager of $topicName")
 
-                // NB! .all is throwing error... Use of future for specific entry instead
-                adminClient.alterConfigs(configReq)
-                        // .all()
-                        .values()[configResource]
-                        ?.get() ?: PutTopicConfigEntryModel(topicName, body.configentry, "updated with ${body.value}")
+                    val configEntry = ConfigEntry(body.configentry.entryName, body.value)
+
+                    // check whether configEntry is allowed
+                    if (!AllowedConfigEntries.values().map { it.entryName }.contains(configEntry.name()))
+                        throw Exception("configEntry ${configEntry.name()} is not allowed to update automatically")
+
+                    val configResource = ConfigResource(ConfigResource.Type.TOPIC, topicName)
+                    val configReq = mapOf(configResource to Config(listOf(configEntry)))
+
+                    application.environment.log.info("Update topic config request: $configReq")
+
+                    // NB! .all is throwing error... Use of future for specific entry instead
+                    adminClient.alterConfigs(configReq)
+                            // .all()
+                            .values()[configResource]
+                            ?.get()
+                            ?: PutTopicConfigEntryModel(topicName, body.configentry, "updated with ${body.value}")
+                } else {
+                    application.environment.log.info("$currentUser is NOT manager of $topicName")
+                    PutTopicConfigEntryModel(topicName, body.configentry, "Not authorized")
+                }
             }
         }
 
@@ -427,7 +464,8 @@ data class PutTopicGMemberModel(
 )
 
 fun Routing.updateTopicGroup(config: FasitProperties) =
-        put<PutTopicGMember, LDAPGroup.Companion.UpdateKafkaGroupMember>("".securityAndReponds(
+        put<PutTopicGMember, LDAPGroup.Companion.UpdateKafkaGroupMember>(
+                "add/remove members in topic groups. Only members in KM-{topicName} are authorized ".securityAndReponds(
                 BasicAuthSecurity(),
                 ok<PutTopicGMemberModel>(),
                 failed<AnError>(),
@@ -435,27 +473,37 @@ fun Routing.updateTopicGroup(config: FasitProperties) =
         )) { param, body ->
             respondCatch {
 
+                val currentUser = call.principal<UserIdPrincipal>()!!.name
                 val topicName = param.topicName
-                // val updateEntry = runBlocking { call.receive<LDAPGroup.Companion.UpdateKafkaGroupMember>() }
+
                 val logEntry = "Topic group membership update request by " +
                         "${this.context.authentication.principal} - $topicName "
-
                 application.environment.log.info(logEntry)
 
-                LDAPGroup(config)
-                        .use { ldap ->
+                val authorized = LDAPGroup(config).use { ldap -> ldap.userIsManager(topicName, currentUser) }
 
-                            PutTopicGMemberModel(
-                                    topicName,
-                                    body,
-                                    ldap.updateKafkaGroupMembership(topicName,
-                                            LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                                    body.role,
-                                                    body.operation,
-                                                    body.member
-                                            ))
-                            )
-                        }
-                        .also { application.environment.log.info("$topicName's group has been updated") }
+                if (authorized) {
+
+                    application.environment.log.info("$currentUser is manager of $topicName")
+
+                    LDAPGroup(config)
+                            .use { ldap ->
+
+                                PutTopicGMemberModel(
+                                        topicName,
+                                        body,
+                                        ldap.updateKafkaGroupMembership(topicName,
+                                                LDAPGroup.Companion.UpdateKafkaGroupMember(
+                                                        body.role,
+                                                        body.operation,
+                                                        body.member
+                                                ))
+                                )
+                            }
+                            .also { application.environment.log.info("$topicName's group has been updated") }
+                } else {
+                    application.environment.log.info("$currentUser is NOT manager of $topicName")
+                    PutTopicGMemberModel(topicName, body, LDAPGroup.Companion.SLDAPResult())
+                }
             }
         }
