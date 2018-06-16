@@ -57,7 +57,8 @@ object KafkaAdminRestSpec : Spek ({
     // to be added and removed from tpc-01
     val usersToManage = mapOf(
             "srvp01" to LDAPGroup.Companion.KafkaGroupType.PRODUCER,
-            "srvc02" to LDAPGroup.Companion.KafkaGroupType.CONSUMER
+            "srvc02" to LDAPGroup.Companion.KafkaGroupType.CONSUMER,
+            "n145821" to LDAPGroup.Companion.KafkaGroupType.MANAGER
     )
 
     val invalidTopics = mapOf(
@@ -310,6 +311,7 @@ object KafkaAdminRestSpec : Spek ({
                     result.groups.flatMap { it.members } shouldContainAll listOf(
                             "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
                             "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local",
+                            "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
                             "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
                     )
                 }

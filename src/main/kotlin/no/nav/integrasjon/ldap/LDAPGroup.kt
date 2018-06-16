@@ -155,9 +155,11 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): SLDAPResult =
 
-            getServiceUserDN(updateEntry.member).let { srvUserDN ->
-                if (srvUserDN.isEmpty())
-                    throw Exception("Cannot find ${updateEntry.member} under ${config.ldapSrvUserBase}")
+            resolveUserDN(updateEntry.member).let { userDN ->
+                if (userDN.isEmpty())
+                    throw Exception("Cannot find ${updateEntry.member} under user - or service accounts")
+                else if (updateEntry.role != KafkaGroupType.MANAGER && isNAVIdent(updateEntry.member))
+                    throw Exception("Cannot have ${updateEntry.member} as consumer/producer")
                 else
                     config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
 
@@ -169,13 +171,13 @@ class LDAPGroup(private val config: FasitProperties) :
                                             GroupMemberOperation.REMOVE -> ModificationType.DELETE
                                         },
                                         config.ldapGrpMemberAttrName,
-                                        srvUserDN
+                                        userDN
                                 )
                         )
 
-                        log.info { "Update group membership request: $req for $srvUserDN" }
+                        log.info { "Update group membership request: $req for $userDN" }
 
-                        if (updateEntry.isRedundant(srvUserDN, groupDN, toGroupName(updateEntry.role.prefix, topicName)))
+                        if (updateEntry.isRedundant(userDN, groupDN, toGroupName(updateEntry.role.prefix, topicName)))
                             LDAPResult(0, ResultCode.SUCCESS).simplify()
                         else
                             ldapConnection.modify(req).simplify()
