@@ -118,7 +118,12 @@ class LDAPGroup(private val config: FasitProperties) :
                     getKafkaGroupNames(),
                     topicName,
                     { exists, groupName -> getMembersInKafkaGroup(groupName, exists) },
-                    { _, _ -> LDAPResult(0, ResultCode.SUCCESS).simplify() }
+                    { exists, _ ->
+                        if (exists)
+                            LDAPResult(ResultCode.SUCCESS_INT_VALUE, ResultCode.SUCCESS).simplify()
+                        else
+                            LDAPResult(ResultCode.NO_SUCH_OBJECT_INT_VALUE, ResultCode.NO_SUCH_OBJECT).simplify()
+                    }
             )
 
     private fun createKafkaGroup(exists: Boolean, groupName: String, creator: String): SLDAPResult =
