@@ -145,6 +145,10 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                 val logEntry = "Topic creation request by $currentUser - $body"
                 application.environment.log.info(logEntry)
 
+                if (!LDAPGroup(config).use { ldap -> ldap.userExists(currentUser) })
+                    throw Exception("authenticated user $currentUser doesn't exist as NAV ident or " +
+                            "service user in current LDAP domain, cannot be manager of topic")
+
                 if (!body.name.isValid())
                     throw Exception("Invalid topic name - $body.name. " +
                             "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
