@@ -213,8 +213,8 @@ class LDAPGroup(private val config: FasitProperties) :
                 else false
             }
 
-    fun userExists(userName: String): Boolean = resolveUserDN(userName).isNotEmpty().also {
-        log.error { "$userName doesn't exists as NAV ident or service user in current LDAP domain" }
+    fun userExists(userName: String): Boolean = resolveUserDN(userName).isNotEmpty().also { exists ->
+        if (!exists) log.error { "$userName doesn't exists as NAV ident or service user in current LDAP domain" }
     }
 
     /**
