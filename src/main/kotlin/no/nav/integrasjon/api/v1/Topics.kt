@@ -5,6 +5,7 @@ import io.ktor.application.call
 import io.ktor.auth.UserIdPrincipal
 import io.ktor.auth.authentication
 import io.ktor.auth.principal
+import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
 import io.ktor.routing.Routing
 import no.nav.integrasjon.EXCEPTION
@@ -234,7 +235,7 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
                         failed<AnError>(),
                         unAuthorized<Unit>()
                 )) { param ->
-            respondCatch {
+            respondSelectiveCatch {
 
                 val currentUser = call.principal<UserIdPrincipal>()!!.name
                 val topicName = param.topicName
@@ -277,15 +278,12 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
                         application.environment.log.error("$EXCEPTION topic delete request $topicName - $e")
                         "failure for topic $topicName deletion, $e"
                     }
-                    DeleteTopicModel(topicResult, groupsResult, aclsResult)
+                    Pair(HttpStatusCode.OK, DeleteTopicModel(topicResult, groupsResult, aclsResult))
                 } else {
 
                     application.environment.log.info("$currentUser is NOT manager of $topicName")
 
-                    DeleteTopicModel(
-                            "Not authorized",
-                            listOf(LDAPGroup.Companion.KafkaGroup()),
-                            "Not authorized")
+                    Pair(HttpStatusCode.Unauthorized, "")
                 }
             }
         }
@@ -359,7 +357,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient, config: FasitProperties)
                 failed<AnError>(),
                 unAuthorized<Unit>()
         )) { param, body ->
-            respondCatch {
+            respondSelectiveCatch {
 
                 val currentUser = call.principal<UserIdPrincipal>()!!.name
                 val topicName = param.topicName
@@ -385,14 +383,16 @@ fun Routing.updateTopicConfig(adminClient: AdminClient, config: FasitProperties)
                     application.environment.log.info("Update topic config request: $configReq")
 
                     // NB! .all is throwing error... Use of future for specific entry instead
-                    adminClient.alterConfigs(configReq)
+                    val res = adminClient.alterConfigs(configReq)
                             // .all()
                             .values()[configResource]
                             ?.get()
                             ?: PutTopicConfigEntryModel(topicName, body.configentry, "updated with ${body.value}")
+
+                    Pair(HttpStatusCode.OK, res)
                 } else {
                     application.environment.log.info("$currentUser is NOT manager of $topicName")
-                    PutTopicConfigEntryModel(topicName, body.configentry, "Not authorized")
+                    Pair(HttpStatusCode.Unauthorized, "")
                 }
             }
         }
@@ -471,7 +471,7 @@ fun Routing.updateTopicGroup(config: FasitProperties) =
                 failed<AnError>(),
                 unAuthorized<Unit>()
         )) { param, body ->
-            respondCatch {
+            respondSelectiveCatch {
 
                 val currentUser = call.principal<UserIdPrincipal>()!!.name
                 val topicName = param.topicName
@@ -486,7 +486,7 @@ fun Routing.updateTopicGroup(config: FasitProperties) =
 
                     application.environment.log.info("$currentUser is manager of $topicName")
 
-                    LDAPGroup(config)
+                    val res = LDAPGroup(config)
                             .use { ldap ->
 
                                 PutTopicGMemberModel(
@@ -501,9 +501,10 @@ fun Routing.updateTopicGroup(config: FasitProperties) =
                                 )
                             }
                             .also { application.environment.log.info("$topicName's group has been updated") }
+                    Pair(HttpStatusCode.OK, res)
                 } else {
                     application.environment.log.info("$currentUser is NOT manager of $topicName")
-                    PutTopicGMemberModel(topicName, body, LDAPGroup.Companion.SLDAPResult())
+                    Pair(HttpStatusCode.Unauthorized, "")
                 }
             }
         }

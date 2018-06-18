@@ -30,3 +30,12 @@ internal suspend fun PipelineContext<Unit, ApplicationCall>.respondCatch(block: 
             application.environment.log.error(EXCEPTION, e)
             call.respond(HttpStatusCode.ExceptionFailed, AnError("$EXCEPTION$e"))
         }
+
+internal suspend fun PipelineContext<Unit, ApplicationCall>.respondSelectiveCatch(block: () -> Pair<HttpStatusCode, Any>) =
+        try {
+            val res = block()
+            call.respond(res.first, res.second)
+        } catch (e: Exception) {
+            application.environment.log.error(EXCEPTION, e)
+            call.respond(HttpStatusCode.ExceptionFailed, AnError("$EXCEPTION$e"))
+        }
