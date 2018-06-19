@@ -2,6 +2,7 @@ package no.nav.integrasjon.api.nais.client
 
 import io.ktor.application.call
 import io.ktor.http.ContentType
+import io.ktor.http.HttpStatusCode
 import io.ktor.response.respondText
 import io.ktor.response.respondWrite
 import io.ktor.routing.Routing
@@ -9,7 +10,7 @@ import io.ktor.routing.get
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
 import no.nav.integrasjon.FasitProperties
-import no.nav.integrasjon.api.v1.respondCatch
+import no.nav.integrasjon.api.v1.respondSelectiveCatch
 import no.nav.integrasjon.ldap.LDAPAuthenticate
 import no.nav.integrasjon.ldap.LDAPGroup
 import org.apache.kafka.clients.admin.AdminClient
@@ -39,14 +40,14 @@ fun Routing.getIsAlive() =
 
 fun Routing.getIsReady(adminClient: AdminClient, config: FasitProperties) =
         get("/isReady") {
-            respondCatch {
+            respondSelectiveCatch {
                 if (LDAPGroup(config).use { ldapGroup -> ldapGroup.connectionOk } &&
                         LDAPAuthenticate(config).use { ldapAuthenticate -> ldapAuthenticate.connectionOk } &&
                         adminClient.listTopics().namesToListings().get().isNotEmpty()
                 )
-                    "is ready"
+                    Pair(HttpStatusCode.OK, "is ready")
                 else
-                    "is not ready"
+                    Pair(HttpStatusCode.ExceptionFailed, "is not ready")
             }
         }
 
