@@ -69,7 +69,7 @@ pipeline {
             }
         }
 
-        /*stage('deploy to preprod') {
+        stage('deploy to preprod') {
             environment {
                 FASIT_ENV = 'q4'
                 NAMESPACE = 'q4'
@@ -88,7 +88,7 @@ pipeline {
             steps {
                 deployApplication()
             }
-        }*/
+        }
     }
     post {
         always {

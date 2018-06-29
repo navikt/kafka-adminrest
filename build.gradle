@@ -1,31 +1,30 @@
 buildscript {
     ext.kotlin_version = '1.2.50'
-    ext.kafka_version = '1.0.1'
-    ext.embeddedkafka_version = '0.6.3'
+    ext.kafka_version = '1.1.0'
+    ext.embeddedkafka_version = '0.7.7'
     ext.coroutines_version = '0.22.5'
-    ext.kotlin_loggin_version = '1.5.3'
-    ext.confluent_version = '4.0.0'
-    ext.ktor_version = '0.9.3-alpha-3'
-    ext.prometheus_version = '0.3.0'
-    ext.logstash_encoder_version = '4.10'
-    ext.fjackson_datatype_version = '2.9.2'
+    ext.kotlin_loggin_version = '1.5.4'
+    ext.ktor_version = '0.9.3'
+    ext.prometheus_version = '0.4.0'
+    ext.logstash_encoder_version = '5.1'
+    ext.jackson_datatype_version = '2.9.6'
     ext.unboundid_version = '4.0.6'
-
-    dependencies {
-        classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.2'
-    }
+    ext.logback_version = '1.2.3'
+    ext.log4j_version = '1.7.25'
+    ext.swagger_version = '3.1.7'
+    ext.spek_version = '1.1.5'
+    ext.kluent_version = '1.38'
 }
 
 plugins{
     id "org.jetbrains.kotlin.jvm" version "1.2.50"
-    id 'org.jmailen.kotlinter' version '1.12.0'
-    id 'org.junit.platform.gradle.plugin' version '1.1.0'
+    id 'org.jmailen.kotlinter' version '1.13.0'
     id 'maven-publish'
-    id 'com.github.johnrengelman.shadow' version '2.0.2'
+    id 'com.github.johnrengelman.shadow' version '2.0.4'
+    id 'com.github.ben-manes.versions' version '0.20.0'
 }
 
 group 'no.nav.integrasjon'
-version '0.51-SNAPSHOT'
 
 // suppress warning for experimental coroutines
 kotlin { experimental { coroutines "enable"} }
@@ -46,15 +45,21 @@ shadowJar {
     classifier = null
 }
 
+test {
+    useJUnitPlatform {
+        includeEngines 'spek'
+    }
+}
+
 repositories {
-    mavenCentral()
     maven {
-        url 'https://repo.adeo.no/repository/maven-public/'
+        url 'https://repo.adeo.no/repository/maven-releases/'
     }
     maven {
         url "http://packages.confluent.io/maven"
     }
     maven { url "https://dl.bintray.com/kotlin/ktor" }
+    mavenCentral()
     jcenter()
 }
 
@@ -75,23 +80,30 @@ dependencies {
     implementation "io.ktor:ktor-auth:$ktor_version"
     implementation "io.ktor:ktor-locations:$ktor_version"
 
-    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$fjackson_datatype_version"
+    implementation "com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jackson_datatype_version"
 
     implementation "io.github.microutils:kotlin-logging:$kotlin_loggin_version"
-    implementation "ch.qos.logback:logback-classic:1.2.3"
-    implementation "org.slf4j:log4j-over-slf4j:1.7.25"
+    implementation "ch.qos.logback:logback-classic:$logback_version"
+    implementation "org.slf4j:log4j-over-slf4j:$log4j_version"
     implementation "net.logstash.logback:logstash-logback-encoder:$logstash_encoder_version"
 
     implementation "io.prometheus:simpleclient_common:$prometheus_version"
 
-    implementation "org.webjars:swagger-ui:3.1.7"
+    implementation "org.webjars:swagger-ui:$swagger_version"
 
-    testCompile "org.jetbrains.spek:spek-api:1.1.5"
-    testImplementation "org.amshove.kluent:kluent:1.33"
-    testImplementation "no.nav.common:embedded.kafka:$embeddedkafka_version"
+    testCompile ("org.jetbrains.spek:spek-api:$spek_version") {
+        exclude group: 'org.junit.platform'
+        exclude group: 'org.jetbrains.kotlin'
+    }
+    testImplementation "org.amshove.kluent:kluent:$kluent_version"
+    testImplementation "no.nav.common:kafka-embedded-env:$embeddedkafka_version"
     testImplementation "io.ktor:ktor-server-test-host:$ktor_version"
 
-    testRuntimeOnly "org.jetbrains.spek:spek-junit-platform-engine:1.1.5"
+    testRuntimeOnly ("org.jetbrains.spek:spek-junit-platform-engine:$spek_version") {
+        exclude group: 'org.junit.platform'
+        exclude group: 'org.jetbrains.kotlin'
+    }
+    testImplementation 'org.junit.platform:junit-platform-runner:1.2.0'
 }
 
 compileKotlin {
