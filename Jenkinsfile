@@ -22,6 +22,8 @@ pipeline {
                     env.APPLICATION_VERSION = "${applicationVersionGradle}"
                     if (applicationVersionGradle.endsWith('-SNAPSHOT')) {
                         env.APPLICATION_VERSION = "${applicationVersionGradle}.${env.BUILD_ID}-${env.COMMIT_HASH_SHORT}"
+                    } else {
+                        env.DEPLOY_TO = 'production'
                     }
                     changeLog = utils.gitVars(env.APPLICATION_NAME).changeLog.toString()
                     githubStatus 'pending'
@@ -67,7 +69,7 @@ pipeline {
             }
         }
 
-        stage('deploy to preprod') {
+        /*stage('deploy to preprod') {
             environment {
                 FASIT_ENV = 'q4'
                 NAMESPACE = 'q4'
@@ -78,34 +80,15 @@ pipeline {
         }
 
         stage('deploy to production') {
+            when { environment name: 'DEPLOY_TO', value: 'production' }
             environment {
                 FASIT_ENV = 'p'
                 NAMESPACE = 'default'
-
             }
             steps {
                 deployApplication()
             }
-        }
-
-        /*stage('deploy to nais') {
-            steps {
-                script {
-                    def jiraIssueId = nais 'jiraDeploy'
-                    slackStatus status: 'deploying', jiraIssueId: "${jiraIssueId}"
-                    try {
-                        timeout(time: 1, unit: 'HOURS') {
-                            input id: "deploy", message: "Waiting for remote Jenkins server to deploy the application..."
-                        }
-                    } catch (Exception exception) {
-                        currentBuild.description = "Deploy failed, see " + currentBuild.description
-                        throw exception
-                    }
-                }
-            }
         }*/
-
-
     }
     post {
         always {
@@ -116,19 +99,17 @@ pipeline {
                     slackStatus status: 'aborted'
                 }
             }
+            junit '**/build/test-results/test/*.xml'
+            archiveArtifacts artifacts: '**/build/libs/*', allowEmptyArchive: true
+            deleteDir()
         }
         success {
-            //junit '**/build/test-results/junit-platform/*.xml'
-            archive '**/build/libs/*'
-            //archive '**/build/install/*'
             githubStatus 'success'
             slackStatus status: 'success'
-            deleteDir()
         }
         failure {
             githubStatus 'failure'
             slackStatus status: 'failure'
-            deleteDir()
         }
     }
 }
