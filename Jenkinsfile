@@ -54,8 +54,8 @@ pipeline {
         }
         stage('validate & upload nais.yaml to nexus m2internal') {
             steps {
-                nais 'validate'
-                nais 'upload'
+                nais action: 'validate'
+                nais action: 'upload'
             }
         }
 
@@ -84,9 +84,24 @@ pipeline {
             environment {
                 FASIT_ENV = 'p'
                 NAMESPACE = 'default'
+                APPLICATION_SERVICE = 'CMDB-274891'
+                APPLICATION_COMPONENT = 'CMDB-247049'
             }
             steps {
-                deployApplication()
+                script {
+                    def jiraIssueId = nais action: 'jiraDeploy'
+                    slackStatus status: 'deploying', jiraIssueId: "${jiraIssueId}"
+                    def jiraProdIssueId = nais action: 'jiraDeployProd', jiraIssueId: jiraIssueId
+                    slackStatus status: 'deploying', jiraIssueId: "${jiraProdIssueId}"
+                    try {
+                        timeout(time: 1, unit: 'HOURS') {
+                            input id: "deploy", message: "Waiting for remote Jenkins server to deploy the application..."
+                        }
+                    } catch (Exception exception) {
+                        currentBuild.description = "Deploy failed, see " + currentBuild.description
+                        throw exception
+                    }
+                }
             }
         }
     }
@@ -116,7 +131,7 @@ pipeline {
 
 
 void deployApplication() {
-    def jiraIssueId = nais 'jiraDeploy'
+    def jiraIssueId = nais action: 'jiraDeploy'
     slackStatus status: 'deploying', jiraIssueId: "${jiraIssueId}"
     try {
         timeout(time: 1, unit: 'HOURS') {
