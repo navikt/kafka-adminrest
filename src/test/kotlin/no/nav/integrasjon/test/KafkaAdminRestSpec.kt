@@ -48,7 +48,7 @@ import org.jetbrains.spek.api.dsl.on
  * TODO - need to enhance embedded kafka
  * TODO - need to define the missing routes
  */
-object KafkaAdminRestSpec : Spek ({
+object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
     val preTopics = setOf("tpc-01", "tpc-02", "tpc-03")

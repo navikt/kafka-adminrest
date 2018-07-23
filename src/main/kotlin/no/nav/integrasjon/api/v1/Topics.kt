@@ -326,7 +326,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient) =
                             ).all().get().values.first().entries().toList()
                     )
                 else
-                    throw Exception( "failure, topic $topicName does not exist")
+                    throw Exception("failure, topic $topicName does not exist")
             }
         }
 
