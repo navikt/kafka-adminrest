@@ -1,5 +1,7 @@
 # kafka-adminrest
 
+[![Build Status](https://travis-ci.org/navikt/kafka-adminrest.svg?branch=master)](https://travis-ci.org/navikt/kafka-adminrest)
+
 Provides a REST interface for 
 - List of brokers in kafka cluster and their configuration (Broker API)
 - List of all Access Control Lists in kafka cluster (ACL API)
