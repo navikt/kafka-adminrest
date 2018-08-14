@@ -91,7 +91,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient, fasit: FasitProperties)
 
                 log.info("Validating config entries$logFormat", *logKeys)
                 request.topics.flatMap { it.configEntries?.entries ?: setOf() }.filter { entry ->
-                    AllowedConfigEntries.values().any { it.entryName == entry.key }
+                    AllowedConfigEntries.values().none { it.entryName == entry.key }
                 }.any { return@respondSelectiveCatch HttpStatusCode.BadRequest to Exception("configEntry ${it.key} is not allowed to update automatically") }
                 val existingTopics = adminClient.listTopics().listings().get().map { it.name() }
 
