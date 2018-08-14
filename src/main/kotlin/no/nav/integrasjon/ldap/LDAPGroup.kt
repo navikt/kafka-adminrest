@@ -156,7 +156,7 @@ class LDAPGroup(private val config: FasitProperties) :
                         .searchEntries
                         .flatMap { (it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: listOf<String>())
                                 .map { DN(it).rdn.attributes.first {
-                                    it.name.toLowerCase() == config.ldapUserAttrName.toLowerCase()
+                                    it.name.equals(config.ldapUserAttrName, ignoreCase = true)
                                 }.value }
                         }
 

@@ -160,8 +160,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient, fasit: FasitProperties)
                 val groupAddDiff = requestedGroupMembers
                         .filter {
                             val (group, member) = it
-                            membersInGroup.filter { it.group == group }
-                                    .none { it.user == member }
+                            membersInGroup.filter { it.group.equals(group, ignoreCase = true) }
+                                    .none { it.user.equals(member, ignoreCase = true) }
                         }
                         .groupBy({ it.group }, { it.user })
 
@@ -184,8 +184,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient, fasit: FasitProperties)
                 membersInGroup
                         .filter { inGroup ->
                             requestedGroupMembers
-                                    .filter { it.group == inGroup.group }
-                                    .none { inGroup.user == it.user }
+                                    .filter { it.group.equals(inGroup.group, ignoreCase = true) }
+                                    .none { inGroup.user.equals(it.user, ignoreCase = true) }
                         }
                         .groupBy({ it.group }) { it.user }
                         .filterNot { it.value.isEmpty() }
