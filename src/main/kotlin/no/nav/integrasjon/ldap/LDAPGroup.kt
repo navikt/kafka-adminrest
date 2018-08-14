@@ -155,7 +155,9 @@ class LDAPGroup(private val config: FasitProperties) :
                 searchGetMembershipKN(Filter.createEqualityFilter(config.ldapGroupAttrName, groupName))
                         .searchEntries
                         .flatMap { (it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: listOf<String>())
-                                .map { DN(it).rdn.attributes.first { it.name == config.ldapUserAttrName }.value }
+                                .map { DN(it).rdn.attributes.first {
+                                    it.name.toLowerCase() == config.ldapUserAttrName.toLowerCase()
+                                }.value }
                         }
 
     private fun createKafkaGroup(exists: Boolean, groupName: String, creator: String): SLDAPResult =
