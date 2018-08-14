@@ -19,11 +19,14 @@ import no.nav.integrasjon.ldap.KafkaGroupType
 import no.nav.integrasjon.ldap.LDAPGroup
 import no.nav.integrasjon.ldap.toGroupName
 import org.apache.kafka.clients.admin.AdminClient
+import org.apache.kafka.clients.admin.Config
+import org.apache.kafka.clients.admin.ConfigEntry
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.common.acl.AccessControlEntry
 import org.apache.kafka.common.acl.AclBinding
 import org.apache.kafka.common.acl.AclOperation
 import org.apache.kafka.common.acl.AclPermissionType
+import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.Resource
 import org.apache.kafka.common.resource.ResourceType
 import org.slf4j.Logger
@@ -197,6 +200,12 @@ fun Routing.registerOneshotApi(adminClient: AdminClient, fasit: FasitProperties)
 
                 // Create topics that are missing
                 log.debug("Creating topics$logFormat", *logKeys)
+                adminClient.alterConfigs(request.topics.filter { existingTopics.contains(it.topicName) }
+                        .map {
+                            ConfigResource(ConfigResource.Type.TOPIC, it.topicName) to Config(it.configEntries
+                                    ?.map { ConfigEntry(it.key, it.value) } ?: listOf())
+                        }.toMap())
+
                 adminClient.createTopics(request.topics
                         .filterNot { existingTopics.contains(it.topicName) }
                         .map {
