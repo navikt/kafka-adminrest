@@ -2,7 +2,10 @@ package no.nav.integrasjon.test.ldap
 
 import com.unboundid.ldap.sdk.ResultCode
 import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.ldap.GroupMemberOperation
+import no.nav.integrasjon.ldap.KafkaGroupType
 import no.nav.integrasjon.ldap.LDAPGroup
+import no.nav.integrasjon.ldap.UpdateKafkaGroupMember
 import no.nav.integrasjon.test.common.InMemoryLDAPServer
 import org.amshove.kluent.shouldBe
 import org.amshove.kluent.shouldContainAll
@@ -65,8 +68,8 @@ object LDAPGroupSpec : Spek({
                 it("should return correct info for topic $topic") {
                     val kGroups = LDAPGroup(fp).use { lc -> lc.getKafkaGroupsAndMembers(topic) }
 
-                    kGroups.size shouldEqualTo LDAPGroup.Companion.KafkaGroupType.values().size
-                    kGroups.map { it.type } shouldContainAll LDAPGroup.Companion.KafkaGroupType.values()
+                    kGroups.size shouldEqualTo KafkaGroupType.values().size
+                    kGroups.map { it.type } shouldContainAll KafkaGroupType.values()
                     kGroups.flatMap { it.members } shouldContainAll allMembers
                 }
             }
@@ -112,9 +115,9 @@ object LDAPGroupSpec : Spek({
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
                                 topic,
-                                LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                        LDAPGroup.Companion.KafkaGroupType.PRODUCER,
-                                        LDAPGroup.Companion.GroupMemberOperation.ADD,
+                                UpdateKafkaGroupMember(
+                                        KafkaGroupType.PRODUCER,
+                                        GroupMemberOperation.ADD,
                                         "srvp01"
                                 ))
                         lc.getKafkaGroupMembers("KP-$topic")
@@ -126,9 +129,9 @@ object LDAPGroupSpec : Spek({
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
                                 topic,
-                                LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                        LDAPGroup.Companion.KafkaGroupType.PRODUCER,
-                                        LDAPGroup.Companion.GroupMemberOperation.ADD,
+                                UpdateKafkaGroupMember(
+                                        KafkaGroupType.PRODUCER,
+                                        GroupMemberOperation.ADD,
                                         "srvp02"
                                 ))
                         lc.getKafkaGroupMembers("KP-$topic")
@@ -141,9 +144,9 @@ object LDAPGroupSpec : Spek({
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
                                 topic,
-                                LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                        LDAPGroup.Companion.KafkaGroupType.CONSUMER,
-                                        LDAPGroup.Companion.GroupMemberOperation.ADD,
+                                UpdateKafkaGroupMember(
+                                        KafkaGroupType.CONSUMER,
+                                        GroupMemberOperation.ADD,
                                         "srvc01"
                                 ))
                         lc.getKafkaGroupMembers("KC-$topic")
@@ -155,9 +158,9 @@ object LDAPGroupSpec : Spek({
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
                                 topic,
-                                LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                        LDAPGroup.Companion.KafkaGroupType.CONSUMER,
-                                        LDAPGroup.Companion.GroupMemberOperation.ADD,
+                                UpdateKafkaGroupMember(
+                                        KafkaGroupType.CONSUMER,
+                                        GroupMemberOperation.ADD,
                                         "srvc02"
                                 ))
                         lc.getKafkaGroupMembers("KC-$topic")
@@ -171,9 +174,9 @@ object LDAPGroupSpec : Spek({
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
                                 topic,
-                                LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                        LDAPGroup.Companion.KafkaGroupType.CONSUMER,
-                                        LDAPGroup.Companion.GroupMemberOperation.ADD,
+                                UpdateKafkaGroupMember(
+                                        KafkaGroupType.CONSUMER,
+                                        GroupMemberOperation.ADD,
                                         "srvc02"
                                 ))
                     }.resultCode shouldBe ResultCode.SUCCESS
@@ -188,9 +191,9 @@ object LDAPGroupSpec : Spek({
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
                                 topic,
-                                LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                        LDAPGroup.Companion.KafkaGroupType.PRODUCER,
-                                        LDAPGroup.Companion.GroupMemberOperation.REMOVE,
+                                UpdateKafkaGroupMember(
+                                        KafkaGroupType.PRODUCER,
+                                        GroupMemberOperation.REMOVE,
                                         "srvp01"
                                 ))
                         lc.getKafkaGroupMembers("KP-$topic")
@@ -202,9 +205,9 @@ object LDAPGroupSpec : Spek({
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
                                 topic,
-                                LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                        LDAPGroup.Companion.KafkaGroupType.CONSUMER,
-                                        LDAPGroup.Companion.GroupMemberOperation.REMOVE,
+                                UpdateKafkaGroupMember(
+                                        KafkaGroupType.CONSUMER,
+                                        GroupMemberOperation.REMOVE,
                                         "srvc01"
                                 ))
                         lc.getKafkaGroupMembers("KC-$topic")
@@ -217,9 +220,9 @@ object LDAPGroupSpec : Spek({
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
                                 topic,
-                                LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                        LDAPGroup.Companion.KafkaGroupType.CONSUMER,
-                                        LDAPGroup.Companion.GroupMemberOperation.REMOVE,
+                                UpdateKafkaGroupMember(
+                                        KafkaGroupType.CONSUMER,
+                                        GroupMemberOperation.REMOVE,
                                         "srvc01"
                                 ))
                     }.resultCode shouldBe ResultCode.SUCCESS

@@ -24,11 +24,17 @@ import no.nav.integrasjon.api.v1.GetGroupsModel
 import no.nav.integrasjon.api.v1.GetTopicConfigModel
 import no.nav.integrasjon.api.v1.GetTopicGroupsModel
 import no.nav.integrasjon.api.v1.GetTopicsModel
+import no.nav.integrasjon.api.v1.ONESHOT
+import no.nav.integrasjon.api.v1.OneshotCreationRequest
 import no.nav.integrasjon.api.v1.PostTopicBody
 import no.nav.integrasjon.api.v1.PutTopicConfigEntryBody
+import no.nav.integrasjon.api.v1.RoleMember
 import no.nav.integrasjon.api.v1.TOPICS
+import no.nav.integrasjon.api.v1.TopicCreation
 import no.nav.integrasjon.kafkaAdminREST
-import no.nav.integrasjon.ldap.LDAPGroup
+import no.nav.integrasjon.ldap.GroupMemberOperation
+import no.nav.integrasjon.ldap.KafkaGroupType
+import no.nav.integrasjon.ldap.UpdateKafkaGroupMember
 import no.nav.integrasjon.test.common.InMemoryLDAPServer
 import org.amshove.kluent.shouldBe
 import org.amshove.kluent.shouldBeEqualTo
@@ -40,6 +46,7 @@ import org.jetbrains.spek.api.Spek
 import org.jetbrains.spek.api.dsl.given
 import org.jetbrains.spek.api.dsl.it
 import org.jetbrains.spek.api.dsl.on
+import org.jetbrains.spek.api.dsl.xon
 
 /**
  * Since the embedded kafka doesn't support authentication&authorization yet,
@@ -56,9 +63,9 @@ object KafkaAdminRestSpec : Spek({
     // Combining srv users in ServiceAccounts and the node below, ApplAccounts (Basta)
     // to be added and removed from tpc-01
     val usersToManage = mapOf(
-            "srvp01" to LDAPGroup.Companion.KafkaGroupType.PRODUCER,
-            "srvc02" to LDAPGroup.Companion.KafkaGroupType.CONSUMER,
-            "n145821" to LDAPGroup.Companion.KafkaGroupType.MANAGER
+        "srvp01" to KafkaGroupType.PRODUCER,
+        "srvc02" to KafkaGroupType.CONSUMER,
+        "n145821" to KafkaGroupType.MANAGER
     )
 
     val invalidTopics = mapOf(
@@ -283,9 +290,9 @@ object KafkaAdminRestSpec : Spek({
                                     "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
 
                             val jsonPayload = Gson().toJson(
-                                    LDAPGroup.Companion.UpdateKafkaGroupMember(
+                                    UpdateKafkaGroupMember(
                                             role,
-                                            LDAPGroup.Companion.GroupMemberOperation.ADD,
+                                            GroupMemberOperation.ADD,
                                             srvUser
                                     )
                             )
@@ -327,9 +334,9 @@ object KafkaAdminRestSpec : Spek({
                                 "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
 
                         val jsonPayload = Gson().toJson(
-                                LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                        LDAPGroup.Companion.KafkaGroupType.PRODUCER,
-                                        LDAPGroup.Companion.GroupMemberOperation.ADD,
+                                UpdateKafkaGroupMember(
+                                        KafkaGroupType.PRODUCER,
+                                        GroupMemberOperation.ADD,
                                         "non-existing"
                                 )
                         )
@@ -351,9 +358,9 @@ object KafkaAdminRestSpec : Spek({
                                     "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
 
                             val jsonPayload = Gson().toJson(
-                                    LDAPGroup.Companion.UpdateKafkaGroupMember(
+                                    UpdateKafkaGroupMember(
                                             role,
-                                            LDAPGroup.Companion.GroupMemberOperation.REMOVE,
+                                            GroupMemberOperation.REMOVE,
                                             srvUser
                                     )
                             )
@@ -396,6 +403,27 @@ object KafkaAdminRestSpec : Spek({
 
                         call.response.status() shouldBe HttpStatusCode.ExceptionFailed
                     }
+                }
+            }
+
+            xon("Route $ONESHOT") {
+                it("creates a topic with one consumer + manager") {
+                    val call = handleRequest(HttpMethod.Put, ONESHOT) {
+                        addHeader(HttpHeaders.Accept, "application/json")
+                        addHeader(HttpHeaders.ContentType, "application/json")
+                        addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("igroup:itest".toByteArray())}")
+                        setBody(Gson().toJson(OneshotCreationRequest(
+                                topics = listOf(
+                                        TopicCreation(
+                                                topicName = "integrationTestNoUpdate",
+                                                members = listOf(RoleMember("srvp01", KafkaGroupType.CONSUMER)),
+                                                configEntries = mapOf(),
+                                                numPartitions = 3
+                                        )))))
+                    }
+
+                    println(call.response.content)
+                    call.response.status() shouldBe HttpStatusCode.OK
                 }
             }
         }

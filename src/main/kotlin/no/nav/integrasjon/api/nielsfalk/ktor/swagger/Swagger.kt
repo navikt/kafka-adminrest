@@ -13,6 +13,7 @@ import java.util.Date
 import kotlin.reflect.KClass
 import kotlin.reflect.KProperty1
 import kotlin.reflect.KType
+import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.full.memberProperties
 
 /**
@@ -167,9 +168,13 @@ fun <T, R> KProperty1<T, R>.toModelProperty(): Property =
 
 private fun KClass<*>.toModelProperty(returnType: KType? = null): Property =
         propertyTypes[qualifiedName?.removeSuffix("?")]
-                ?: if (returnType != null && toString() == "class kotlin.collections.List") {
+                ?: if (returnType != null && (isSubclassOf(Collection::class) || this.isSubclassOf(Set::class))) {
                     val kClass: KClass<*> = returnType.arguments.first().type?.classifier as KClass<*>
                     Property(items = kClass.toModelProperty(), type = "array")
+                } else if (returnType != null && this.isSubclassOf(Map::class)) {
+                    Property(type = "object")
+                } else if (returnType != null && this.isSubclassOf(String::class)) {
+                    Property(type = "string")
                 } else if (java.isEnum) {
                     val enumConstants = (this).java.enumConstants
                     Property(enum = enumConstants.map { (it as Enum<*>).name }, type = "string")
