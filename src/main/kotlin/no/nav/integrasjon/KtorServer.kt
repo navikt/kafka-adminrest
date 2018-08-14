@@ -34,6 +34,7 @@ import no.nav.integrasjon.api.v1.topicsAPI
 import no.nav.integrasjon.api.v1.brokersAPI
 import no.nav.integrasjon.api.v1.groupsAPI
 import no.nav.integrasjon.api.v1.aclAPI
+import no.nav.integrasjon.api.v1.registerOneshotApi
 import no.nav.integrasjon.ldap.LDAPAuthenticate
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -48,7 +49,7 @@ val swagger = Swagger(
                 title = "Kafka self service API",
                 description = "[kafka-adminrest](https://github.com/navikt/kafka-adminrest)",
                 contact = Contact(
-                    name = "Torstein Nesby, Trong Huu Nguyen",
+                    name = "Torstein Nesby, Trong Huu Nguyen, Kevin Sillerud",
                     url = "https://github.com/navikt/kafka-adminrest",
                     email = "")
         )
@@ -141,5 +142,6 @@ fun Application.kafkaAdminREST() {
         brokersAPI(adminClient)
         aclAPI(adminClient)
         groupsAPI(fasitProps)
+        registerOneshotApi(adminClient, fasitProps)
     }
 }

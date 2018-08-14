@@ -23,6 +23,7 @@ import no.nav.integrasjon.LdapConnectionType
 import no.nav.integrasjon.getConnectionInfo
 import no.nav.integrasjon.srvUserDN
 import no.nav.integrasjon.groupDN
+import no.nav.integrasjon.ldap.LDAPGroup.Companion.simplify
 
 /**
  * LDAPGroup provides services for LDAP group management
@@ -39,6 +40,8 @@ import no.nav.integrasjon.groupDN
  * Ok, this class can be divided into cleaner classes (pure LDAP group and Kafka context), but
  * laziness and good-enough is the strongest competitor so far
  */
+
+fun toGroupName(prefix: String, topicName: String) = "$prefix$topicName"
 
 class LDAPGroup(private val config: FasitProperties) :
         LDAPBase(config.getConnectionInfo(LdapConnectionType.GROUP)) {
@@ -125,6 +128,35 @@ class LDAPGroup(private val config: FasitProperties) :
                             LDAPResult(ResultCode.NO_SUCH_OBJECT_INT_VALUE, ResultCode.NO_SUCH_OBJECT).simplify()
                     }
             )
+
+    fun createGroup(groupName: String, initialMember: String? = null) {
+        ldapConnection.add(AddRequest(DN(config.groupDN(groupName)), newGroupAttr.toMutableList().apply {
+            add(Attribute("cn", groupName))
+            add(Attribute("sAMAccountName", groupName))
+            if (initialMember != null) {
+                add(Attribute(config.ldapGrpMemberAttrName, resolveUserDN(initialMember)))
+            }
+        }))
+    }
+
+    fun removeGroupMembers(groupName: String, membersToRemove: List<String>) {
+        ldapConnection.modify(config.groupDN(groupName), membersToRemove.map {
+            Modification(ModificationType.DELETE, config.ldapGrpMemberAttrName, resolveUserDN(it))
+        })
+    }
+
+    fun addToGroup(groupName: String, groupMembers: List<String>) {
+        ldapConnection.modify(config.groupDN(groupName), groupMembers.map {
+            Modification(ModificationType.ADD, config.ldapGrpMemberAttrName, resolveUserDN(it))
+        })
+    }
+
+    fun getGroupMembers(groupName: String): List<String> =
+                searchGetMembershipKN(Filter.createEqualityFilter(config.ldapGroupAttrName, groupName))
+                        .searchEntries
+                        .flatMap { (it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: listOf<String>())
+                                .map { DN(it).rdn.attributes.first { it.name == config.ldapUserAttrName }.value }
+                        }
 
     private fun createKafkaGroup(exists: Boolean, groupName: String, creator: String): SLDAPResult =
             if (exists)
@@ -306,8 +338,6 @@ class LDAPGroup(private val config: FasitProperties) :
 
         val log = KotlinLogging.logger { }
 
-        private fun toGroupName(prefix: String, topicName: String) = "$prefix$topicName"
-
         /**
          * Ref. https://social.technet.microsoft.com/Forums/windows/en-US/0d7c1a2d-2bbe-4a54-9d1a-c3cff1871ed6/active-directory-group-name-character-limit?forum=winserverDS
          * The longest CommonName (CN) is limited to 64 characters
@@ -320,57 +350,55 @@ class LDAPGroup(private val config: FasitProperties) :
 
         fun maxTopicNameLength(): Int = MAX_GROUPNAME_LENGTH - KafkaGroupType.values().map { it.prefix.length }.max()!!
 
-        /**
-         * Enum class KafkaGroupType with LDAP group prefix included
-         * Each topic has 2 groups
-         * - a producer group with members allowed to produce events to topic
-         * - a consumer group with members allowed to consume events from topic
-         */
-        enum class KafkaGroupType(val prefix: String) {
-            @SerializedName("PRODUCER") PRODUCER("KP-"),
-            @SerializedName("CONSUMER") CONSUMER("KC-"),
-            @SerializedName("MANAGER") MANAGER("KM-")
-        }
-
-        /**
-         * Enum class KafkaGroupOperation
-         * ADD - add a new group member
-         * REMOVE - remove a group member from group
-         */
-        enum class GroupMemberOperation {
-            @SerializedName("ADD") ADD,
-            @SerializedName("REMOVE") REMOVE
-        }
-
-        /**
-         * data class UpdateKafkaGroupMember
-         */
-        data class UpdateKafkaGroupMember(
-            val role: KafkaGroupType,
-            val operation: GroupMemberOperation,
-            val member: String
-        )
-
-        /**
-         * A simpler version of LDAPResult, giving kafka API the resultCode and diagnostic message
-         */
-        data class SLDAPResult(
-            val resultCode: ResultCode = ResultCode.INSUFFICIENT_ACCESS_RIGHTS,
-            val message: String = "Not authorized"
-        )
-
         fun LDAPResult.simplify(): SLDAPResult = SLDAPResult(this.resultCode, this.diagnosticMessage ?: "")
-
-        /**
-         * data class KafkaGroup as result from functions iterating KafkaGroupType - see groupTypesCatch
-         */
-        data class KafkaGroup(
-            val type: KafkaGroupType = KafkaGroupType.MANAGER,
-            val name: String = "",
-            val members: List<String> = emptyList(),
-            val ldapResult: SLDAPResult = LDAPResult(
-                    50,
-                    ResultCode.INSUFFICIENT_ACCESS_RIGHTS).simplify()
-        )
     }
 }
+
+/**
+ * Enum class KafkaGroupType with LDAP group prefix included
+ * Each topic has 2 groups
+ * - a producer group with members allowed to produce events to topic
+ * - a consumer group with members allowed to consume events from topic
+ */
+enum class KafkaGroupType(val prefix: String) {
+    @SerializedName("PRODUCER") PRODUCER("KP-"),
+    @SerializedName("CONSUMER") CONSUMER("KC-"),
+    @SerializedName("MANAGER") MANAGER("KM-")
+}
+
+/**
+ * Enum class KafkaGroupOperation
+ * ADD - add a new group member
+ * REMOVE - remove a group member from group
+ */
+enum class GroupMemberOperation {
+    @SerializedName("ADD") ADD,
+    @SerializedName("REMOVE") REMOVE
+}
+
+/**
+ * data class UpdateKafkaGroupMember
+ */
+data class UpdateKafkaGroupMember(
+    val role: KafkaGroupType,
+    val operation: GroupMemberOperation,
+    val member: String
+)
+
+/**
+ * A simpler version of LDAPResult, giving kafka API the resultCode and diagnostic message
+ */
+data class SLDAPResult(
+    val resultCode: ResultCode = ResultCode.INSUFFICIENT_ACCESS_RIGHTS,
+    val message: String = "Not authorized"
+)
+
+/**
+ * data class KafkaGroup as result from functions iterating KafkaGroupType - see groupTypesCatch
+ */
+data class KafkaGroup(
+    val type: KafkaGroupType = KafkaGroupType.MANAGER,
+    val name: String = "",
+    val members: List<String> = emptyList(),
+    val ldapResult: SLDAPResult = LDAPResult(50, ResultCode.INSUFFICIENT_ACCESS_RIGHTS).simplify()
+)

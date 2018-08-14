@@ -49,6 +49,9 @@ test {
     useJUnitPlatform {
         includeEngines 'spek'
     }
+    testLogging {
+        showStandardStreams = true
+    }
 }
 
 repositories {

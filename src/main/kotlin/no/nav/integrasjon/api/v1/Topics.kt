@@ -19,7 +19,13 @@ import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.post
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.put
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.securityAndReponds
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.unAuthorized
+import no.nav.integrasjon.ldap.KafkaGroup
+import no.nav.integrasjon.ldap.KafkaGroupType
 import no.nav.integrasjon.ldap.LDAPGroup
+import no.nav.integrasjon.ldap.SLDAPResult
+import no.nav.integrasjon.ldap.UpdateKafkaGroupMember
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.Config
 import org.apache.kafka.clients.admin.ConfigEntry
@@ -34,8 +40,7 @@ import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.Resource
 import org.apache.kafka.common.resource.ResourceFilter
 import org.apache.kafka.common.resource.ResourceType
-import no.nav.integrasjon.api.nielsfalk.ktor.swagger.securityAndReponds
-import no.nav.integrasjon.api.nielsfalk.ktor.swagger.unAuthorized
+import java.util.regex.Pattern
 
 /**
  * Topic API
@@ -99,7 +104,7 @@ fun Routing.getTopics(adminClient: AdminClient) =
 
 // get the default replication factor from 1st broker configuration. Due to puppet, consistency across brokers in a
 // kafka cluster
-private fun getDefaultReplicationFactor(adminClient: AdminClient): Short =
+fun getDefaultReplicationFactor(adminClient: AdminClient): Short =
         adminClient.describeCluster().nodes().get().first().let { node ->
             adminClient.describeConfigs(
                     listOf(
@@ -111,14 +116,10 @@ private fun getDefaultReplicationFactor(adminClient: AdminClient): Short =
             ).all().get().values.first().get("default.replication.factor").value().toShort()
         }
 
+private val topicPattern: Pattern = Pattern.compile("[A-Za-z0-9-]+")
 // extension function for validating a topic name and that the future group names are of valid length
-private fun String.isValid(): Boolean =
-        this.map { c ->
-            when {
-                (c in 'A'..'Z' || c in 'a'..'z' || c == '-' || c in '0'..'9') -> true
-                else -> false
-            }
-        }.all { it } && LDAPGroup.validGroupLength(this)
+fun String.isValidTopicName(): Boolean = topicPattern.matcher(this).matches() &&
+        LDAPGroup.validGroupLength(this)
 
 @Group(swGroup)
 @Location(TOPICS)
@@ -127,7 +128,7 @@ data class PostTopicBody(val name: String, val numPartitions: Int = 1)
 
 data class PostTopicModel(
     val topicStatus: String,
-    val groupsStatus: List<LDAPGroup.Companion.KafkaGroup>,
+    val groupsStatus: List<KafkaGroup>,
     val aclStatus: String
 )
 
@@ -149,7 +150,7 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                     throw Exception("authenticated user $currentUser doesn't exist as NAV ident or " +
                             "service user in current LDAP domain, cannot be manager of topic")
 
-                if (!body.name.isValid())
+                if (!body.name.isValidTopicName())
                     throw Exception("Invalid topic name - $body.name. " +
                             "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
                             "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}")
@@ -178,7 +179,7 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
 
                 // create ACLs based on kafka groups in LDAP, except manager group KM-
                 val rsrc = Resource(ResourceType.TOPIC, newTopic.name())
-                val acls = groupsResult.filter { it.type != LDAPGroup.Companion.KafkaGroupType.MANAGER }.map { kafkaGroup ->
+                val acls = groupsResult.filter { it.type != KafkaGroupType.MANAGER }.map { kafkaGroup ->
                     val principal = "Group:${kafkaGroup.name}"
                     val host = "*"
                     listOf(
@@ -188,8 +189,8 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                                             principal,
                                             host,
                                             when (kafkaGroup.type) {
-                                                LDAPGroup.Companion.KafkaGroupType.PRODUCER -> AclOperation.WRITE
-                                                LDAPGroup.Companion.KafkaGroupType.CONSUMER -> AclOperation.READ
+                                                KafkaGroupType.PRODUCER -> AclOperation.WRITE
+                                                KafkaGroupType.CONSUMER -> AclOperation.READ
                                                 else -> AclOperation.READ // should never be here
                                             },
                                             AclPermissionType.ALLOW)),
@@ -227,7 +228,7 @@ data class DeleteTopic(val topicName: String)
 
 data class DeleteTopicModel(
     val topicStatus: String,
-    val groupsStatus: List<LDAPGroup.Companion.KafkaGroup>,
+    val groupsStatus: List<KafkaGroup>,
     val aclStatus: String
 )
 
@@ -438,7 +439,7 @@ fun Routing.getTopicAcls(adminClient: AdminClient) =
 @Location("$TOPICS/{topicName}/groups")
 data class GetTopicGroups(val topicName: String)
 
-data class GetTopicGroupsModel(val name: String, val groups: List<LDAPGroup.Companion.KafkaGroup>)
+data class GetTopicGroupsModel(val name: String, val groups: List<KafkaGroup>)
 
 fun Routing.getTopicGroups(config: FasitProperties) =
         get<GetTopicGroups>("a topic's groups".responds(ok<GetTopicGroupsModel>(), failed<AnError>())) { param ->
@@ -463,12 +464,12 @@ data class PutTopicGMember(val topicName: String)
 
 data class PutTopicGMemberModel(
     val name: String,
-    val updaterequest: LDAPGroup.Companion.UpdateKafkaGroupMember,
-    val status: LDAPGroup.Companion.SLDAPResult
+    val updaterequest: UpdateKafkaGroupMember,
+    val status: SLDAPResult
 )
 
 fun Routing.updateTopicGroup(config: FasitProperties) =
-        put<PutTopicGMember, LDAPGroup.Companion.UpdateKafkaGroupMember>(
+        put<PutTopicGMember, UpdateKafkaGroupMember>(
                 "add/remove members in topic groups. Only members in KM-{topicName} are authorized ".securityAndReponds(
                 BasicAuthSecurity(),
                 ok<PutTopicGMemberModel>(),
@@ -490,22 +491,9 @@ fun Routing.updateTopicGroup(config: FasitProperties) =
 
                     application.environment.log.info("$currentUser is manager of $topicName")
 
-                    val res = LDAPGroup(config)
-                            .use { ldap ->
-
-                                PutTopicGMemberModel(
-                                        topicName,
-                                        body,
-                                        ldap.updateKafkaGroupMembership(topicName,
-                                                LDAPGroup.Companion.UpdateKafkaGroupMember(
-                                                        body.role,
-                                                        body.operation,
-                                                        body.member
-                                                ))
-                                )
-                            }
+                    HttpStatusCode.OK to LDAPGroup(config)
+                            .use { PutTopicGMemberModel(topicName, body, it.updateKafkaGroupMembership(topicName, body)) }
                             .also { application.environment.log.info("$topicName's group has been updated") }
-                    Pair(HttpStatusCode.OK, res)
                 } else {
                     application.environment.log.info("$currentUser is NOT manager of $topicName")
                     Pair(HttpStatusCode.Unauthorized, "")
