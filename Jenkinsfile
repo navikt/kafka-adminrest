@@ -44,23 +44,27 @@ pipeline {
                 nais action: 'upload'
             }
         }
+        stage('deploy') {
+            parallel {
+                stage('deploy to test') {
+                    steps {
+                        deploy action: 'jiraPreprod', environment: 't4', namespace: 't4'
+                    }
+                }
 
-        stage('deploy to test') {
-            steps {
-                deploy action: 'jiraPreprod', environment: 't4', namespace: 't4'
-            }
-        }
+                stage('deploy to preprod') {
+                    steps {
+                        deploy action: 'jiraPreprod', environment: 'q4', namespace: 'q4'
+                    }
+                }
 
-        stage('deploy to preprod') {
-            steps {
-                deploy action: 'jiraPreprod', environment: 'q4', namespace: 'q4'
-            }
-        }
-
-        stage('deploy to production') {
-            when { environment name: 'DEPLOY_TO', value: 'production' }
-            steps {
-                deploy action: 'jiraProd'
+                stage('deploy to production') {
+                    when { environment name: 'DEPLOY_TO', value: 'production' }
+                    steps {
+                        deploy action: 'jiraProd'
+                        githubStatus action: 'tagRelease'
+                    }
+                }
             }
         }
     }
