@@ -5,30 +5,16 @@ pipeline {
 
     environment {
         APPLICATION_NAME = 'kafka-adminrest'
-        FASIT_ENV = 't4'
+        APPLICATION_SERVICE = 'CMDB-274891'
+        APPLICATION_COMPONENT = 'CMDB-247049'
         ZONE = 'fss'
-        NAMESPACE = 'default'
-        COMMIT_HASH_SHORT = gitVars 'commitHashShort'
-        COMMIT_HASH = gitVars 'commitHash'
+        DOCKER_SLUG = 'integrasjon'
     }
 
     stages {
         stage('initialize') {
             steps {
-                ciSkip 'check'
-                sh './gradlew clean'
-                script {
-                    applicationVersionGradle = sh(script: './gradlew -q printVersion', returnStdout: true).trim()
-                    env.APPLICATION_VERSION = "${applicationVersionGradle}"
-                    if (applicationVersionGradle.endsWith('-SNAPSHOT')) {
-                        env.APPLICATION_VERSION = "${applicationVersionGradle}.${env.BUILD_ID}-${env.COMMIT_HASH_SHORT}"
-                    } else {
-                        env.DEPLOY_TO = 'production'
-                    }
-                    changeLog = utils.gitVars(env.APPLICATION_NAME).changeLog.toString()
-                    githubStatus 'pending'
-                    slackStatus status: 'started', changeLog: "${changeLog}"
-                }
+                init action: 'gradle'
             }
         }
         stage('build') {
@@ -49,7 +35,7 @@ pipeline {
         }
         stage('push docker image') {
             steps {
-                dockerUtils 'createPushImage'
+                dockerUtils action: 'createPushImage'
             }
         }
         stage('validate & upload nais.yaml to nexus m2internal') {
@@ -60,85 +46,35 @@ pipeline {
         }
 
         stage('deploy to test') {
-            environment {
-                FASIT_ENV = 't4'
-                NAMESPACE = 't4'
-            }
             steps {
-                deployApplication()
+                deploy action: 'jiraPreprod', environment: 't4', namespace: 't4'
             }
         }
 
         stage('deploy to preprod') {
-            environment {
-                FASIT_ENV = 'q4'
-                NAMESPACE = 'q4'
-            }
             steps {
-                deployApplication()
+                deploy action: 'jiraPreprod', environment: 'q4', namespace: 'q4'
             }
         }
 
         stage('deploy to production') {
             when { environment name: 'DEPLOY_TO', value: 'production' }
-            environment {
-                FASIT_ENV = 'p'
-                NAMESPACE = 'default'
-                APPLICATION_SERVICE = 'CMDB-274891'
-                APPLICATION_COMPONENT = 'CMDB-247049'
-            }
             steps {
-                script {
-                    def jiraIssueId = nais action: 'jiraDeploy'
-                    slackStatus status: 'deploying', jiraIssueId: "${jiraIssueId}"
-                    def jiraProdIssueId = nais action: 'jiraDeployProd', jiraIssueId: jiraIssueId
-                    slackStatus status: 'deploying', jiraIssueId: "${jiraProdIssueId}"
-                    try {
-                        timeout(time: 1, unit: 'HOURS') {
-                            input id: "deploy", message: "Waiting for remote Jenkins server to deploy the application..."
-                        }
-                    } catch (Exception exception) {
-                        currentBuild.description = "Deploy failed, see " + currentBuild.description
-                        throw exception
-                    }
-                }
+                deploy action: 'jiraProd'
             }
         }
     }
     post {
         always {
-            ciSkip 'postProcess'
-            dockerUtils 'pruneBuilds'
-            script {
-                if (currentBuild.result == 'ABORTED') {
-                    slackStatus status: 'aborted'
-                }
-            }
+            postProcess action: 'always'
             junit '**/build/test-results/test/*.xml'
             archiveArtifacts artifacts: '**/build/libs/*', allowEmptyArchive: true
-            deleteDir()
         }
         success {
-            githubStatus 'success'
-            slackStatus status: 'success'
+            postProcess action: 'success'
         }
         failure {
-            githubStatus 'failure'
-            slackStatus status: 'failure'
+            postProcess action: 'failure'
         }
-    }
-}
-
-
-void deployApplication() {
-    def jiraIssueId = nais action: 'jiraDeploy'
-    slackStatus status: 'deploying', jiraIssueId: "${jiraIssueId}"
-    try {
-        timeout(time: 1, unit: 'HOURS') {
-            input id: "deploy", message: "Waiting for remote Jenkins server to deploy the application..."
-        }
-    } catch (Exception exception) {
-        currentBuild.description = "Deploy failed, see " + currentBuild.description
-        throw exception
     }
 }
