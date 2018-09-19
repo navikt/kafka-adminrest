@@ -45,4 +45,5 @@ fasitResources:
     resourceType: ApplicationProperties
   exposed:
   - alias: kafka-adminrest-api
+    resourceType: restservice
     path: /api/v1
