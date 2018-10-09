@@ -36,14 +36,7 @@ task printVersion() {
     }
 }
 
-test {
-    useJUnitPlatform {
-        includeEngines 'spek'
-    }
-    testLogging {
-        showStandardStreams = true
-    }
-}
+test { useJUnitPlatform { includeEngines 'spek' } }
 
 repositories {
     maven { url "http://packages.confluent.io/maven" }
