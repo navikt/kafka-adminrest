@@ -6,5 +6,6 @@ RUN gradle build --no-daemon --console=plain
 
 FROM navikt/java:11
 ENV JAVA_OPTS="-Dlogback.configurationFile=logback-remote.xml"
-COPY --from=builder /home/gradle/src/build/install/kafka-adminrest/bin/kafka-adminrest bin/app
+RUN mkdir bin
 COPY --from=builder /home/gradle/src/build/install/kafka-adminrest/lib lib/
+COPY --from=builder /home/gradle/src/build/install/kafka-adminrest/bin/kafka-adminrest bin/app
