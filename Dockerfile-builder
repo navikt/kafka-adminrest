@@ -1,7 +1,7 @@
-FROM openjdk:11-slim
-COPY . /app
+FROM gradle:jdk11-slim
+COPY --chown=gradle:gradle . /app
 WORKDIR /app
-RUN ./gradlew build --no-daemon --console plain
+RUN gradle build --no-daemon --console=plain
 
 FROM navikt/java:11
 ENV JAVA_OPTS="-Dlogback.configurationFile=logback-remote.xml"
