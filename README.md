@@ -38,17 +38,11 @@ See also swagger documentation at host:port/api/v1
 ## Build 
 
 ```
-./gradlew clean build
-./gradlew shadowJar
-
-The result is fat jar, kafka.adminclient-<version>.jar
+./gradlew clean build installDist
 ```
 ### Contact us
 #### Code/project related questions can be sent to 
 * Torstein Nesby, `torstein.nesby@nav.no`
 * Trong Huu Nguyen, `trong.huu.nguyen@nav.no`
 
-For internal resources, send requests/questions to slack#kafka
-
-
-
+For internal resources, send requests/questions to Slack #kafka

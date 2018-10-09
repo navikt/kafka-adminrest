@@ -5,8 +5,6 @@ pipeline {
 
     environment {
         APPLICATION_NAME = 'kafka-adminrest'
-        APPLICATION_SERVICE = 'CMDB-274891'
-        APPLICATION_COMPONENT = 'CMDB-247049'
         ZONE = 'fss'
         DOCKER_SLUG = 'integrasjon'
     }
@@ -28,9 +26,9 @@ pipeline {
                 slackStatus status: 'passed'
             }
         }
-        stage('generate executable FAT jar') {
+        stage('generate distribution files') {
             steps {
-                sh './gradlew shadowJar'
+                sh './gradlew installDist'
             }
         }
         stage('push docker image') {

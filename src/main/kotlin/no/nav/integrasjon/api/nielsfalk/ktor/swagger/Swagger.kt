@@ -199,9 +199,9 @@ open class Property(
 
 fun addDefinition(kClass: KClass<*>) {
     if (kClass != Unit::class) {
-        swagger.definitions.computeIfAbsent(kClass.modelName()) {
-            log.info { "Generating swagger spec for model $it" }
-            ModelData(kClass)
+        if (!swagger.definitions.containsKey(kClass.modelName())) {
+            log.info { "Generating swagger spec for model ${kClass.modelName()}" }
+            swagger.definitions[kClass.modelName()] = ModelData(kClass)
         }
     }
 }
