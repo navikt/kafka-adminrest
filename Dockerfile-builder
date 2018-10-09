@@ -1,11 +1,10 @@
 FROM gradle:jdk11-slim as builder
 USER root
-COPY . /home/gradle/src
-WORKDIR /home/gradle/src
-RUN gradle build --no-daemon --console=plain
+ADD . /builder
+WORKDIR /builder
+RUN gradle build installDist --no-daemon
 
 FROM navikt/java:11
 ENV JAVA_OPTS="-Dlogback.configurationFile=logback-remote.xml"
-RUN mkdir bin
-COPY --from=builder /home/gradle/src/build/install/kafka-adminrest/lib lib/
-COPY --from=builder /home/gradle/src/build/install/kafka-adminrest/bin/kafka-adminrest bin/app
+COPY --from=builder /builder/build/install/kafka-adminrest/lib/ lib/
+COPY --from=builder /builder/build/install/kafka-adminrest/bin/kafka-adminrest bin/app
