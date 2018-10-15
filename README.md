@@ -1,6 +1,9 @@
 # kafka-adminrest
 
 [![Build Status](https://travis-ci.org/navikt/kafka-adminrest.svg?branch=master)](https://travis-ci.org/navikt/kafka-adminrest)
+[![Docker Build Status](https://img.shields.io/docker/build/navikt/kafka-adminrest.svg)](https://hub.docker.com/r/navikt/kafka-adminrest/builds/)
+[![Docker Automated build](https://img.shields.io/docker/automated/navikt/kafka-adminrest.svg)](https://hub.docker.com/r/navikt/kafka-adminrest/)
+
 
 Provides a REST interface for 
 - List of brokers in kafka cluster and their configuration (Broker API)
