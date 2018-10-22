@@ -236,6 +236,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient, fasit: FasitProperties)
 }
 
 fun KafkaGroupType.into(): AclOperation = when (this) {
+    KafkaGroupType.CONNECT -> AclOperation.CREATE
     KafkaGroupType.PRODUCER -> AclOperation.WRITE
     else -> AclOperation.READ
 }

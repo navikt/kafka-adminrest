@@ -358,11 +358,13 @@ class LDAPGroup(private val config: FasitProperties) :
 
 /**
  * Enum class KafkaGroupType with LDAP group prefix included
- * Each topic has 2 groups
+ * Each topic has 3 groups
  * - a producer group with members allowed to produce events to topic
  * - a consumer group with members allowed to consume events from topic
+ * - a connect group with members allowed to create on topic
  */
 enum class KafkaGroupType(val prefix: String) {
+    @SerializedName("CONNECT") CONNECT("CO-"),
     @SerializedName("PRODUCER") PRODUCER("KP-"),
     @SerializedName("CONSUMER") CONSUMER("KC-"),
     @SerializedName("MANAGER") MANAGER("KM-")

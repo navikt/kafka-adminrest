@@ -189,6 +189,7 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                                             principal,
                                             host,
                                             when (kafkaGroup.type) {
+                                                KafkaGroupType.CONNECT -> AclOperation.CREATE
                                                 KafkaGroupType.PRODUCER -> AclOperation.WRITE
                                                 KafkaGroupType.CONSUMER -> AclOperation.READ
                                                 else -> AclOperation.READ // should never be here
