@@ -30,14 +30,10 @@ import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.Config
 import org.apache.kafka.clients.admin.ConfigEntry
 import org.apache.kafka.clients.admin.NewTopic
-import org.apache.kafka.common.acl.AccessControlEntry
 import org.apache.kafka.common.acl.AccessControlEntryFilter
 import org.apache.kafka.common.acl.AclBinding
 import org.apache.kafka.common.acl.AclBindingFilter
-import org.apache.kafka.common.acl.AclOperation
-import org.apache.kafka.common.acl.AclPermissionType
 import org.apache.kafka.common.config.ConfigResource
-import org.apache.kafka.common.resource.Resource
 import org.apache.kafka.common.resource.ResourceFilter
 import org.apache.kafka.common.resource.ResourceType
 import java.util.regex.Pattern
@@ -178,30 +174,8 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                 }
 
                 // create ACLs based on kafka groups in LDAP, except manager group KM-
-                val rsrc = Resource(ResourceType.TOPIC, newTopic.name())
                 val acls = groupsResult.filter { it.type != KafkaGroupType.MANAGER }.map { kafkaGroup ->
-                    val principal = "Group:${kafkaGroup.name}"
-                    val host = "*"
-                    listOf(
-                            AclBinding(
-                                    rsrc,
-                                    AccessControlEntry(
-                                            principal,
-                                            host,
-                                            when (kafkaGroup.type) {
-                                                KafkaGroupType.PRODUCER -> AclOperation.WRITE
-                                                KafkaGroupType.CONSUMER -> AclOperation.READ
-                                                else -> AclOperation.READ // should never be here
-                                            },
-                                            AclPermissionType.ALLOW)),
-                            AclBinding(
-                                    rsrc,
-                                    AccessControlEntry(
-                                            principal,
-                                            host,
-                                            AclOperation.DESCRIBE,
-                                            AclPermissionType.ALLOW))
-                    )
+                    kafkaGroup.type.intoAcls(newTopic.name())
                 }.flatMap { it }
 
                 application.environment.log.info("ACLs create request: $acls")
