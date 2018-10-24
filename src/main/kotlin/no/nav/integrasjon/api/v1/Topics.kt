@@ -26,6 +26,7 @@ import no.nav.integrasjon.ldap.KafkaGroupType
 import no.nav.integrasjon.ldap.LDAPGroup
 import no.nav.integrasjon.ldap.SLDAPResult
 import no.nav.integrasjon.ldap.UpdateKafkaGroupMember
+import no.nav.integrasjon.ldap.intoAcls
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.Config
 import org.apache.kafka.clients.admin.ConfigEntry
