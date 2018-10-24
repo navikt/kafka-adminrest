@@ -17,18 +17,13 @@ import no.nav.integrasjon.api.nielsfalk.ktor.swagger.securityAndReponds
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.unAuthorized
 import no.nav.integrasjon.ldap.KafkaGroupType
 import no.nav.integrasjon.ldap.LDAPGroup
+import no.nav.integrasjon.ldap.intoAcls
 import no.nav.integrasjon.ldap.toGroupName
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.Config
 import org.apache.kafka.clients.admin.ConfigEntry
 import org.apache.kafka.clients.admin.NewTopic
-import org.apache.kafka.common.acl.AccessControlEntry
-import org.apache.kafka.common.acl.AclBinding
-import org.apache.kafka.common.acl.AclOperation
-import org.apache.kafka.common.acl.AclPermissionType
 import org.apache.kafka.common.config.ConfigResource
-import org.apache.kafka.common.resource.Resource
-import org.apache.kafka.common.resource.ResourceType
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.util.UUID
@@ -234,12 +229,3 @@ fun Routing.registerOneshotApi(adminClient: AdminClient, fasit: FasitProperties)
         }
     }
 }
-
-fun KafkaGroupType.into(): AclOperation = when (this) {
-    KafkaGroupType.PRODUCER -> AclOperation.WRITE
-    else -> AclOperation.READ
-}
-
-fun KafkaGroupType.intoAcls(topic: String): List<AclBinding> = listOf(AclOperation.DESCRIBE, into())
-        .map { AccessControlEntry("Group:${toGroupName(prefix, topic)}", "*", it, AclPermissionType.ALLOW) }
-        .map { AclBinding(Resource(ResourceType.TOPIC, topic), it) }
