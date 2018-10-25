@@ -24,6 +24,12 @@ import no.nav.integrasjon.getConnectionInfo
 import no.nav.integrasjon.srvUserDN
 import no.nav.integrasjon.groupDN
 import no.nav.integrasjon.ldap.LDAPGroup.Companion.simplify
+import org.apache.kafka.common.acl.AccessControlEntry
+import org.apache.kafka.common.acl.AclBinding
+import org.apache.kafka.common.acl.AclOperation
+import org.apache.kafka.common.acl.AclPermissionType
+import org.apache.kafka.common.resource.Resource
+import org.apache.kafka.common.resource.ResourceType
 
 /**
  * LDAPGroup provides services for LDAP group management
@@ -367,6 +373,15 @@ enum class KafkaGroupType(val prefix: String) {
     @SerializedName("CONSUMER") CONSUMER("KC-"),
     @SerializedName("MANAGER") MANAGER("KM-")
 }
+
+fun KafkaGroupType.into(): List<AclOperation> = when (this) {
+    KafkaGroupType.PRODUCER -> listOf(AclOperation.DESCRIBE, AclOperation.WRITE, AclOperation.CREATE)
+    else -> listOf(AclOperation.DESCRIBE, AclOperation.READ)
+}
+
+fun KafkaGroupType.intoAcls(topicName: String): List<AclBinding> = into()
+        .map { AccessControlEntry("Group:${toGroupName(prefix, topicName)}", "*", it, AclPermissionType.ALLOW) }
+        .map { AclBinding(Resource(ResourceType.TOPIC, topicName), it) }
 
 /**
  * Enum class KafkaGroupOperation
