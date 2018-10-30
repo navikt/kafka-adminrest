@@ -35,7 +35,8 @@ import org.apache.kafka.common.acl.AccessControlEntryFilter
 import org.apache.kafka.common.acl.AclBinding
 import org.apache.kafka.common.acl.AclBindingFilter
 import org.apache.kafka.common.config.ConfigResource
-import org.apache.kafka.common.resource.ResourceFilter
+import org.apache.kafka.common.resource.PatternType
+import org.apache.kafka.common.resource.ResourcePatternFilter
 import org.apache.kafka.common.resource.ResourceType
 import java.util.regex.Pattern
 
@@ -231,7 +232,7 @@ fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
 
                     // delete ACLs
                     val acls = AclBindingFilter(
-                            ResourceFilter(ResourceType.TOPIC, topicName),
+                            ResourcePatternFilter(ResourceType.TOPIC, topicName, PatternType.LITERAL),
                             AccessControlEntryFilter.ANY
                     )
 
@@ -397,7 +398,7 @@ fun Routing.getTopicAcls(adminClient: AdminClient) =
                         topicName,
                         adminClient.describeAcls(
                                 AclBindingFilter(
-                                        ResourceFilter(ResourceType.TOPIC, topicName),
+                                        ResourcePatternFilter(ResourceType.TOPIC, topicName, PatternType.LITERAL),
                                         AccessControlEntryFilter.ANY)
                         )
                                 .values()

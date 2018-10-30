@@ -1,7 +1,7 @@
 package no.nav.integrasjon.api.nielsfalk.ktor.swagger
 
 import io.ktor.application.ApplicationCall
-import io.ktor.content.URIFileContent
+import io.ktor.http.content.URIFileContent
 import io.ktor.response.respond
 
 /**

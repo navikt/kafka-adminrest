@@ -16,17 +16,20 @@ import no.nav.integrasjon.FasitPropFactory
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.api.v1.AllowedConfigEntries
 import no.nav.integrasjon.api.v1.BROKERS
+import no.nav.integrasjon.api.v1.DeleteTopicModel
 import no.nav.integrasjon.api.v1.GROUPS
 import no.nav.integrasjon.api.v1.GetBrokerConfigModel
 import no.nav.integrasjon.api.v1.GetBrokersModel
 import no.nav.integrasjon.api.v1.GetGroupMembersModel
 import no.nav.integrasjon.api.v1.GetGroupsModel
+import no.nav.integrasjon.api.v1.GetTopicACLModel
 import no.nav.integrasjon.api.v1.GetTopicConfigModel
 import no.nav.integrasjon.api.v1.GetTopicGroupsModel
 import no.nav.integrasjon.api.v1.GetTopicsModel
 import no.nav.integrasjon.api.v1.ONESHOT
 import no.nav.integrasjon.api.v1.OneshotCreationRequest
 import no.nav.integrasjon.api.v1.PostTopicBody
+import no.nav.integrasjon.api.v1.PostTopicModel
 import no.nav.integrasjon.api.v1.PutTopicConfigEntryBody
 import no.nav.integrasjon.api.v1.RoleMember
 import no.nav.integrasjon.api.v1.TOPICS
@@ -38,27 +41,22 @@ import no.nav.integrasjon.ldap.UpdateKafkaGroupMember
 import no.nav.integrasjon.test.common.InMemoryLDAPServer
 import org.amshove.kluent.shouldBe
 import org.amshove.kluent.shouldBeEqualTo
+import org.amshove.kluent.shouldContain
 import org.amshove.kluent.shouldContainAll
 import org.amshove.kluent.shouldEqual
 import org.amshove.kluent.shouldEqualTo
 import org.apache.kafka.clients.admin.ConfigEntry
-import org.jetbrains.spek.api.Spek
-import org.jetbrains.spek.api.dsl.given
-import org.jetbrains.spek.api.dsl.it
-import org.jetbrains.spek.api.dsl.on
-import org.jetbrains.spek.api.dsl.xon
+import org.spekframework.spek2.Spek
+import org.spekframework.spek2.style.specification.describe
 
-/**
- * Since the embedded kafka doesn't support authentication&authorization yet,
- * not possible to test route ACLS or those in TOPICS (create/delete and get acls) related to acl management
- *
- * TODO - need to enhance embedded kafka
- * TODO - need to define the missing routes
- */
 object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
     val preTopics = setOf("tpc-01", "tpc-02", "tpc-03")
+
+    // topics to create in tests
+    val topics2CreateDelete = listOf("tpc-created01", "tpc-created02", "tpc-created03")
+    val topics4ACLTesting = listOf("tpc-acl01")
 
     // Combining srv users in ServiceAccounts and the node below, ApplAccounts (Basta)
     // to be added and removed from tpc-01
@@ -74,12 +72,13 @@ object KafkaAdminRestSpec : Spek({
     )
 
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
-    val kCluster = KafkaEnvironment(1, topics = preTopics.toList(), autoStart = true)
+    val kCluster = KafkaEnvironment(1, topics = preTopics.toList(), withSecurity = true, autoStart = true)
 
     // establish correct set of fasit properties
     val fp = FasitProperties(
-            kCluster.brokersURL, "kafka-adminrest", "FALSE",
-            "", "", "", "",
+            kCluster.brokersURL, "kafka-adminrest", "TRUE",
+            "SASL_PLAINTEXT", "PLAIN",
+            "srvkafkaclient", "kafkaclient", // see predfined users in embedded kafka
             ldapConnTimeout = 250,
             ldapUserAttrName = "uid",
             ldapAuthHost = "localhost",
@@ -98,7 +97,7 @@ object KafkaAdminRestSpec : Spek({
     // set the correct set of fasit properties in fasit factory - before starting ktor module kafkaAdminRest
     FasitPropFactory.setFasitProperties(fp)
 
-    given("application kafka-adminrest") {
+    describe("application kafka-adminrest") {
 
         val engine = TestApplicationEngine(createTestEnvironment())
         engine.start(wait = false)
@@ -108,9 +107,9 @@ object KafkaAdminRestSpec : Spek({
 
         with(engine) {
 
-            on("Route $BROKERS") {
+            context("Route $BROKERS") {
 
-                it("should return list of ${kCluster.serverPark.brokers.size} broker(s) in kafka cluster") {
+                it("should return list of ${kCluster.brokers.size} broker(s) in kafka cluster") {
 
                     val call = handleRequest(HttpMethod.Get, BROKERS) {
                         addHeader(HttpHeaders.Accept, "application/json")
@@ -121,7 +120,7 @@ object KafkaAdminRestSpec : Spek({
                             object : TypeToken<GetBrokersModel>() {}.type)
 
                     call.response.status() shouldBe HttpStatusCode.OK
-                    result.brokers.size shouldEqualTo kCluster.serverPark.brokers.size
+                    result.brokers.size shouldEqualTo kCluster.brokers.size
                 }
 
                 it("should return configuration for broker 0") {
@@ -139,7 +138,7 @@ object KafkaAdminRestSpec : Spek({
                 }
             }
 
-            on("Route $GROUPS") {
+            context("Route $GROUPS") {
 
                 it("should list all kafka groups in LDAP") {
 
@@ -178,7 +177,7 @@ object KafkaAdminRestSpec : Spek({
                 }
             }
 
-            on("Route $TOPICS") {
+            context("Route $TOPICS") {
 
                 it("should list all topics $preTopics in kafka cluster") {
 
@@ -192,6 +191,61 @@ object KafkaAdminRestSpec : Spek({
 
                     call.response.status() shouldBe HttpStatusCode.OK
                     result.topics shouldContainAll preTopics
+                }
+
+                (topics2CreateDelete + topics4ACLTesting).forEach { topicToCreate ->
+
+                    it("should create topic $topicToCreate") {
+
+                        val call = handleRequest(HttpMethod.Post, TOPICS) {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                            addHeader(HttpHeaders.ContentType, "application/json")
+                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                            setBody(Gson().toJson(PostTopicBody(topicToCreate)))
+                        }
+
+                        val result: PostTopicModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<PostTopicModel>() {}.type)
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+
+                        result.topicStatus shouldContain "created topic"
+                        result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
+                        result.aclStatus shouldContain "created"
+                    }
+                }
+
+                it("should not be possible to delete ${topics2CreateDelete.first()} for non-member in KM-") {
+                    val call = handleRequest(HttpMethod.Delete, "$TOPICS/${topics2CreateDelete.first()}") {
+                        addHeader(HttpHeaders.Accept, "application/json")
+                        addHeader(HttpHeaders.ContentType, "application/json")
+                        addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("igroup:itest".toByteArray())}")
+                    }
+
+                    call.response.status() shouldBe HttpStatusCode.Unauthorized
+                }
+
+                topics2CreateDelete.forEach { topicToDelete ->
+
+                    it("should delete topic $topicToDelete for member in KM-") {
+
+                        val call = handleRequest(HttpMethod.Delete, "$TOPICS/$topicToDelete") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                            addHeader(HttpHeaders.ContentType, "application/json")
+                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                        }
+
+                        val result: DeleteTopicModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<DeleteTopicModel>() {}.type)
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+
+                        result.topicStatus shouldContain "deleted topic"
+                        result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
+                        result.aclStatus shouldContain "deleted"
+                    }
                 }
 
                 preTopics.forEach { topic ->
@@ -251,7 +305,23 @@ object KafkaAdminRestSpec : Spek({
                         setBody(jsonPayload)
                     }
 
-                    call.response.status() shouldBe HttpStatusCode.ExceptionFailed
+                    call.response.status() shouldBe HttpStatusCode.ExpectationFailed
+                }
+
+                topics4ACLTesting.forEach { tpcACL ->
+                    it("should for topic $tpcACL report standard ACL for KP- and KC- group") {
+                        val call = handleRequest(HttpMethod.Get, "$TOPICS/$tpcACL/acls") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                            addHeader(HttpHeaders.ContentType, "application/json")
+                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                        }
+
+                        val result: GetTopicACLModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicACLModel>() {}.type)
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+                    }
                 }
 
                 it("should report non-existing topic for topic 'invalid'") {
@@ -260,7 +330,7 @@ object KafkaAdminRestSpec : Spek({
                         addHeader(HttpHeaders.Accept, "application/json")
                     }
 
-                    call.response.status() shouldBe HttpStatusCode.ExceptionFailed
+                    call.response.status() shouldBe HttpStatusCode.ExpectationFailed
                     call.response.content.toString() shouldBeEqualTo """{"error":"Sorry, exception happened - java.lang.Exception: failure, topic invalid does not exist"}"""
                 }
 
@@ -343,7 +413,7 @@ object KafkaAdminRestSpec : Spek({
                         setBody(jsonPayload)
                     }
 
-                    call.response.status() shouldBe HttpStatusCode.ExceptionFailed
+                    call.response.status() shouldBe HttpStatusCode.ExpectationFailed
                 }
 
                 usersToManage.forEach { srvUser, role ->
@@ -401,12 +471,12 @@ object KafkaAdminRestSpec : Spek({
                             setBody(jsonPayload)
                         }
 
-                        call.response.status() shouldBe HttpStatusCode.ExceptionFailed
+                        call.response.status() shouldBe HttpStatusCode.ExpectationFailed
                     }
                 }
             }
 
-            xon("Route $ONESHOT") {
+            context("Route $ONESHOT") {
                 it("creates a topic with one consumer + manager") {
                     val call = handleRequest(HttpMethod.Put, ONESHOT) {
                         addHeader(HttpHeaders.Accept, "application/json")

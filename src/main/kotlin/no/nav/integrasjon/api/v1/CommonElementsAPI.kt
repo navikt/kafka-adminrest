@@ -29,7 +29,7 @@ internal suspend fun PipelineContext<Unit, ApplicationCall>.respondCatch(block: 
             call.respond(block())
         } catch (e: Exception) {
             application.environment.log.error(EXCEPTION, e)
-            call.respond(HttpStatusCode.ExceptionFailed, AnError("$EXCEPTION$e"))
+            call.respond(HttpStatusCode.ExpectationFailed, AnError("$EXCEPTION$e"))
         }
 
 internal suspend fun PipelineContext<Unit, ApplicationCall>.respondSelectiveCatch(block: () -> Pair<HttpStatusCode, Any>) =
@@ -38,5 +38,5 @@ internal suspend fun PipelineContext<Unit, ApplicationCall>.respondSelectiveCatc
             call.respond(res.first, res.second)
         } catch (e: Exception) {
             application.environment.log.error(EXCEPTION, e)
-            call.respond(HttpStatusCode.ExceptionFailed, AnError("$EXCEPTION$e"))
+            call.respond(HttpStatusCode.ExpectationFailed, AnError("$EXCEPTION$e"))
         }

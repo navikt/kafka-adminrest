@@ -4,7 +4,7 @@ import io.ktor.application.call
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.response.respondText
-import io.ktor.response.respondWrite
+import io.ktor.response.respondTextWriter
 import io.ktor.routing.Routing
 import io.ktor.routing.get
 import io.prometheus.client.CollectorRegistry
@@ -47,14 +47,14 @@ fun Routing.getIsReady(adminClient: AdminClient, config: FasitProperties) =
                 )
                     Pair(HttpStatusCode.OK, "is ready")
                 else
-                    Pair(HttpStatusCode.ExceptionFailed, "is not ready")
+                    Pair(HttpStatusCode.ExpectationFailed, "is not ready")
             }
         }
 
 fun Routing.getPrometheus(collectorRegistry: CollectorRegistry) =
         get("/prometheus") {
             val names = call.request.queryParameters.getAll("name[]")?.toSet() ?: setOf()
-            call.respondWrite(ContentType.parse(TextFormat.CONTENT_TYPE_004)) {
+            call.respondTextWriter(ContentType.parse(TextFormat.CONTENT_TYPE_004)) {
                 TextFormat.write004(
                         this,
                         collectorRegistry.filteredMetricFamilySamples(names))

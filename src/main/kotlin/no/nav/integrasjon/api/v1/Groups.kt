@@ -46,7 +46,7 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.ldapRespondCatch(
             }
         } catch (e: Exception) {
             application.environment.log.error(EXCEPTION, e)
-            call.respond(HttpStatusCode.ExceptionFailed, AnError("$EXCEPTION$e"))
+            call.respond(HttpStatusCode.ExpectationFailed, AnError("$EXCEPTION$e"))
         }
 
 /**
