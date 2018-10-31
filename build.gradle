@@ -1,7 +1,7 @@
 buildscript {
     ext.kotlin_version = '1.2.71'
     ext.kafka_version = '2.0.0'
-    ext.embeddedkafka_version = '2.0.0'
+    ext.embeddedkafka_version = '2.0.1'
     ext.coroutines_version = '0.22.5'
     ext.kotlin_loggin_version = '1.6.10'
     ext.ktor_version = '0.9.5'
