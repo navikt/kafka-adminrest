@@ -38,6 +38,7 @@ import no.nav.integrasjon.kafkaAdminREST
 import no.nav.integrasjon.ldap.GroupMemberOperation
 import no.nav.integrasjon.ldap.KafkaGroupType
 import no.nav.integrasjon.ldap.UpdateKafkaGroupMember
+import no.nav.integrasjon.ldap.intoAcls
 import no.nav.integrasjon.test.common.InMemoryLDAPServer
 import org.amshove.kluent.shouldBe
 import org.amshove.kluent.shouldBeEqualTo
@@ -309,7 +310,7 @@ object KafkaAdminRestSpec : Spek({
                 }
 
                 topics4ACLTesting.forEach { tpcACL ->
-                    it("should for topic $tpcACL report standard ACL for KP- and KC- group") {
+                    it("should for topic $tpcACL report standard ACL for KP- and KC- groups") {
                         val call = handleRequest(HttpMethod.Get, "$TOPICS/$tpcACL/acls") {
                             addHeader(HttpHeaders.Accept, "application/json")
                             addHeader(HttpHeaders.ContentType, "application/json")
@@ -320,7 +321,13 @@ object KafkaAdminRestSpec : Spek({
                                 call.response.content ?: "",
                                 object : TypeToken<GetTopicACLModel>() {}.type)
 
+                        val expectedResult = KafkaGroupType.values()
+                                .filter { it != KafkaGroupType.MANAGER }
+                                .map { grType -> grType.intoAcls(tpcACL) }
+                                .flatten()
+
                         call.response.status() shouldBe HttpStatusCode.OK
+                        result.acls shouldContainAll expectedResult
                     }
                 }
 
