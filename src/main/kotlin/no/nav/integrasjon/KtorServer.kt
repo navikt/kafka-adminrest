@@ -34,10 +34,13 @@ import no.nav.integrasjon.api.v1.topicsAPI
 import no.nav.integrasjon.api.v1.brokersAPI
 import no.nav.integrasjon.api.v1.groupsAPI
 import no.nav.integrasjon.api.v1.aclAPI
+import no.nav.integrasjon.api.v1.backEndServicesAreOk
 import no.nav.integrasjon.api.v1.registerOneshotApi
 import no.nav.integrasjon.ldap.LDAPAuthenticate
+import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.apache.kafka.common.config.SaslConfigs
 import org.slf4j.event.Level
 import java.util.Properties
 
@@ -60,6 +63,9 @@ val swagger = Swagger(
  * with suitable set of functionality
  */
 
+internal const val JAAS_PLAIN_LOGIN = "org.apache.kafka.common.security.plain.PlainLoginModule"
+internal const val JAAS_REQUIRED = "required"
+
 fun Application.kafkaAdminREST() {
 
     val log = KotlinLogging.logger { }
@@ -67,22 +73,24 @@ fun Application.kafkaAdminREST() {
     log.info { "Starting server" }
 
     val fasitProps = FasitPropFactory.fasitProperties
-    val adminClient = fasitProps.let { fp ->
+    val adminClient: AdminClient? = try {
+        fasitProps.let { fp ->
 
-        log.info { "Creating kafka admin client" }
+            log.info { "Creating kafka admin client" }
 
-        AdminClient.create(Properties()
-                .apply {
-                    set(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, fp.kafkaBrokers)
-                    set(ConsumerConfig.CLIENT_ID_CONFIG, fp.kafkaClientID)
-                    if (fp.kafkaSecurityEnabled()) {
-                        set("security.protocol", fp.kafkaSecProt)
-                        set("sasl.mechanism", fp.kafkaSaslMec)
-                        set("sasl.jaas.config", "org.apache.kafka.common.security.plain.PlainLoginModule required " +
-                                "username=\"${fp.kafkaUser}\" password=\"${fp.kafkaPassword}\";")
-                    }
-                })
-    }
+            AdminClient.create(Properties()
+                    .apply {
+                        set(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, fp.kafkaBrokers)
+                        set(ConsumerConfig.CLIENT_ID_CONFIG, fp.kafkaClientID)
+                        if (fp.kafkaSecurityEnabled()) {
+                            set(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, fp.kafkaSecProt)
+                            set(SaslConfigs.SASL_MECHANISM, fp.kafkaSaslMec)
+                            set(SaslConfigs.SASL_JAAS_CONFIG, "$JAAS_PLAIN_LOGIN $JAAS_REQUIRED " +
+                                    "username=\"${fp.kafkaUser}\" password=\"${fp.kafkaPassword}\";")
+                        }
+                    })
+        }
+    } catch (e: Exception) { null }
 
     val collectorRegistry = CollectorRegistry.defaultRegistry
 
@@ -138,10 +146,14 @@ fun Application.kafkaAdminREST() {
         naisAPI(adminClient, fasitProps, collectorRegistry)
 
         // provide the essential, management of kafka environment, topic creation and authorization
+
         topicsAPI(adminClient, fasitProps)
         brokersAPI(adminClient)
         aclAPI(adminClient)
         groupsAPI(fasitProps)
-        registerOneshotApi(adminClient, fasitProps)
+
+        if (backEndServicesAreOk(adminClient, fasitProps).toList().filter { false }.size == 3) {
+            registerOneshotApi(adminClient!!, fasitProps)
+        }
     }
 }

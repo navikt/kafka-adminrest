@@ -5,9 +5,11 @@ import io.ktor.application.call
 import io.ktor.auth.authenticate
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.HttpStatusCode.Companion.BadRequest
 import io.ktor.http.HttpStatusCode.Companion.ExpectationFailed
 import io.ktor.http.HttpStatusCode.Companion.NotFound
 import io.ktor.http.HttpStatusCode.Companion.OK
+import io.ktor.http.HttpStatusCode.Companion.ServiceUnavailable
 import io.ktor.http.HttpStatusCode.Companion.Unauthorized
 import io.ktor.locations.Location
 import io.ktor.locations.delete
@@ -86,6 +88,8 @@ fun responses(vararg pairs: Pair<HttpStatusCode, KClass<*>>) = Metadata(response
 
 inline fun <reified T> ok(): Pair<HttpStatusCode, KClass<*>> = OK to T::class
 inline fun <reified T> failed(): Pair<HttpStatusCode, KClass<*>> = ExpectationFailed to T::class
+inline fun <reified T> serviceUnavailable(): Pair<HttpStatusCode, KClass<*>> = ServiceUnavailable to T::class
+inline fun <reified T> badRequest(): Pair<HttpStatusCode, KClass<*>> = BadRequest to T::class
 inline fun <reified T> unAuthorized(): Pair<HttpStatusCode, KClass<*>> = Unauthorized to T::class
 
 fun notFound(): Pair<HttpStatusCode, KClass<*>> = NotFound to Unit::class

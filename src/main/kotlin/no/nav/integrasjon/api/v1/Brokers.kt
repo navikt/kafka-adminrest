@@ -2,15 +2,17 @@ package no.nav.integrasjon.api.v1
 
 import io.ktor.locations.Location
 import io.ktor.routing.Routing
+import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
-import no.nav.integrasjon.api.nielsfalk.ktor.swagger.failed
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.serviceUnavailable
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.ConfigEntry
 import org.apache.kafka.common.Node
 import org.apache.kafka.common.config.ConfigResource
+import java.util.concurrent.TimeUnit
 
 /**
  * Brokers API
@@ -20,7 +22,7 @@ import org.apache.kafka.common.config.ConfigResource
  */
 
 // a wrapper for this api to be installed as routes
-fun Routing.brokersAPI(adminClient: AdminClient) {
+fun Routing.brokersAPI(adminClient: AdminClient?) {
 
     getBrokers(adminClient)
     getBrokerConfig(adminClient)
@@ -38,14 +40,18 @@ class GetBrokers
 
 data class GetBrokersModel(val brokers: List<Node>)
 
-fun Routing.getBrokers(adminClient: AdminClient) =
-        get<GetBrokers>("all brokers".responds(ok<GetBrokersModel>(), failed<AnError>())) {
-            respondCatch {
-                GetBrokersModel(
-                        adminClient.describeCluster()
-                            .nodes()
-                            .get().toList()
-                )
+fun Routing.getBrokers(adminClient: AdminClient?) =
+        get<GetBrokers>("all brokers".responds(ok<GetBrokersModel>(), serviceUnavailable<AnError>())) {
+            respondOrServiceUnavailable {
+
+                val nodes = adminClient
+                        ?.describeCluster()
+                        ?.nodes()
+                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?.toList()
+                ?: throw Exception(SERVICES_ERR_K)
+
+                GetBrokersModel(nodes)
             }
         }
 
@@ -59,17 +65,23 @@ data class GetBrokerConfig(val brokerID: String)
 
 data class GetBrokerConfigModel(val id: String, val config: List<ConfigEntry>)
 
-fun Routing.getBrokerConfig(adminClient: AdminClient) =
-        get<GetBrokerConfig>("a broker configuration".responds(ok<GetBrokerConfigModel>(), failed<AnError>())) { broker ->
-            respondCatch {
-                GetBrokerConfigModel(
-                        broker.brokerID,
-                        adminClient.describeConfigs(
-                                listOf(ConfigResource(ConfigResource.Type.BROKER, broker.brokerID))
-                        )
-                                .all()
-                                .get()
-                                .entries.first().value.entries().toList()
-                )
+fun Routing.getBrokerConfig(adminClient: AdminClient?) =
+        get<GetBrokerConfig>(
+                "a broker configuration".responds(ok<GetBrokerConfigModel>(),
+                        serviceUnavailable<AnError>())) { broker ->
+            respondOrServiceUnavailable {
+
+                val brokerConfig = adminClient
+                        ?.describeConfigs(listOf(ConfigResource(ConfigResource.Type.BROKER, broker.brokerID)))
+                        ?.all()
+                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?.entries
+                        ?.first()
+                        ?.value
+                        ?.entries()
+                        ?.toList()
+                        ?: throw Exception(SERVICES_ERR_K)
+
+                GetBrokerConfigModel(broker.brokerID, brokerConfig)
             }
         }

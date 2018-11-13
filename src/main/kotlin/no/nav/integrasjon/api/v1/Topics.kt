@@ -1,5 +1,6 @@
 package no.nav.integrasjon.api.v1
 
+import com.unboundid.ldap.sdk.ResultCode
 import io.ktor.application.application
 import io.ktor.application.call
 import io.ktor.auth.UserIdPrincipal
@@ -7,11 +8,14 @@ import io.ktor.auth.authentication
 import io.ktor.auth.principal
 import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
+import io.ktor.response.respond
 import io.ktor.routing.Routing
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.BasicAuthSecurity
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.badRequest
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.delete
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.failed
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
@@ -20,6 +24,7 @@ import no.nav.integrasjon.api.nielsfalk.ktor.swagger.post
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.put
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.securityAndReponds
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.serviceUnavailable
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.unAuthorized
 import no.nav.integrasjon.ldap.KafkaGroup
 import no.nav.integrasjon.ldap.KafkaGroupType
@@ -38,6 +43,7 @@ import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.PatternType
 import org.apache.kafka.common.resource.ResourcePatternFilter
 import org.apache.kafka.common.resource.ResourceType
+import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 
 /**
@@ -57,10 +63,11 @@ import java.util.regex.Pattern
  */
 
 // a wrapper for this api to be installed as routes
-fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
+fun Routing.topicsAPI(adminClient: AdminClient?, config: FasitProperties) {
 
     getTopics(adminClient)
-    createNewTopic(adminClient, config)
+
+/*    createNewTopic(adminClient, config)
     deleteTopic(adminClient, config)
 
     getTopicConfig(adminClient)
@@ -69,7 +76,7 @@ fun Routing.topicsAPI(adminClient: AdminClient, config: FasitProperties) {
     getTopicAcls(adminClient)
 
     getTopicGroups(config)
-    updateTopicGroup(config)
+    updateTopicGroup(config)*/
 }
 
 private const val swGroup = "Topics"
@@ -84,10 +91,18 @@ class GetTopics
 
 data class GetTopicsModel(val topics: List<String>)
 
-fun Routing.getTopics(adminClient: AdminClient) =
-        get<GetTopics>("all topics".responds(ok<GetTopicsModel>(), failed<AnError>())) {
-            respondCatch {
-                GetTopicsModel(adminClient.listTopics().names().get().toList())
+fun Routing.getTopics(adminClient: AdminClient?) =
+        get<GetTopics>("all topics".responds(ok<GetTopicsModel>(), serviceUnavailable<AnError>())) {
+            respondOrServiceUnavailable {
+
+                val topics = adminClient
+                        ?.listTopics()
+                        ?.names()
+                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?.toList()
+                        ?: throw Exception(SERVICES_ERR_K)
+
+                GetTopicsModel(topics)
             }
         }
 
@@ -136,62 +151,100 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                         .securityAndReponds(
                                 BasicAuthSecurity(),
                                 ok<PostTopicModel>(),
-                                failed<AnError>(),
+                                serviceUnavailable<AnError>(),
+                                badRequest<AnError>(),
                                 unAuthorized<Unit>())) { _, body ->
-            respondCatch {
 
-                val currentUser = call.principal<UserIdPrincipal>()!!.name
-                val logEntry = "Topic creation request by $currentUser - $body"
-                application.environment.log.info(logEntry)
+            val currentUser = call.principal<UserIdPrincipal>()!!.name
+            val logEntry = "Topic creation request by $currentUser - $body"
+            application.environment.log.info(logEntry)
 
-                if (!LDAPGroup(config).use { ldap -> ldap.userExists(currentUser) })
-                    throw Exception("authenticated user $currentUser doesn't exist as NAV ident or " +
-                            "service user in current LDAP domain, cannot be manager of topic")
+            /**
+             * Rule 1 - user must exist in current ldap environment in order to be part of group KM-<topic>
+             */
 
-                if (!body.name.isValidTopicName())
-                    throw Exception("Invalid topic name - $body.name. " +
-                            "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
-                            "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}")
-
-                // create kafka NewTopic by getting the default replication factor from broker config
-                val newTopic = NewTopic(
-                        body.name,
-                        body.numPartitions,
-                        getDefaultReplicationFactor(adminClient)
+            try { !LDAPGroup(config).use { ldap -> ldap.userExists(currentUser) }
+            } catch (e: Exception) {
+                call.respond(HttpStatusCode.ServiceUnavailable, AnError(
+                        "authenticated user $currentUser doesn't exist as NAV ident or " +
+                                "service user in current LDAP domain, cannot be manager of topic")
                 )
+                return@post
+            }
 
-                // create the topic itself
-                val topicResult = try {
-                    adminClient.createTopics(mutableListOf(newTopic)).all().get()
-                    application.environment.log.info("Topic created - $newTopic")
-                    "created topic $newTopic"
-                } catch (e: Exception) {
-                    application.environment.log.error("$EXCEPTION topic create request $newTopic - $e")
-                    "failure for topic $newTopic creation, $e"
-                }
+            /**
+             * Rule 2 - must be a valid topic name, limited by group name length in LDAP and type of characters
+             */
 
-                // create kafka groups in ldap
-                val groupsResult = LDAPGroup(config).use { ldap ->
-                    ldap.createKafkaGroups(newTopic.name(), currentUser)
-                }
+            if (!body.name.isValidTopicName()) {
+                call.respond(HttpStatusCode.BadRequest, AnError(
+                        "Invalid topic name - $body.name. " +
+                                "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
+                                "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}")
+                )
+                return@post
+            }
 
-                // create ACLs based on kafka groups in LDAP, except manager group KM-
-                val acls = groupsResult.filter { it.type != KafkaGroupType.MANAGER }.map { kafkaGroup ->
-                    kafkaGroup.type.intoAcls(newTopic.name())
-                }.flatMap { it }
+            /**
+             * Rule 3 - use default replication factor from kafka cluster
+             * test and preprod has 3 brokers
+             * production has 6 brokers
+             *
+             */
 
-                application.environment.log.info("ACLs create request: $acls")
+            val repFactorError = (-1).toShort()
+            val defaultRepFactor = try { getDefaultReplicationFactor(adminClient) } catch (e: Exception) { repFactorError }
 
-                val aclsResult = try {
-                    adminClient.createAcls(acls).all().get()
-                    application.environment.log.info("ACLs created - $acls")
-                    "created $acls"
-                } catch (e: Exception) {
-                    application.environment.log.error("$EXCEPTION ACLs create request $acls - $e")
-                    "failure for $acls creation, $e"
-                }
+            if (defaultRepFactor == repFactorError) {
+                call.respond(HttpStatusCode.ServiceUnavailable, AnError(
+                        "Could not get replicationFactor for topic from Kafka")
+                )
+                return@post
+            }
 
-                PostTopicModel(topicResult, groupsResult, aclsResult)
+            val newTopic = NewTopic(body.name, body.numPartitions, defaultRepFactor)
+
+            val (topicIsOk, topicResult) = try {
+                adminClient.createTopics(mutableListOf(newTopic)).all().get()
+                application.environment.log.info("Topic created - $newTopic")
+                Pair(true, "created topic $newTopic")
+            } catch (e: Exception) {
+                // TODO should have warning for topcis already exists
+                application.environment.log.error("$EXCEPTION topic create request $newTopic - $e")
+                Pair(false, "failure for topic $newTopic creation, $e")
+            }
+
+            val groupsResult = LDAPGroup(config).use { ldap -> ldap.createKafkaGroups(newTopic.name(), currentUser) }
+
+            val groupsAreOk = groupsResult
+                    .asSequence()
+                    .map { it.ldapResult.resultCode }
+                    .all { it == ResultCode.SUCCESS }
+
+            // create ACLs based on kafka groups in LDAP, except manager group KM-
+            val acls = groupsResult.asSequence()
+                    .filter { it.type != KafkaGroupType.MANAGER }
+                    .map { kafkaGroup -> kafkaGroup.type.intoAcls(newTopic.name()) }
+                    .flatten()
+
+            application.environment.log.info("ACLs create request: $acls")
+
+            val (aclsAreOk, aclsResult) = try {
+                adminClient.createAcls(acls.toList()).all().get()
+                application.environment.log.info("ACLs created - $acls")
+                Pair(true, "created $acls")
+            } catch (e: Exception) {
+                application.environment.log.error("$EXCEPTION ACLs create request $acls - $e")
+                Pair(false, "failure for $acls creation, $e")
+            }
+
+            val errorMsg = "Topic: $topicResult " +
+                    "Groups: ${groupsResult.map { it.ldapResult.message }} " +
+                    "ACLs: $aclsResult"
+
+            when (topicIsOk && groupsAreOk && aclsAreOk) {
+                true -> call.respond(PostTopicModel(topicResult, groupsResult, aclsResult))
+                false -> call.respond(HttpStatusCode.ServiceUnavailable, errorMsg)
             }
         }
 

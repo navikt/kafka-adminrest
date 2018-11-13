@@ -14,7 +14,13 @@ import io.ktor.util.encodeBase64
 import no.nav.common.KafkaEnvironment
 import no.nav.integrasjon.FasitPropFactory
 import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.api.nais.client.SERVICES_ERR_A
+import no.nav.integrasjon.api.nais.client.SERVICES_ERR_G
+import no.nav.integrasjon.api.nais.client.SERVICES_ERR_GAK
+import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
+import no.nav.integrasjon.api.v1.ACLS
 import no.nav.integrasjon.api.v1.AllowedConfigEntries
+import no.nav.integrasjon.api.v1.AnError
 import no.nav.integrasjon.api.v1.BROKERS
 import no.nav.integrasjon.api.v1.DeleteTopicModel
 import no.nav.integrasjon.api.v1.GROUPS
@@ -26,6 +32,8 @@ import no.nav.integrasjon.api.v1.GetTopicACLModel
 import no.nav.integrasjon.api.v1.GetTopicConfigModel
 import no.nav.integrasjon.api.v1.GetTopicGroupsModel
 import no.nav.integrasjon.api.v1.GetTopicsModel
+import no.nav.integrasjon.api.v1.NAIS_ISALIVE
+import no.nav.integrasjon.api.v1.NAIS_ISREADY
 import no.nav.integrasjon.api.v1.ONESHOT
 import no.nav.integrasjon.api.v1.OneshotCreationRequest
 import no.nav.integrasjon.api.v1.PostTopicBody
@@ -49,28 +57,12 @@ import org.amshove.kluent.shouldEqualTo
 import org.apache.kafka.clients.admin.ConfigEntry
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
+import org.spekframework.spek2.style.specification.xdescribe
 
 object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
     val preTopics = setOf("tpc-01", "tpc-02", "tpc-03")
-
-    // topics to create in tests
-    val topics2CreateDelete = listOf("tpc-created01", "tpc-created02", "tpc-created03")
-    val topics4ACLTesting = listOf("tpc-acl01")
-
-    // Combining srv users in ServiceAccounts and the node below, ApplAccounts (Basta)
-    // to be added and removed from tpc-01
-    val usersToManage = mapOf(
-        "srvp01" to KafkaGroupType.PRODUCER,
-        "srvc02" to KafkaGroupType.CONSUMER,
-        "n145821" to KafkaGroupType.MANAGER
-    )
-
-    val invalidTopics = mapOf(
-            "invalid_test" to 1,
-            "too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-" to 1
-    )
 
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
     val kCluster = KafkaEnvironment(1, topics = preTopics.toList(), withSecurity = true, autoStart = true)
@@ -95,10 +87,199 @@ object KafkaAdminRestSpec : Spek({
             ldapPassword = "itest"
     )
 
-    // set the correct set of fasit properties in fasit factory - before starting ktor module kafkaAdminRest
-    FasitPropFactory.setFasitProperties(fp)
+    fun FasitProperties.injectValues(
+        portLDAPGroup: Int = InMemoryLDAPServer.LPORT,
+        portLDAPAuth: Int = InMemoryLDAPServer.LPORT,
+        kafkaURL: String = kCluster.brokersURL
+    ) =
+            FasitProperties(
+                    kafkaURL,
+                    kafkaClientID,
+                    kafkaSecurity,
+                    kafkaSecProt,
+                    kafkaSaslMec,
+                    kafkaUser,
+                    kafkaPassword,
 
-    describe("application kafka-adminrest") {
+                    ldapConnTimeout,
+                    ldapUserAttrName,
+
+                    ldapAuthHost,
+                    portLDAPAuth,
+                    ldapAuthUserBase,
+
+                    ldapHost,
+                    portLDAPGroup,
+
+                    ldapSrvUserBase,
+                    ldapGroupBase,
+                    ldapGroupAttrName,
+                    ldapGrpMemberAttrName,
+
+                    ldapUser,
+                    ldapPassword
+            )
+
+    describe("test of different services down (ldap auth and group, and kafka)") {
+
+        beforeGroup {
+            InMemoryLDAPServer.start()
+        }
+
+        data class Scenario(
+            val method: HttpMethod,
+            val route: String,
+            val body: String = "",
+            val security: Boolean = false,
+            val response: HttpStatusCode
+        )
+
+        data class ServiceDown(
+            val error: String,
+            val fasitProps: FasitProperties,
+            val scenarios: List<Scenario>,
+            val details: String = ""
+        )
+
+        val kafkaDownScenarios = listOf(
+                Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.ServiceUnavailable)
+        )
+
+        val ldapGroupDown = listOf(
+                Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.OK)
+        )
+
+        val ldapAuthDown = listOf(
+                Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.Unauthorized),
+                Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.OK)
+        )
+
+        val srvsDown = listOf(
+                ServiceDown(
+                        SERVICES_ERR_GAK,
+                        fp.injectValues(0, 0, "Wrong_Broker_URL"),
+                        emptyList()
+                        ),
+                ServiceDown(
+                        SERVICES_ERR_A,
+                        fp.injectValues(portLDAPAuth = 0),
+                        ldapAuthDown
+                ),
+                ServiceDown(
+                        SERVICES_ERR_G,
+                        fp.injectValues(portLDAPGroup = 0),
+                        ldapGroupDown
+                ),
+                ServiceDown(
+                        SERVICES_ERR_K,
+                        fp.injectValues(kafkaURL = "Wrong_Broker_URL"),
+                        kafkaDownScenarios,
+                        "invalid broker url"
+                ),
+                ServiceDown(
+                        SERVICES_ERR_K,
+                        fp.injectValues(kafkaURL = "SASL_PLAINTEXT://localhost:01"),
+                        kafkaDownScenarios,
+                        "wrong broker port"
+                )
+        )
+
+        srvsDown.forEach { srvDown ->
+
+            context("${srvDown.error} - ${srvDown.details}") {
+
+                FasitPropFactory.setFasitProperties(srvDown.fasitProps)
+
+                val engine = TestApplicationEngine(createTestEnvironment())
+                engine.start(wait = false)
+                engine.application.kafkaAdminREST()
+
+                with(engine) {
+
+                    context("NAIS API") {
+                        it("should return OK for isAlive") {
+                            val call = handleRequest(HttpMethod.Get, NAIS_ISALIVE) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                            }
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                        }
+
+                        it("should return ${srvDown.error}") {
+                            val call = handleRequest(HttpMethod.Get, NAIS_ISREADY) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                            }
+
+                            val result: AnError = Gson().fromJson(
+                                    call.response.content ?: "",
+                                    object : TypeToken<AnError>() {}.type)
+
+                            call.response.status() shouldBe HttpStatusCode.ServiceUnavailable
+                            result.error shouldBeEqualTo srvDown.error
+                        }
+                    }
+
+                    context("Routes") {
+                        srvDown.scenarios.forEach { scenario ->
+
+                            it("Route ${scenario.route} should return ${scenario.response}") {
+
+                                val call = handleRequest(scenario.method, scenario.route) {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                    addHeader(HttpHeaders.ContentType, "application/json")
+                                    setBody(scenario.body)
+                                    addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                }
+
+                                call.response.status() shouldBe scenario.response
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        afterGroup {
+            InMemoryLDAPServer.stop()
+            kCluster.tearDown()
+        }
+    }
+
+    xdescribe("test of all backend services up (ldap auth and group, and kafka)") {
+
+        // topics to create in tests
+        val topics2CreateDelete = listOf("tpc-created01", "tpc-created02", "tpc-created03")
+        val topics4ACLTesting = listOf("tpc-acl01")
+
+        // Combining srv users in ServiceAccounts and the node below, ApplAccounts (Basta)
+        // to be added and removed from tpc-01
+        val usersToManage = mapOf(
+                "srvp01" to KafkaGroupType.PRODUCER,
+                "srvc02" to KafkaGroupType.CONSUMER,
+                "n145821" to KafkaGroupType.MANAGER
+        )
+
+        val invalidTopics = mapOf(
+                "invalid_test" to 1,
+                "too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-" to 1
+        )
+
+        // set the correct set of fasit properties in fasit factory - before starting ktor module kafkaAdminRest
+        FasitPropFactory.setFasitProperties(fp)
 
         val engine = TestApplicationEngine(createTestEnvironment())
         engine.start(wait = false)
@@ -107,6 +288,10 @@ object KafkaAdminRestSpec : Spek({
         beforeGroup { InMemoryLDAPServer.start() }
 
         with(engine) {
+
+            context("Route $ACLS") {
+                // don't bother :-)
+            }
 
             context("Route $BROKERS") {
 
