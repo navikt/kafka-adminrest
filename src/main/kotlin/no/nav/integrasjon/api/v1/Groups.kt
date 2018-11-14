@@ -55,7 +55,8 @@ data class GetGroupMembersModel(val name: String, val members: List<String>)
 fun Routing.getGroupMembers(config: FasitProperties) =
         get<GetGroupMembers>(
                 "members in a group".responds(ok<GetGroupMembersModel>(),
-                        serviceUnavailable<AnError>())) { group ->
+                        serviceUnavailable<AnError>())
+        ) { group ->
             respondOrServiceUnavailable(config) { lc ->
                 GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
             }

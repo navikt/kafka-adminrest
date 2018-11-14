@@ -55,15 +55,6 @@ internal fun backEndServicesAreOk(
             kafkaIsOk(adminClient)
     )
 
-// a wrapper for each call to AdminClient - used in routes
-internal suspend fun PipelineContext<Unit, ApplicationCall>.respondCatch(block: () -> Any) =
-        try {
-            call.respond(block())
-        } catch (e: Exception) {
-            application.environment.log.error(EXCEPTION, e)
-            call.respond(HttpStatusCode.ExpectationFailed, AnError("$EXCEPTION$e"))
-        }
-
 internal suspend fun PipelineContext<Unit, ApplicationCall>.respondSelectiveCatch(block: () -> Pair<HttpStatusCode, Any>) =
         try {
             val res = block()

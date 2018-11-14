@@ -67,8 +67,7 @@ object KafkaAdminRestSpec : Spek({
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
     val kCluster = KafkaEnvironment(1, topics = preTopics.toList(), withSecurity = true, autoStart = true)
 
-    // establish correct set of fasit properties
-    val fp = FasitProperties(
+    val correctFP = FasitProperties(
             kCluster.brokersURL, "kafka-adminrest", "TRUE",
             "SASL_PLAINTEXT", "PLAIN",
             "srvkafkaclient", "kafkaclient", // see predfined users in embedded kafka
@@ -141,13 +140,34 @@ object KafkaAdminRestSpec : Spek({
             val details: String = ""
         )
 
+        val allDownServices = listOf(
+                Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.Unauthorized),
+                Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(
+                        HttpMethod.Post,
+                        TOPICS,
+                        body = Gson().toJson(PostTopicBody("tpc-alldown")),
+                        security = true,
+                        response = HttpStatusCode.Unauthorized)
+        )
+
         val kafkaDownScenarios = listOf(
                 Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.ServiceUnavailable),
                 Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.ServiceUnavailable),
                 Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.ServiceUnavailable),
                 Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.OK),
                 Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.OK),
-                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.ServiceUnavailable)
+                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(
+                        HttpMethod.Post,
+                        TOPICS,
+                        body = Gson().toJson(PostTopicBody("tpc-alldown")),
+                        security = true,
+                        response = HttpStatusCode.ServiceUnavailable)
         )
 
         val ldapGroupDown = listOf(
@@ -156,7 +176,13 @@ object KafkaAdminRestSpec : Spek({
                 Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.OK),
                 Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.ServiceUnavailable),
                 Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
-                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.OK)
+                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.OK),
+                Scenario(
+                        HttpMethod.Post,
+                        TOPICS,
+                        body = Gson().toJson(PostTopicBody("tpc-alldown")),
+                        security = true,
+                        response = HttpStatusCode.ServiceUnavailable)
         )
 
         val ldapAuthDown = listOf(
@@ -165,34 +191,40 @@ object KafkaAdminRestSpec : Spek({
                 Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.OK),
                 Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.OK),
                 Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.OK),
-                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.OK)
+                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.OK),
+                Scenario(
+                        HttpMethod.Post,
+                        TOPICS,
+                        body = Gson().toJson(PostTopicBody("tpc-alldown")),
+                        security = true,
+                        response = HttpStatusCode.Unauthorized)
         )
 
         val srvsDown = listOf(
                 ServiceDown(
                         SERVICES_ERR_GAK,
-                        fp.injectValues(0, 0, "Wrong_Broker_URL"),
-                        emptyList()
+                        correctFP.injectValues(0, 0, "Wrong_Broker_URL"),
+                        allDownServices
                         ),
                 ServiceDown(
                         SERVICES_ERR_A,
-                        fp.injectValues(portLDAPAuth = 0),
+                        correctFP.injectValues(portLDAPAuth = 0),
                         ldapAuthDown
                 ),
                 ServiceDown(
                         SERVICES_ERR_G,
-                        fp.injectValues(portLDAPGroup = 0),
+                        correctFP.injectValues(portLDAPGroup = 0),
                         ldapGroupDown
                 ),
                 ServiceDown(
                         SERVICES_ERR_K,
-                        fp.injectValues(kafkaURL = "Wrong_Broker_URL"),
+                        correctFP.injectValues(kafkaURL = "Wrong_Broker_URL"),
                         kafkaDownScenarios,
                         "invalid broker url"
                 ),
                 ServiceDown(
                         SERVICES_ERR_K,
-                        fp.injectValues(kafkaURL = "SASL_PLAINTEXT://localhost:01"),
+                        correctFP.injectValues(kafkaURL = "SASL_PLAINTEXT://localhost:01"),
                         kafkaDownScenarios,
                         "wrong broker port"
                 )
@@ -241,8 +273,11 @@ object KafkaAdminRestSpec : Spek({
                                 val call = handleRequest(scenario.method, scenario.route) {
                                     addHeader(HttpHeaders.Accept, "application/json")
                                     addHeader(HttpHeaders.ContentType, "application/json")
+                                    addHeader(
+                                            HttpHeaders.Authorization,
+                                            "Basic ${encodeBase64("n000002:itest2".toByteArray())}"
+                                    )
                                     setBody(scenario.body)
-                                    addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
                                 }
 
                                 call.response.status() shouldBe scenario.response
@@ -279,7 +314,7 @@ object KafkaAdminRestSpec : Spek({
         )
 
         // set the correct set of fasit properties in fasit factory - before starting ktor module kafkaAdminRest
-        FasitPropFactory.setFasitProperties(fp)
+        FasitPropFactory.setFasitProperties(correctFP)
 
         val engine = TestApplicationEngine(createTestEnvironment())
         engine.start(wait = false)
@@ -663,7 +698,7 @@ object KafkaAdminRestSpec : Spek({
                             setBody(jsonPayload)
                         }
 
-                        call.response.status() shouldBe HttpStatusCode.ExpectationFailed
+                        call.response.status() shouldBe HttpStatusCode.BadRequest
                     }
                 }
             }

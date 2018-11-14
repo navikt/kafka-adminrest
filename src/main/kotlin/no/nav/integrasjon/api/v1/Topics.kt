@@ -1,6 +1,7 @@
 package no.nav.integrasjon.api.v1
 
 import com.unboundid.ldap.sdk.ResultCode
+import io.ktor.application.ApplicationCall
 import io.ktor.application.application
 import io.ktor.application.call
 import io.ktor.auth.UserIdPrincipal
@@ -8,16 +9,17 @@ import io.ktor.auth.authentication
 import io.ktor.auth.principal
 import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
+import io.ktor.pipeline.PipelineContext
 import io.ktor.response.respond
 import io.ktor.routing.Routing
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.api.nais.client.SERVICES_ERR_G
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.BasicAuthSecurity
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.badRequest
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.delete
-import no.nav.integrasjon.api.nielsfalk.ktor.swagger.failed
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.post
@@ -66,8 +68,8 @@ import java.util.regex.Pattern
 fun Routing.topicsAPI(adminClient: AdminClient?, config: FasitProperties) {
 
     getTopics(adminClient)
+    createNewTopic(adminClient, config)
 
-/*    createNewTopic(adminClient, config)
     deleteTopic(adminClient, config)
 
     getTopicConfig(adminClient)
@@ -76,7 +78,7 @@ fun Routing.topicsAPI(adminClient: AdminClient?, config: FasitProperties) {
     getTopicAcls(adminClient)
 
     getTopicGroups(config)
-    updateTopicGroup(config)*/
+    updateTopicGroup(config)
 }
 
 private const val swGroup = "Topics"
@@ -117,17 +119,28 @@ fun Routing.getTopics(adminClient: AdminClient?) =
 
 // get the default replication factor from 1st broker configuration. Due to puppet, consistency across brokers in a
 // kafka cluster
-fun getDefaultReplicationFactor(adminClient: AdminClient): Short =
-        adminClient.describeCluster().nodes().get().first().let { node ->
-            adminClient.describeConfigs(
-                    listOf(
-                            ConfigResource(
-                                    ConfigResource.Type.BROKER,
-                                    node.idString()
+fun getDefaultReplicationFactor(adminClient: AdminClient?): Short =
+        adminClient
+                ?.describeCluster()
+                ?.nodes()
+                ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                ?.first()?.let { node ->
+                    adminClient.describeConfigs(
+                            listOf(
+                                    ConfigResource(
+                                            ConfigResource.Type.BROKER,
+                                            node.idString()
+                                    )
                             )
                     )
-            ).all().get().values.first().get("default.replication.factor").value().toShort()
+                            .all()
+                            .get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                            .values.first()
+                            .get("default.replication.factor")
+                            .value()
+                            .toShort()
         }
+                ?: throw Exception(SERVICES_ERR_K)
 
 private val topicPattern: Pattern = Pattern.compile("[A-Za-z0-9-]+")
 // extension function for validating a topic name and that the future group names are of valid length
@@ -145,7 +158,7 @@ data class PostTopicModel(
     val aclStatus: String
 )
 
-fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
+fun Routing.createNewTopic(adminClient: AdminClient?, config: FasitProperties) =
         post<PostTopic, PostTopicBody>(
                 "new topic. The authenticated user becomes member of KM-{newTopic}. Please add other team members"
                         .securityAndReponds(
@@ -153,7 +166,9 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
                                 ok<PostTopicModel>(),
                                 serviceUnavailable<AnError>(),
                                 badRequest<AnError>(),
-                                unAuthorized<Unit>())) { _, body ->
+                                unAuthorized<Unit>()
+                        )
+        ) { _, body ->
 
             val currentUser = call.principal<UserIdPrincipal>()!!.name
             val logEntry = "Topic creation request by $currentUser - $body"
@@ -163,12 +178,15 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
              * Rule 1 - user must exist in current ldap environment in order to be part of group KM-<topic>
              */
 
-            try { !LDAPGroup(config).use { ldap -> ldap.userExists(currentUser) }
-            } catch (e: Exception) {
-                call.respond(HttpStatusCode.ServiceUnavailable, AnError(
-                        "authenticated user $currentUser doesn't exist as NAV ident or " +
-                                "service user in current LDAP domain, cannot be manager of topic")
-                )
+            val userExist = try {
+                LDAPGroup(config).use { ldap -> ldap.userExists(currentUser) }
+            } catch (e: Exception) { false }
+
+            if (!userExist) {
+                val msg = "authenticated user $currentUser doesn't exist as NAV ident or " +
+                        "service user in current LDAP domain, or ldap unreachable, cannot be manager of topic"
+                application.environment.log.warn(msg)
+                call.respond(HttpStatusCode.ServiceUnavailable, AnError(msg))
                 return@post
             }
 
@@ -193,7 +211,9 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
              */
 
             val repFactorError = (-1).toShort()
-            val defaultRepFactor = try { getDefaultReplicationFactor(adminClient) } catch (e: Exception) { repFactorError }
+            val defaultRepFactor = try {
+                getDefaultReplicationFactor(adminClient)
+            } catch (e: Exception) { repFactorError }
 
             if (defaultRepFactor == repFactorError) {
                 call.respond(HttpStatusCode.ServiceUnavailable, AnError(
@@ -205,7 +225,11 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
             val newTopic = NewTopic(body.name, body.numPartitions, defaultRepFactor)
 
             val (topicIsOk, topicResult) = try {
-                adminClient.createTopics(mutableListOf(newTopic)).all().get()
+                adminClient
+                        ?.createTopics(mutableListOf(newTopic))
+                        ?.all()
+                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?: throw Exception(SERVICES_ERR_K)
                 application.environment.log.info("Topic created - $newTopic")
                 Pair(true, "created topic $newTopic")
             } catch (e: Exception) {
@@ -230,7 +254,11 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
             application.environment.log.info("ACLs create request: $acls")
 
             val (aclsAreOk, aclsResult) = try {
-                adminClient.createAcls(acls.toList()).all().get()
+                adminClient
+                        ?.createAcls(acls.toList())
+                        ?.all()
+                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?: throw Exception(SERVICES_ERR_K)
                 application.environment.log.info("ACLs created - $acls")
                 Pair(true, "created $acls")
             } catch (e: Exception) {
@@ -244,9 +272,39 @@ fun Routing.createNewTopic(adminClient: AdminClient, config: FasitProperties) =
 
             when (topicIsOk && groupsAreOk && aclsAreOk) {
                 true -> call.respond(PostTopicModel(topicResult, groupsResult, aclsResult))
-                false -> call.respond(HttpStatusCode.ServiceUnavailable, errorMsg)
+                false -> call.respond(HttpStatusCode.ServiceUnavailable, AnError(errorMsg))
             }
         }
+
+private enum class UserIsManager { LDAP_NOT_AVAILABLE, IS_NOT_MANAGER, IS_MANAGER }
+
+private suspend fun PipelineContext<Unit, ApplicationCall>.userTopicManagerStatus(
+    user: String,
+    topicName: String,
+    config: FasitProperties
+): UserIsManager {
+
+    val (isMngRequestOk, authorized) = try {
+        Pair(true, LDAPGroup(config).use { ldap -> ldap.userIsManager(topicName, user) })
+    } catch (e: Exception) { Pair(false, false) }
+
+    if (!isMngRequestOk) {
+        application.environment.log.warn(SERVICES_ERR_G)
+        call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_G))
+        return UserIsManager.LDAP_NOT_AVAILABLE
+    }
+
+    if (!authorized) {
+        val msg = "$user is NOT manager of $topicName"
+        application.environment.log.warn(msg)
+        call.respond(HttpStatusCode.BadRequest, AnError(msg))
+        return UserIsManager.IS_NOT_MANAGER
+    }
+
+    application.environment.log.info("$user is manager of $topicName")
+
+    return UserIsManager.IS_MANAGER
+}
 
 /**
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#deleteTopics-java.util.Collection-
@@ -261,64 +319,77 @@ data class DeleteTopicModel(
     val aclStatus: String
 )
 
-fun Routing.deleteTopic(adminClient: AdminClient, config: FasitProperties) =
+fun Routing.deleteTopic(adminClient: AdminClient?, config: FasitProperties) =
         delete<DeleteTopic>(
                 "a topic. Only members in KM-{topicName} are authorized".securityAndReponds(
                         BasicAuthSecurity(),
                         ok<DeleteTopicModel>(),
-                        failed<AnError>(),
+                        serviceUnavailable<AnError>(),
+                        badRequest<AnError>(),
                         unAuthorized<Unit>()
                 )) { param ->
-            respondSelectiveCatch {
 
-                val currentUser = call.principal<UserIdPrincipal>()!!.name
-                val topicName = param.topicName
+            val currentUser = call.principal<UserIdPrincipal>()!!.name
+            val topicName = param.topicName
 
-                val logEntry = "Topic deletion request by $currentUser - $topicName"
-                application.environment.log.info(logEntry)
+            val logEntry = "Topic deletion request by $currentUser - $topicName"
+            application.environment.log.info(logEntry)
 
-                val authorized = LDAPGroup(config).use { ldap -> ldap.userIsManager(topicName, currentUser) }
+            when (userTopicManagerStatus(currentUser, topicName, config)) {
+                UserIsManager.LDAP_NOT_AVAILABLE -> return@delete
+                UserIsManager.IS_NOT_MANAGER -> return@delete
+                else -> {}
+            }
 
-                if (authorized) {
+            // delete ACLs
+            val acls = AclBindingFilter(
+                    ResourcePatternFilter(ResourceType.TOPIC, topicName, PatternType.LITERAL),
+                    AccessControlEntryFilter.ANY
+            )
 
-                    application.environment.log.info("$currentUser is manager of $topicName")
+            application.environment.log.info("ACLs delete request: $acls")
 
-                    // delete ACLs
-                    val acls = AclBindingFilter(
-                            ResourcePatternFilter(ResourceType.TOPIC, topicName, PatternType.LITERAL),
-                            AccessControlEntryFilter.ANY
-                    )
+            val (aclsAreOk, aclsResult) = try {
+                adminClient
+                        ?.deleteAcls(mutableListOf(acls))
+                        ?.all()
+                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?: throw Exception(SERVICES_ERR_K)
+                application.environment.log.info("ACLs deleted - $acls")
+                Pair(true, "deleted $acls")
+            } catch (e: Exception) {
+                application.environment.log.error("$EXCEPTION ACLs delete request $acls - $e")
+                Pair(false, "failure for $acls deletion, $e")
+            }
 
-                    application.environment.log.info("ACLs delete request: $acls")
+            // delete related kafka ldap groups
+            val groupsResult = LDAPGroup(config).use { ldap -> ldap.deleteKafkaGroups(topicName) }
+            val groupsAreOk = groupsResult
+                    .asSequence()
+                    .map { it.ldapResult.resultCode }
+                    .all { it == ResultCode.SUCCESS }
 
-                    val aclsResult = try {
-                        adminClient.deleteAcls(mutableListOf(acls)).all().get()
-                        application.environment.log.info("ACLs deleted - $acls")
-                        "deleted $acls"
-                    } catch (e: Exception) {
-                        application.environment.log.error("$EXCEPTION ACLs delete request $acls - $e")
-                        "failure for $acls deletion, $e"
-                    }
+            // delete the topic itself
+            val (topicIsOk, topicResult) = try {
+                adminClient
+                        ?.deleteTopics(listOf(topicName))
+                        ?.all()
+                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?: throw Exception(SERVICES_ERR_K)
+                application.environment.log.info("Topic deleted - $topicName")
+                Pair(true, "deleted topic $topicName")
+            } catch (e: Exception) {
+                application.environment.log.error("$EXCEPTION topic delete request $topicName - $e")
+                Pair(false, "failure for topic $topicName deletion, $e")
+            }
 
-                    // delete related kafka ldap groups
-                    val groupsResult = LDAPGroup(config).use { ldap -> ldap.deleteKafkaGroups(topicName) }
+            val errorMsg = "Topic: $topicResult " +
+                    "Groups: ${groupsResult.map { it.ldapResult.message }} " +
+                    "ACLs: $aclsResult"
 
-                    // delete the topic itself
-                    val topicResult = try {
-                        adminClient.deleteTopics(listOf(topicName)).all().get()
-                        application.environment.log.info("Topic deleted - $topicName")
-                        "deleted topic $topicName"
-                    } catch (e: Exception) {
-                        application.environment.log.error("$EXCEPTION topic delete request $topicName - $e")
-                        "failure for topic $topicName deletion, $e"
-                    }
-                    Pair(HttpStatusCode.OK, DeleteTopicModel(topicResult, groupsResult, aclsResult))
-                } else {
-
-                    application.environment.log.info("$currentUser is NOT manager of $topicName")
-
-                    Pair(HttpStatusCode.Unauthorized, "")
-                }
+            when (topicIsOk && groupsAreOk && aclsAreOk) {
+                true -> call.respond(DeleteTopicModel(topicResult, groupsResult, aclsResult))
+                false -> call.respond(HttpStatusCode.ServiceUnavailable, AnError(errorMsg))
             }
         }
 
@@ -332,32 +403,61 @@ data class GetTopicConfig(val topicName: String)
 
 data class GetTopicConfigModel(val name: String, val config: List<ConfigEntry>)
 
-fun Routing.getTopicConfig(adminClient: AdminClient) =
+fun Routing.getTopicConfig(adminClient: AdminClient?) =
         get<GetTopicConfig>("a topic's configuration".responds(
                 ok<GetTopicConfigModel>(),
-                failed<AnError>())) { param ->
-            respondCatch {
+                serviceUnavailable<AnError>(),
+                badRequest<AnError>())) { param ->
 
-                val topicName = param.topicName
+            val topicName = param.topicName
 
-                // NB! AdminClient is listing a default config independent of topic exists or not, verify!
-                val existingTopics = adminClient.listTopics().listings().get().map { it.name() }
-
-                if (existingTopics.contains(topicName))
-                    GetTopicConfigModel(
-                            topicName,
-                            adminClient.describeConfigs(
-                                    mutableListOf(
-                                            ConfigResource(
-                                                    ConfigResource.Type.TOPIC,
-                                                    topicName
-                                            )
-                                    )
-                            ).all().get().values.first().entries().toList()
-                    )
-                else
-                    throw Exception("failure, topic $topicName does not exist")
+            // NB! AdminClient is listing a default config independent of topic exists or not, verify existence!
+            val (topicsRequestOk, existingTopics) = try {
+                Pair(true, adminClient
+                        ?.listTopics()
+                        ?.listings()
+                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?.map { it.name() }
+                        ?: throw Exception(SERVICES_ERR_K)
+                )
+            } catch (e: Exception) {
+                application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
+                Pair(false, emptyList<String>())
             }
+
+            if (!topicsRequestOk) {
+                call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+                return@get
+            }
+
+            if (existingTopics.isNotEmpty() && !existingTopics.contains(topicName)) {
+                call.respond(HttpStatusCode.BadRequest, AnError("Cannot find topic $topicName"))
+                return@get
+            }
+
+            val (topicConfigRequestOk, topicConfig) = try {
+                Pair(true, adminClient
+                        ?.describeConfigs(
+                                mutableListOf(ConfigResource(ConfigResource.Type.TOPIC, topicName)))
+                        ?.all()
+                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?.values
+                        ?.first()
+                        ?.entries()
+                        ?.toList()
+                        ?: throw Exception(SERVICES_ERR_K)
+                )
+            } catch (e: Exception) {
+                application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
+                Pair(false, emptyList<ConfigEntry>())
+            }
+
+            if (!topicConfigRequestOk) {
+                call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+                return@get
+            }
+
+            call.respond(GetTopicConfigModel(topicName, topicConfig))
         }
 
 /**
@@ -383,52 +483,59 @@ data class PutTopicConfigEntryModel(
     val status: String
 )
 
-fun Routing.updateTopicConfig(adminClient: AdminClient, config: FasitProperties) =
+fun Routing.updateTopicConfig(adminClient: AdminClient?, config: FasitProperties) =
         put<PutTopicConfigEntry, PutTopicConfigEntryBody>(
                 "a configuration entry for a topic. Only members in KM-{topicName} are authorized".securityAndReponds(
-                BasicAuthSecurity(),
-                ok<PutTopicConfigEntryModel>(),
-                failed<AnError>(),
-                unAuthorized<Unit>()
+                        BasicAuthSecurity(),
+                        ok<PutTopicConfigEntryModel>(),
+                        serviceUnavailable<AnError>(),
+                        badRequest<AnError>(),
+                        unAuthorized<Unit>()
         )) { param, body ->
-            respondSelectiveCatch {
 
-                val currentUser = call.principal<UserIdPrincipal>()!!.name
-                val topicName = param.topicName
+            val currentUser = call.principal<UserIdPrincipal>()!!.name
+            val topicName = param.topicName
 
-                val logEntry = "Topic config. update request by $currentUser - $topicName"
-                application.environment.log.info(logEntry)
+            val logEntry = "Topic config. update request by $currentUser - $topicName"
+            application.environment.log.info(logEntry)
 
-                val authorized = LDAPGroup(config).use { ldap -> ldap.userIsManager(topicName, currentUser) }
-
-                if (authorized) {
-
-                    application.environment.log.info("$currentUser is manager of $topicName")
-
-                    val configEntry = ConfigEntry(body.configentry.entryName, body.value)
-
-                    // check whether configEntry is allowed
-                    if (!AllowedConfigEntries.values().map { it.entryName }.contains(configEntry.name()))
-                        throw Exception("configEntry ${configEntry.name()} is not allowed to update automatically")
-
-                    val configResource = ConfigResource(ConfigResource.Type.TOPIC, topicName)
-                    val configReq = mapOf(configResource to Config(listOf(configEntry)))
-
-                    application.environment.log.info("Update topic config request: $configReq")
-
-                    // NB! .all is throwing error... Use of future for specific entry instead
-                    val res = adminClient.alterConfigs(configReq)
-                            // .all()
-                            .values()[configResource]
-                            ?.get()
-                            ?: PutTopicConfigEntryModel(topicName, body.configentry, "updated with ${body.value}")
-
-                    Pair(HttpStatusCode.OK, res)
-                } else {
-                    application.environment.log.info("$currentUser is NOT manager of $topicName")
-                    Pair(HttpStatusCode.Unauthorized, "")
-                }
+            when (userTopicManagerStatus(currentUser, topicName, config)) {
+                UserIsManager.LDAP_NOT_AVAILABLE -> return@put
+                UserIsManager.IS_NOT_MANAGER -> return@put
+                else -> {}
             }
+
+            val configEntry = ConfigEntry(body.configentry.entryName, body.value)
+
+            if (!AllowedConfigEntries.values().map { it.entryName }.contains(configEntry.name())) {
+                val msg = "configEntry ${configEntry.name()} is not allowed to update automatically"
+                application.environment.log.error(msg)
+                call.respond(HttpStatusCode.BadRequest, AnError(msg))
+                return@put
+            }
+
+            val configResource = ConfigResource(ConfigResource.Type.TOPIC, topicName)
+            val configReq = mapOf(configResource to Config(listOf(configEntry)))
+
+            application.environment.log.info("Update topic config request: $configReq")
+
+            // NB! .all is throwing error... Use of future for specific entry instead
+            val (alterConfigRequestOk, _) = try {
+                Pair(true, adminClient?.alterConfigs(configReq)
+                        ?.values()
+                        ?.get(configResource)
+                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?: throw Exception(SERVICES_ERR_K)
+                )
+            } catch (e: Exception) { Pair(false, Unit) }
+
+            if (!alterConfigRequestOk) {
+                application.environment.log.error(SERVICES_ERR_K)
+                call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+                return@put
+            }
+
+            call.respond(PutTopicConfigEntryModel(topicName, body.configentry, "updated with ${body.value}"))
         }
 
 /**
@@ -441,23 +548,35 @@ data class GetTopicACL(val topicName: String)
 
 data class GetTopicACLModel(val name: String, val acls: List<AclBinding>)
 
-fun Routing.getTopicAcls(adminClient: AdminClient) =
-        get<GetTopicACL>("a topic's access control lists".responds(ok<GetTopicACLModel>(), failed<AnError>())) { param ->
-            respondCatch {
+fun Routing.getTopicAcls(adminClient: AdminClient?) =
+        get<GetTopicACL>("a topic's access control lists".responds(
+                ok<GetTopicACLModel>(),
+                serviceUnavailable<AnError>())
+        ) { param ->
 
-                val topicName = param.topicName
+            val topicName = param.topicName
 
-                GetTopicACLModel(
-                        topicName,
-                        adminClient.describeAcls(
-                                AclBindingFilter(
-                                        ResourcePatternFilter(ResourceType.TOPIC, topicName, PatternType.LITERAL),
-                                        AccessControlEntryFilter.ANY)
-                        )
-                                .values()
-                                .get().toList()
+            val aclFilter = AclBindingFilter(
+                    ResourcePatternFilter(ResourceType.TOPIC, topicName, PatternType.LITERAL),
+                    AccessControlEntryFilter.ANY)
+
+            val (aclRequestOk, acls) = try {
+                Pair(true, adminClient
+                        ?.describeAcls(aclFilter)
+                        ?.values()
+                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?.toList()
+                        ?: throw Exception(SERVICES_ERR_K)
                 )
+            } catch (e: Exception) { Pair(false, emptyList<AclBinding>()) }
+
+            if (!aclRequestOk) {
+                application.environment.log.error(SERVICES_ERR_K)
+                call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+                return@get
             }
+
+            call.respond(GetTopicACLModel(topicName, acls))
         }
 
 /**
@@ -471,15 +590,14 @@ data class GetTopicGroups(val topicName: String)
 data class GetTopicGroupsModel(val name: String, val groups: List<KafkaGroup>)
 
 fun Routing.getTopicGroups(config: FasitProperties) =
-        get<GetTopicGroups>("a topic's groups".responds(ok<GetTopicGroupsModel>(), failed<AnError>())) { param ->
-            respondCatch {
+        get<GetTopicGroups>("a topic's groups".responds(
+                ok<GetTopicGroupsModel>(),
+                serviceUnavailable<AnError>())
+        ) { param ->
+            respondOrServiceUnavailable(config) { lc ->
 
                 val topicName = param.topicName
-
-                GetTopicGroupsModel(
-                        topicName,
-                        LDAPGroup(config).use { ldap -> ldap.getKafkaGroupsAndMembers(topicName) }
-                )
+                GetTopicGroupsModel(topicName, lc.getKafkaGroupsAndMembers(topicName))
             }
         }
 
@@ -500,32 +618,39 @@ data class PutTopicGMemberModel(
 fun Routing.updateTopicGroup(config: FasitProperties) =
         put<PutTopicGMember, UpdateKafkaGroupMember>(
                 "add/remove members in topic groups. Only members in KM-{topicName} are authorized ".securityAndReponds(
-                BasicAuthSecurity(),
-                ok<PutTopicGMemberModel>(),
-                failed<AnError>(),
-                unAuthorized<Unit>()
-        )) { param, body ->
-            respondSelectiveCatch {
+                        BasicAuthSecurity(),
+                        ok<PutTopicGMemberModel>(),
+                        serviceUnavailable<AnError>(),
+                        badRequest<AnError>(),
+                        unAuthorized<Unit>())
+        ) { param, body ->
 
-                val currentUser = call.principal<UserIdPrincipal>()!!.name
-                val topicName = param.topicName
+            val currentUser = call.principal<UserIdPrincipal>()!!.name
+            val topicName = param.topicName
 
-                val logEntry = "Topic group membership update request by " +
-                        "${this.context.authentication.principal} - $topicName "
-                application.environment.log.info(logEntry)
+            val logEntry = "Topic group membership update request by " +
+                    "${this.context.authentication.principal} - $topicName "
+            application.environment.log.info(logEntry)
 
-                val authorized = LDAPGroup(config).use { ldap -> ldap.userIsManager(topicName, currentUser) }
-
-                if (authorized) {
-
-                    application.environment.log.info("$currentUser is manager of $topicName")
-
-                    HttpStatusCode.OK to LDAPGroup(config)
-                            .use { PutTopicGMemberModel(topicName, body, it.updateKafkaGroupMembership(topicName, body)) }
-                            .also { application.environment.log.info("$topicName's group has been updated") }
-                } else {
-                    application.environment.log.info("$currentUser is NOT manager of $topicName")
-                    Pair(HttpStatusCode.Unauthorized, "")
-                }
+            when (userTopicManagerStatus(currentUser, topicName, config)) {
+                UserIsManager.LDAP_NOT_AVAILABLE -> return@put
+                UserIsManager.IS_NOT_MANAGER -> return@put
+                else -> {}
             }
+
+            val (updateRequestOk, result) = try {
+                Pair(true, LDAPGroup(config).use { lc -> lc.updateKafkaGroupMembership(topicName, body) })
+            } catch (e: Exception) { Pair(false, SLDAPResult()) }
+
+            // TODO 1) User not found 2) user account not allowed in KP and KC groups
+
+            if (!updateRequestOk) {
+                val msg = "User not found, user not allowed in KP and KC, exception..."
+                application.environment.log.error(msg)
+                call.respond(HttpStatusCode.ServiceUnavailable, AnError(msg))
+                return@put
+            }
+
+            application.environment.log.info("$topicName's group has been updated")
+            call.respond(PutTopicGMemberModel(topicName, body, result))
         }
