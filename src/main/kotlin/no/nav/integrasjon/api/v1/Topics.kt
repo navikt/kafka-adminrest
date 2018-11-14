@@ -120,12 +120,12 @@ fun Routing.getTopics(adminClient: AdminClient?) =
 // get the default replication factor from 1st broker configuration. Due to puppet, consistency across brokers in a
 // kafka cluster
 fun getDefaultReplicationFactor(adminClient: AdminClient?): Short =
-        adminClient
-                ?.describeCluster()
-                ?.nodes()
-                ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
-                ?.first()?.let { node ->
-                    adminClient.describeConfigs(
+        adminClient?.let { ac ->
+            ac.describeCluster()
+                .nodes()
+                .get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                .first().let { node ->
+                    ac.describeConfigs(
                             listOf(
                                     ConfigResource(
                                             ConfigResource.Type.BROKER,
@@ -139,8 +139,8 @@ fun getDefaultReplicationFactor(adminClient: AdminClient?): Short =
                             .get("default.replication.factor")
                             .value()
                             .toShort()
-        }
-                ?: throw Exception(SERVICES_ERR_K)
+                }
+        } ?: throw Exception(SERVICES_ERR_K)
 
 private val topicPattern: Pattern = Pattern.compile("[A-Za-z0-9-]+")
 // extension function for validating a topic name and that the future group names are of valid length
@@ -225,13 +225,11 @@ fun Routing.createNewTopic(adminClient: AdminClient?, config: FasitProperties) =
             val newTopic = NewTopic(body.name, body.numPartitions, defaultRepFactor)
 
             val (topicIsOk, topicResult) = try {
-                adminClient
-                        ?.createTopics(mutableListOf(newTopic))
-                        ?.all()
-                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
-                        ?: throw Exception(SERVICES_ERR_K)
-                application.environment.log.info("Topic created - $newTopic")
-                Pair(true, "created topic $newTopic")
+                adminClient?.let { ac ->
+                    ac.createTopics(mutableListOf(newTopic)).all().get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                    application.environment.log.info("Topic created - $newTopic")
+                    Pair(true, "created topic $newTopic")
+                } ?: Pair(false, "failure for topic $newTopic creation, $SERVICES_ERR_K")
             } catch (e: Exception) {
                 // TODO should have warning for topcis already exists
                 application.environment.log.error("$EXCEPTION topic create request $newTopic - $e")
@@ -245,6 +243,11 @@ fun Routing.createNewTopic(adminClient: AdminClient?, config: FasitProperties) =
                     .map { it.ldapResult.resultCode }
                     .all { it == ResultCode.SUCCESS }
 
+            if (groupsAreOk)
+                application.environment.log.info("Groups for topic $newTopic have been created")
+            else
+                application.environment.log.info("Groups for topic $newTopic have some issues")
+
             // create ACLs based on kafka groups in LDAP, except manager group KM-
             val acls = groupsResult.asSequence()
                     .filter { it.type != KafkaGroupType.MANAGER }
@@ -254,13 +257,11 @@ fun Routing.createNewTopic(adminClient: AdminClient?, config: FasitProperties) =
             application.environment.log.info("ACLs create request: $acls")
 
             val (aclsAreOk, aclsResult) = try {
-                adminClient
-                        ?.createAcls(acls.toList())
-                        ?.all()
-                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
-                        ?: throw Exception(SERVICES_ERR_K)
-                application.environment.log.info("ACLs created - $acls")
-                Pair(true, "created $acls")
+                adminClient?.let { ac ->
+                    ac.createAcls(acls.toList()).all().get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                    application.environment.log.info("ACLs created - $acls")
+                    Pair(true, "created $acls")
+                } ?: Pair(false, "failure for $acls creation, $SERVICES_ERR_K")
             } catch (e: Exception) {
                 application.environment.log.error("$EXCEPTION ACLs create request $acls - $e")
                 Pair(false, "failure for $acls creation, $e")
@@ -350,13 +351,11 @@ fun Routing.deleteTopic(adminClient: AdminClient?, config: FasitProperties) =
             application.environment.log.info("ACLs delete request: $acls")
 
             val (aclsAreOk, aclsResult) = try {
-                adminClient
-                        ?.deleteAcls(mutableListOf(acls))
-                        ?.all()
-                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
-                        ?: throw Exception(SERVICES_ERR_K)
-                application.environment.log.info("ACLs deleted - $acls")
-                Pair(true, "deleted $acls")
+                adminClient?.let { ac ->
+                    ac.deleteAcls(mutableListOf(acls)).all().get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                    application.environment.log.info("ACLs deleted - $acls")
+                    Pair(true, "deleted $acls")
+                } ?: Pair(false, "failure for $acls deletion, $SERVICES_ERR_K")
             } catch (e: Exception) {
                 application.environment.log.error("$EXCEPTION ACLs delete request $acls - $e")
                 Pair(false, "failure for $acls deletion, $e")
@@ -371,13 +370,11 @@ fun Routing.deleteTopic(adminClient: AdminClient?, config: FasitProperties) =
 
             // delete the topic itself
             val (topicIsOk, topicResult) = try {
-                adminClient
-                        ?.deleteTopics(listOf(topicName))
-                        ?.all()
-                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
-                        ?: throw Exception(SERVICES_ERR_K)
-                application.environment.log.info("Topic deleted - $topicName")
-                Pair(true, "deleted topic $topicName")
+                adminClient?.let { ac ->
+                    ac.deleteTopics(listOf(topicName)).all().get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                    application.environment.log.info("Topic deleted - $topicName")
+                    Pair(true, "deleted topic $topicName")
+                } ?: Pair(false, "failure for topic $topicName deletion, $SERVICES_ERR_K")
             } catch (e: Exception) {
                 application.environment.log.error("$EXCEPTION topic delete request $topicName - $e")
                 Pair(false, "failure for topic $topicName deletion, $e")
@@ -413,12 +410,12 @@ fun Routing.getTopicConfig(adminClient: AdminClient?) =
 
             // NB! AdminClient is listing a default config independent of topic exists or not, verify existence!
             val (topicsRequestOk, existingTopics) = try {
-                Pair(true, adminClient
-                        ?.listTopics()
-                        ?.listings()
-                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
-                        ?.map { it.name() }
-                        ?: throw Exception(SERVICES_ERR_K)
+                Pair(true, adminClient?.let { ac ->
+                    ac.listTopics()
+                            .listings()
+                            .get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                            .map { it.name() }
+                } ?: throw Exception(SERVICES_ERR_K)
                 )
             } catch (e: Exception) {
                 application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
@@ -436,16 +433,15 @@ fun Routing.getTopicConfig(adminClient: AdminClient?) =
             }
 
             val (topicConfigRequestOk, topicConfig) = try {
-                Pair(true, adminClient
-                        ?.describeConfigs(
-                                mutableListOf(ConfigResource(ConfigResource.Type.TOPIC, topicName)))
-                        ?.all()
-                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
-                        ?.values
-                        ?.first()
-                        ?.entries()
-                        ?.toList()
-                        ?: throw Exception(SERVICES_ERR_K)
+                Pair(true, adminClient?.let { ac ->
+                    ac.describeConfigs(mutableListOf(ConfigResource(ConfigResource.Type.TOPIC, topicName)))
+                            .all()
+                            .get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                            .values
+                            .first()
+                            .entries()
+                            .toList()
+                } ?: throw Exception(SERVICES_ERR_K)
                 )
             } catch (e: Exception) {
                 application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
@@ -505,6 +501,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, config: FasitProperties
                 else -> {}
             }
 
+            // TODO if user tries invalid config entry, the body is non-existing...
             val configEntry = ConfigEntry(body.configentry.entryName, body.value)
 
             if (!AllowedConfigEntries.values().map { it.entryName }.contains(configEntry.name())) {
@@ -521,11 +518,12 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, config: FasitProperties
 
             // NB! .all is throwing error... Use of future for specific entry instead
             val (alterConfigRequestOk, _) = try {
-                Pair(true, adminClient?.alterConfigs(configReq)
-                        ?.values()
-                        ?.get(configResource)
-                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
-                        ?: throw Exception(SERVICES_ERR_K)
+                Pair(true, adminClient?.let { ac ->
+                    ac.alterConfigs(configReq)
+                            .values()
+                            .get(configResource)
+                            ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS) ?: Unit
+                } ?: throw Exception(SERVICES_ERR_K)
                 )
             } catch (e: Exception) { Pair(false, Unit) }
 

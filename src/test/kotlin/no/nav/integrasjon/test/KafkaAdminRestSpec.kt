@@ -119,7 +119,7 @@ object KafkaAdminRestSpec : Spek({
                     ldapPassword
             )
 
-    describe("test of different services down (ldap auth and group, and kafka)") {
+    xdescribe("test of different services down (ldap auth and group, and kafka)") {
 
         beforeGroup {
             InMemoryLDAPServer.start()
@@ -140,6 +140,8 @@ object KafkaAdminRestSpec : Spek({
             val details: String = ""
         )
 
+        // all endpoints with authentication will get unauthorized due to ldap auth not available
+
         val allDownServices = listOf(
                 Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.Unauthorized),
                 Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.ServiceUnavailable),
@@ -152,7 +154,10 @@ object KafkaAdminRestSpec : Spek({
                         TOPICS,
                         body = Gson().toJson(PostTopicBody("tpc-alldown")),
                         security = true,
-                        response = HttpStatusCode.Unauthorized)
+                        response = HttpStatusCode.Unauthorized),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.ServiceUnavailable)
         )
 
         val kafkaDownScenarios = listOf(
@@ -167,7 +172,10 @@ object KafkaAdminRestSpec : Spek({
                         TOPICS,
                         body = Gson().toJson(PostTopicBody("tpc-alldown")),
                         security = true,
-                        response = HttpStatusCode.ServiceUnavailable)
+                        response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.OK)
         )
 
         val ldapGroupDown = listOf(
@@ -182,7 +190,10 @@ object KafkaAdminRestSpec : Spek({
                         TOPICS,
                         body = Gson().toJson(PostTopicBody("tpc-alldown")),
                         security = true,
-                        response = HttpStatusCode.ServiceUnavailable)
+                        response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.ServiceUnavailable)
         )
 
         val ldapAuthDown = listOf(
@@ -197,7 +208,10 @@ object KafkaAdminRestSpec : Spek({
                         TOPICS,
                         body = Gson().toJson(PostTopicBody("tpc-alldown")),
                         security = true,
-                        response = HttpStatusCode.Unauthorized)
+                        response = HttpStatusCode.Unauthorized),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.OK)
         )
 
         val srvsDown = listOf(
@@ -294,7 +308,7 @@ object KafkaAdminRestSpec : Spek({
         }
     }
 
-    xdescribe("test of all backend services up (ldap auth and group, and kafka)") {
+    describe("test of all backend services up (ldap auth and group, and kafka)") {
 
         // topics to create in tests
         val topics2CreateDelete = listOf("tpc-created01", "tpc-created02", "tpc-created03")
@@ -400,310 +414,329 @@ object KafkaAdminRestSpec : Spek({
 
             context("Route $TOPICS") {
 
-                it("should list all topics $preTopics in kafka cluster") {
+                context("Get topics") {
 
-                    val call = handleRequest(HttpMethod.Get, TOPICS) {
-                        addHeader(HttpHeaders.Accept, "application/json")
+                    it("should list all topics $preTopics in kafka cluster") {
+
+                        val call = handleRequest(HttpMethod.Get, TOPICS) {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                        }
+
+                        val result: GetTopicsModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicsModel>() {}.type)
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+                        result.topics shouldContainAll preTopics
                     }
-
-                    val result: GetTopicsModel = Gson().fromJson(
-                            call.response.content ?: "",
-                            object : TypeToken<GetTopicsModel>() {}.type)
-
-                    call.response.status() shouldBe HttpStatusCode.OK
-                    result.topics shouldContainAll preTopics
                 }
 
-                (topics2CreateDelete + topics4ACLTesting).forEach { topicToCreate ->
+                context("Create topics") {
 
-                    it("should create topic $topicToCreate") {
+                    (topics2CreateDelete + topics4ACLTesting).forEach { topicToCreate ->
 
-                        val call = handleRequest(HttpMethod.Post, TOPICS) {
+                        it("should create topic $topicToCreate") {
+
+                            val call = handleRequest(HttpMethod.Post, TOPICS) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                setBody(Gson().toJson(PostTopicBody(topicToCreate)))
+                            }
+
+                            val result: PostTopicModel = Gson().fromJson(
+                                    call.response.content ?: "",
+                                    object : TypeToken<PostTopicModel>() {}.type)
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+
+                            result.topicStatus shouldContain "created topic"
+                            result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
+                            result.aclStatus shouldContain "created"
+                        }
+                    }
+
+                    invalidTopics.forEach { topicName, numPartitions ->
+                        it("should report bad request when creating topic $topicName") {
+
+                            val call = handleRequest(HttpMethod.Post, TOPICS) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                // relevant user is in the right place in UserAndGroups.ldif
+                                addHeader(
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("srvp01:dummy".toByteArray())}")
+
+                                val jsonPayload = Gson().toJson(PostTopicBody(topicName, numPartitions))
+                                setBody(jsonPayload)
+                            }
+
+                            call.response.status() shouldBe HttpStatusCode.BadRequest
+                        }
+                    }
+                }
+
+                context("Delete topics") {
+
+                    it("should not be possible to delete ${topics2CreateDelete.first()} for non-member in KM-") {
+                        val call = handleRequest(HttpMethod.Delete, "$TOPICS/${topics2CreateDelete.first()}") {
                             addHeader(HttpHeaders.Accept, "application/json")
                             addHeader(HttpHeaders.ContentType, "application/json")
-                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
-                            setBody(Gson().toJson(PostTopicBody(topicToCreate)))
+                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("igroup:itest".toByteArray())}")
                         }
 
-                        val result: PostTopicModel = Gson().fromJson(
-                                call.response.content ?: "",
-                                object : TypeToken<PostTopicModel>() {}.type)
-
-                        call.response.status() shouldBe HttpStatusCode.OK
-
-                        result.topicStatus shouldContain "created topic"
-                        result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
-                        result.aclStatus shouldContain "created"
-                    }
-                }
-
-                it("should not be possible to delete ${topics2CreateDelete.first()} for non-member in KM-") {
-                    val call = handleRequest(HttpMethod.Delete, "$TOPICS/${topics2CreateDelete.first()}") {
-                        addHeader(HttpHeaders.Accept, "application/json")
-                        addHeader(HttpHeaders.ContentType, "application/json")
-                        addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("igroup:itest".toByteArray())}")
+                        call.response.status() shouldBe HttpStatusCode.BadRequest
                     }
 
-                    call.response.status() shouldBe HttpStatusCode.Unauthorized
-                }
+                    topics2CreateDelete.forEach { topicToDelete ->
 
-                topics2CreateDelete.forEach { topicToDelete ->
+                        it("should delete topic $topicToDelete for member in KM-") {
 
-                    it("should delete topic $topicToDelete for member in KM-") {
+                            val call = handleRequest(HttpMethod.Delete, "$TOPICS/$topicToDelete") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                            }
 
-                        val call = handleRequest(HttpMethod.Delete, "$TOPICS/$topicToDelete") {
-                            addHeader(HttpHeaders.Accept, "application/json")
-                            addHeader(HttpHeaders.ContentType, "application/json")
-                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                            val result: DeleteTopicModel = Gson().fromJson(
+                                    call.response.content ?: "",
+                                    object : TypeToken<DeleteTopicModel>() {}.type)
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+
+                            result.topicStatus shouldContain "deleted topic"
+                            result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
+                            result.aclStatus shouldContain "deleted"
                         }
-
-                        val result: DeleteTopicModel = Gson().fromJson(
-                                call.response.content ?: "",
-                                object : TypeToken<DeleteTopicModel>() {}.type)
-
-                        call.response.status() shouldBe HttpStatusCode.OK
-
-                        result.topicStatus shouldContain "deleted topic"
-                        result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
-                        result.aclStatus shouldContain "deleted"
                     }
                 }
 
-                preTopics.forEach { topic ->
-                    it("should return configuration for $topic") {
+                context("Get/update topic configuration") {
 
-                        val call = handleRequest(HttpMethod.Get, "$TOPICS/$topic") {
+                    preTopics.forEach { topic ->
+                        it("should return configuration for $topic") {
+
+                            val call = handleRequest(HttpMethod.Get, "$TOPICS/$topic") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                            }
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                        }
+                    }
+
+                    it("should return bad request for non-existing topic 'donotexist'") {
+
+                        val call = handleRequest(HttpMethod.Get, "$TOPICS/donotexist") {
                             addHeader(HttpHeaders.Accept, "application/json")
                         }
 
-                        call.response.status() shouldBe HttpStatusCode.OK
-                    }
-                }
-
-                it("should update 'retention.ms' configuration for tpc-03") {
-
-                    val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
-                        addHeader(HttpHeaders.Accept, "application/json")
-                        addHeader(HttpHeaders.ContentType, "application/json")
-                        // relevant user is in the right place in UserAndGroups.ldif
-                        addHeader(
-                                HttpHeaders.Authorization,
-                                "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
-
-                        val jsonPayload = Gson().toJson(
-                                PutTopicConfigEntryBody(AllowedConfigEntries.RETENTION_BYTES, "6600666"))
-                        setBody(jsonPayload)
+                        call.response.status() shouldBe HttpStatusCode.BadRequest
                     }
 
-                    call.response.status() shouldBe HttpStatusCode.OK
-                }
+                    it("should update 'retention.ms' configuration for tpc-03") {
 
-                it("should return updated 'retention.ms' configuration for tpc-03") {
-
-                    val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03") {
-                        addHeader(HttpHeaders.Accept, "application/json")
-                    }
-
-                    val result: GetTopicConfigModel = Gson().fromJson(
-                            call.response.content ?: "",
-                            object : TypeToken<GetTopicConfigModel>() {}.type)
-
-                    call.response.status() shouldBe HttpStatusCode.OK
-                    result.config.find { it.name() == "retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
-                }
-
-                it("should report exception when trying to update config outside white list for tpc-03 ") {
-
-                    val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
-                        addHeader(HttpHeaders.Accept, "application/json")
-                        addHeader(HttpHeaders.ContentType, "application/json")
-                        // relevant user is in the right place in UserAndGroups.ldif
-                        addHeader(
-                                HttpHeaders.Authorization,
-                                "Basic ${encodeBase64("N145821:itest3".toByteArray())}")
-
-                        val jsonPayload = Gson().toJson(ConfigEntry("max.message.bytes", "51000012"))
-                        setBody(jsonPayload)
-                    }
-
-                    call.response.status() shouldBe HttpStatusCode.ExpectationFailed
-                }
-
-                topics4ACLTesting.forEach { tpcACL ->
-                    it("should for topic $tpcACL report standard ACL for KP- and KC- groups") {
-                        val call = handleRequest(HttpMethod.Get, "$TOPICS/$tpcACL/acls") {
-                            addHeader(HttpHeaders.Accept, "application/json")
-                            addHeader(HttpHeaders.ContentType, "application/json")
-                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
-                        }
-
-                        val result: GetTopicACLModel = Gson().fromJson(
-                                call.response.content ?: "",
-                                object : TypeToken<GetTopicACLModel>() {}.type)
-
-                        val expectedResult = KafkaGroupType.values()
-                                .filter { it != KafkaGroupType.MANAGER }
-                                .map { grType -> grType.intoAcls(tpcACL) }
-                                .flatten()
-
-                        call.response.status() shouldBe HttpStatusCode.OK
-                        result.acls shouldContainAll expectedResult
-                    }
-                }
-
-                it("should report non-existing topic for topic 'invalid'") {
-
-                    val call = handleRequest(HttpMethod.Get, "$TOPICS/invalid") {
-                        addHeader(HttpHeaders.Accept, "application/json")
-                    }
-
-                    call.response.status() shouldBe HttpStatusCode.ExpectationFailed
-                    call.response.content.toString() shouldBeEqualTo """{"error":"Sorry, exception happened - java.lang.Exception: failure, topic invalid does not exist"}"""
-                }
-
-                it("should report groups and members for topic tpc-03") {
-
-                    val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03/groups") {
-                        addHeader(HttpHeaders.Accept, "application/json")
-                    }
-
-                    val result: GetTopicGroupsModel = Gson().fromJson(
-                            call.response.content ?: "",
-                            object : TypeToken<GetTopicGroupsModel>() {}.type)
-
-                    call.response.status() shouldBe HttpStatusCode.OK
-                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
-                }
-
-                usersToManage.forEach { srvUser, role ->
-                    it("should add a new ${role.name} $srvUser to topic tpc-01") {
-
-                        val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01/groups") {
+                        val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
                             addHeader(HttpHeaders.Accept, "application/json")
                             addHeader(HttpHeaders.ContentType, "application/json")
                             // relevant user is in the right place in UserAndGroups.ldif
                             addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                    "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
 
                             val jsonPayload = Gson().toJson(
-                                    UpdateKafkaGroupMember(
-                                            role,
-                                            GroupMemberOperation.ADD,
-                                            srvUser
-                                    )
-                            )
+                                    PutTopicConfigEntryBody(AllowedConfigEntries.RETENTION_BYTES, "6600666"))
                             setBody(jsonPayload)
                         }
 
                         call.response.status() shouldBe HttpStatusCode.OK
                     }
-                }
 
-                it("should report groups and new members for topic tpc-01") {
+                    it("should return updated 'retention.ms' configuration for tpc-03") {
 
-                    val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-01/groups") {
-                        addHeader(HttpHeaders.Accept, "application/json")
-                    }
-
-                    val result: GetTopicGroupsModel = Gson().fromJson(
-                            call.response.content ?: "",
-                            object : TypeToken<GetTopicGroupsModel>() {}.type)
-
-                    call.response.status() shouldBe HttpStatusCode.OK
-                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
-                    result.groups.flatMap { it.members } shouldContainAll listOf(
-                            "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
-                            "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local",
-                            "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
-                            "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
-                    )
-                }
-
-                it("should report exception when trying to add non-existing srv user to topic tpc-01") {
-
-                    val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01/groups") {
-                        addHeader(HttpHeaders.Accept, "application/json")
-                        addHeader(HttpHeaders.ContentType, "application/json")
-                        // relevant user is in the right place in UserAndGroups.ldif
-                        addHeader(
-                                HttpHeaders.Authorization,
-                                "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
-
-                        val jsonPayload = Gson().toJson(
-                                UpdateKafkaGroupMember(
-                                        KafkaGroupType.PRODUCER,
-                                        GroupMemberOperation.ADD,
-                                        "non-existing"
-                                )
-                        )
-                        setBody(jsonPayload)
-                    }
-
-                    call.response.status() shouldBe HttpStatusCode.ExpectationFailed
-                }
-
-                usersToManage.forEach { srvUser, role ->
-                    it("should remove ${role.name} member $srvUser from topic tpc-01") {
-
-                        val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01/groups") {
+                        val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03") {
                             addHeader(HttpHeaders.Accept, "application/json")
-                            addHeader(HttpHeaders.ContentType, "application/json")
-                            // relevant user is in the right place in UserAndGroups.ldif
-                            addHeader(
-                                    HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
-
-                            val jsonPayload = Gson().toJson(
-                                    UpdateKafkaGroupMember(
-                                            role,
-                                            GroupMemberOperation.REMOVE,
-                                            srvUser
-                                    )
-                            )
-                            setBody(jsonPayload)
                         }
 
+                        val result: GetTopicConfigModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicConfigModel>() {}.type)
+
                         call.response.status() shouldBe HttpStatusCode.OK
-                    }
-                }
-
-                it("should report groups and 0 members for topic tpc-01") {
-
-                    val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-01/groups") {
-                        addHeader(HttpHeaders.Accept, "application/json")
+                        result.config.find { it.name() == "retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
                     }
 
-                    val result: GetTopicGroupsModel = Gson().fromJson(
-                            call.response.content ?: "",
-                            object : TypeToken<GetTopicGroupsModel>() {}.type)
+                    xit("should report bad request when trying to update config outside white list for tpc-03 ") {
 
-                    call.response.status() shouldBe HttpStatusCode.OK
-                    result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
-                    result.groups.flatMap { it.members }.size shouldEqualTo 1
-                }
-
-                invalidTopics.forEach { topicName, numPartitions ->
-                    it("should report exception when creating topic $topicName") {
-
-                        val call = handleRequest(HttpMethod.Post, TOPICS) {
+                        val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
                             addHeader(HttpHeaders.Accept, "application/json")
                             addHeader(HttpHeaders.ContentType, "application/json")
                             // relevant user is in the right place in UserAndGroups.ldif
                             addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("srvp01:dummy".toByteArray())}")
+                                    "Basic ${encodeBase64("N145821:itest3".toByteArray())}")
 
-                            val jsonPayload = Gson().toJson(PostTopicBody(topicName, numPartitions))
+                            val jsonPayload = Gson().toJson(
+                                    ConfigEntry("max.message.bytes", "51000012")
+                            )
                             setBody(jsonPayload)
                         }
 
                         call.response.status() shouldBe HttpStatusCode.BadRequest
                     }
                 }
+
+                context("Get topic ACLs") {
+
+                    topics4ACLTesting.forEach { tpcACL ->
+                        it("should for topic $tpcACL report standard ACL for KP- and KC- groups") {
+                            val call = handleRequest(HttpMethod.Get, "$TOPICS/$tpcACL/acls") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                            }
+
+                            val result: GetTopicACLModel = Gson().fromJson(
+                                    call.response.content ?: "",
+                                    object : TypeToken<GetTopicACLModel>() {}.type)
+
+                            val expectedResult = KafkaGroupType.values()
+                                    .filter { it != KafkaGroupType.MANAGER }
+                                    .map { grType -> grType.intoAcls(tpcACL) }
+                                    .flatten()
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            result.acls shouldContainAll expectedResult
+                        }
+                    }
+                }
+
+                context("Get/update topic groups") {
+
+                    it("should report groups and members for topic tpc-03") {
+
+                        val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03/groups") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                        }
+
+                        val result: GetTopicGroupsModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicGroupsModel>() {}.type)
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+                        result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
+                    }
+
+                    usersToManage.forEach { srvUser, role ->
+                        it("should add a new ${role.name} $srvUser to topic tpc-01") {
+
+                            val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01/groups") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                // relevant user is in the right place in UserAndGroups.ldif
+                                addHeader(
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+
+                                val jsonPayload = Gson().toJson(
+                                        UpdateKafkaGroupMember(
+                                                role,
+                                                GroupMemberOperation.ADD,
+                                                srvUser
+                                        )
+                                )
+                                setBody(jsonPayload)
+                            }
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                        }
+                    }
+
+                    it("should report groups and new members for topic tpc-01") {
+
+                        val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-01/groups") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                        }
+
+                        val result: GetTopicGroupsModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicGroupsModel>() {}.type)
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+                        result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
+                        result.groups.flatMap { it.members } shouldContainAll listOf(
+                                "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
+                                "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local",
+                                "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
+                                "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
+                        )
+                    }
+
+                    it("should report exception when trying to add non-existing srv user to topic tpc-01") {
+
+                        val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01/groups") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                            addHeader(HttpHeaders.ContentType, "application/json")
+                            // relevant user is in the right place in UserAndGroups.ldif
+                            addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+
+                            val jsonPayload = Gson().toJson(
+                                    UpdateKafkaGroupMember(
+                                            KafkaGroupType.PRODUCER,
+                                            GroupMemberOperation.ADD,
+                                            "non-existing"
+                                    )
+                            )
+                            setBody(jsonPayload)
+                        }
+
+                        call.response.status() shouldBe HttpStatusCode.ServiceUnavailable
+                    }
+
+                    usersToManage.forEach { srvUser, role ->
+                        it("should remove ${role.name} member $srvUser from topic tpc-01") {
+
+                            val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01/groups") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                // relevant user is in the right place in UserAndGroups.ldif
+                                addHeader(
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+
+                                val jsonPayload = Gson().toJson(
+                                        UpdateKafkaGroupMember(
+                                                role,
+                                                GroupMemberOperation.REMOVE,
+                                                srvUser
+                                        )
+                                )
+                                setBody(jsonPayload)
+                            }
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                        }
+                    }
+
+                    it("should report groups and 0 members for topic tpc-01") {
+
+                        val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-01/groups") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                        }
+
+                        val result: GetTopicGroupsModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicGroupsModel>() {}.type)
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+                        result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
+                        result.groups.flatMap { it.members }.size shouldEqualTo 1
+                    }
+                }
             }
 
-            context("Route $ONESHOT") {
+            xcontext("Route $ONESHOT") {
                 it("creates a topic with one consumer + manager") {
                     val call = handleRequest(HttpMethod.Put, ONESHOT) {
                         addHeader(HttpHeaders.Accept, "application/json")
