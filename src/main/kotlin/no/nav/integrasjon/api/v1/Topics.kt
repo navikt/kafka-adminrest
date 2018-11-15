@@ -501,8 +501,18 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, config: FasitProperties
                 else -> {}
             }
 
-            // TODO if user tries invalid config entry, the body is non-existing...
-            val configEntry = ConfigEntry(body.configentry.entryName, body.value)
+            val configEntry = try {
+                ConfigEntry(body.configentry.entryName, body.value)
+            } catch (e: Exception) {
+                null
+            }
+
+            if (configEntry == null) {
+                val msg = "Not supported configEntry, please see swagger documentation and model"
+                application.environment.log.error(msg)
+                call.respond(HttpStatusCode.BadRequest, AnError(msg))
+                return@put
+            }
 
             if (!AllowedConfigEntries.values().map { it.entryName }.contains(configEntry.name())) {
                 val msg = "configEntry ${configEntry.name()} is not allowed to update automatically"

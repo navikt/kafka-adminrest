@@ -34,7 +34,6 @@ import no.nav.integrasjon.api.v1.topicsAPI
 import no.nav.integrasjon.api.v1.brokersAPI
 import no.nav.integrasjon.api.v1.groupsAPI
 import no.nav.integrasjon.api.v1.aclAPI
-import no.nav.integrasjon.api.v1.backEndServicesAreOk
 import no.nav.integrasjon.api.v1.registerOneshotApi
 import no.nav.integrasjon.ldap.LDAPAuthenticate
 import org.apache.kafka.clients.CommonClientConfigs
@@ -147,13 +146,10 @@ fun Application.kafkaAdminREST() {
 
         // provide the essential, management of kafka environment, topic creation and authorization
 
+        registerOneshotApi(adminClient, fasitProps)
         topicsAPI(adminClient, fasitProps)
         brokersAPI(adminClient)
         aclAPI(adminClient)
         groupsAPI(fasitProps)
-
-        if (backEndServicesAreOk(adminClient, fasitProps).toList().filter { false }.size == 3) {
-            registerOneshotApi(adminClient!!, fasitProps)
-        }
     }
 }
