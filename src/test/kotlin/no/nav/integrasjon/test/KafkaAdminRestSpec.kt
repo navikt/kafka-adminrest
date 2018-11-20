@@ -570,6 +570,38 @@ object KafkaAdminRestSpec : Spek({
                             result.config.find { it.name() == "retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
                         }
 
+                        it("should update 'delete.retention.ms' configuration for tpc-03") {
+
+                            val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                // relevant user is in the right place in UserAndGroups.ldif
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
+
+                                val jsonPayload = Gson().toJson(
+                                    PutTopicConfigEntryBody(AllowedConfigEntries.DELETE_RETENTION_MS, "6600666"))
+                                setBody(jsonPayload)
+                            }
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                        }
+
+                        it("should return updated 'delete.retention.ms' configuration for tpc-03") {
+
+                            val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                            }
+
+                            val result: GetTopicConfigModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicConfigModel>() {}.type)
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            result.config.find { it.name() == "delete.retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
+                        }
+
                         it("should report bad request when trying to update config outside white list for tpc-03 ") {
 
                             val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {

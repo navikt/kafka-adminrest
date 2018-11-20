@@ -465,7 +465,8 @@ fun Routing.getTopicConfig(adminClient: AdminClient?, fasitConfig: FasitProperti
 enum class AllowedConfigEntries(val entryName: String) {
     RETENTION_MS("retention.ms"),
     RETENTION_BYTES("retention.bytes"),
-    CLEANUP_POLICY("cleanup.policy")
+    CLEANUP_POLICY("cleanup.policy"),
+    DELETE_RETENTION_MS("delete.retention.ms")
 }
 
 @Group(swGroup)
