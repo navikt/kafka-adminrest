@@ -61,7 +61,7 @@ internal suspend fun PipelineContext<Unit, ApplicationCall>.respondSelectiveCatc
             call.respond(res.first, res.second)
         } catch (e: Exception) {
             application.environment.log.error(EXCEPTION, e)
-            call.respond(HttpStatusCode.ExpectationFailed, AnError("$EXCEPTION$e"))
+            call.respond(HttpStatusCode.InternalServerError, AnError("$EXCEPTION$e"))
         }
 
 internal suspend fun PipelineContext<Unit, ApplicationCall>.respondOrServiceUnavailable(block: () -> Any) =
