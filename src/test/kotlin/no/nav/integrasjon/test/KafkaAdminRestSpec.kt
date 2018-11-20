@@ -10,6 +10,7 @@ import io.ktor.server.testing.TestApplicationEngine
 import io.ktor.server.testing.createTestEnvironment
 import io.ktor.server.testing.handleRequest
 import io.ktor.server.testing.setBody
+import io.ktor.util.InternalAPI
 import io.ktor.util.encodeBase64
 import no.nav.common.KafkaEnvironment
 import no.nav.integrasjon.FasitPropFactory
@@ -59,6 +60,7 @@ import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
 import java.util.concurrent.TimeUnit
 
+@UseExperimental(InternalAPI::class)
 object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
@@ -68,22 +70,23 @@ object KafkaAdminRestSpec : Spek({
     val kCluster = KafkaEnvironment(1, topics = preTopics.toList(), withSecurity = true, autoStart = true)
 
     val correctFP = FasitProperties(
-            kCluster.brokersURL, "kafka-adminrest", "TRUE",
-            "SASL_PLAINTEXT", "PLAIN",
-            "srvkafkaclient", "kafkaclient", // see predfined users in embedded kafka
-            ldapConnTimeout = 250,
-            ldapUserAttrName = "uid",
-            ldapAuthHost = "localhost",
-            ldapAuthPort = InMemoryLDAPServer.LPORT,
-            ldapAuthUserBase = "OU=Users,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
-            ldapHost = "localhost",
-            ldapPort = InMemoryLDAPServer.LPORT,
-            ldapSrvUserBase = "OU=ServiceAccounts,DC=test,DC=local",
-            ldapGroupBase = "OU=kafka,OU=AccountGroupNotInRemedy,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
-            ldapGroupAttrName = "cn",
-            ldapGrpMemberAttrName = "member",
-            ldapUser = "igroup",
-            ldapPassword = "itest"
+        kCluster.brokersURL, "kafka-adminrest", "TRUE",
+        "SASL_PLAINTEXT", "PLAIN",
+        "srvkafkaclient", "kafkaclient", // see predfined users in embedded kafka
+        ldapConnTimeout = 250,
+        ldapUserAttrName = "uid",
+        ldapAuthHost = "localhost",
+        ldapAuthPort = InMemoryLDAPServer.LPORT,
+        ldapAuthUserBase = "OU=Users,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
+        ldapHost = "localhost",
+        ldapPort = InMemoryLDAPServer.LPORT,
+        ldapSrvUserBase = "OU=ServiceAccounts,DC=test,DC=local",
+        ldapGroupBase = "OU=kafka,OU=AccountGroupNotInRemedy,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
+        ldapGroupAttrName = "cn",
+        ldapGrpMemberAttrName = "member",
+        ldapUser = "igroup",
+        ldapPassword = "itest",
+        kafkaTimeout = 1_000L
     )
 
     fun FasitProperties.injectValues(
@@ -91,33 +94,34 @@ object KafkaAdminRestSpec : Spek({
         portLDAPAuth: Int = InMemoryLDAPServer.LPORT,
         kafkaURL: String = kCluster.brokersURL
     ) =
-            FasitProperties(
-                    kafkaURL,
-                    kafkaClientID,
-                    kafkaSecurity,
-                    kafkaSecProt,
-                    kafkaSaslMec,
-                    kafkaUser,
-                    kafkaPassword,
+        FasitProperties(
+            kafkaURL,
+            kafkaClientID,
+            kafkaSecurity,
+            kafkaSecProt,
+            kafkaSaslMec,
+            kafkaUser,
+            kafkaPassword,
+            kafkaTimeout,
 
-                    ldapConnTimeout,
-                    ldapUserAttrName,
+            ldapConnTimeout,
+            ldapUserAttrName,
 
-                    ldapAuthHost,
-                    portLDAPAuth,
-                    ldapAuthUserBase,
+            ldapAuthHost,
+            portLDAPAuth,
+            ldapAuthUserBase,
 
-                    ldapHost,
-                    portLDAPGroup,
+            ldapHost,
+            portLDAPGroup,
 
-                    ldapSrvUserBase,
-                    ldapGroupBase,
-                    ldapGroupAttrName,
-                    ldapGrpMemberAttrName,
+            ldapSrvUserBase,
+            ldapGroupBase,
+            ldapGroupAttrName,
+            ldapGrpMemberAttrName,
 
-                    ldapUser,
-                    ldapPassword
-            )
+            ldapUser,
+            ldapPassword
+        )
 
     describe("Test of different services down, and all services up (ldap auth and group, and kafka)") {
 
@@ -143,105 +147,105 @@ object KafkaAdminRestSpec : Spek({
             // all endpoints with authentication will get unauthorized due to ldap auth not available
 
             val allDownServices = listOf(
-                    Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.Unauthorized),
-                    Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(
-                            HttpMethod.Post,
-                            TOPICS,
-                            body = Gson().toJson(PostTopicBody("tpc-alldown")),
-                            security = true,
-                            response = HttpStatusCode.Unauthorized),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.ServiceUnavailable)
+                Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.Unauthorized),
+                Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(
+                    HttpMethod.Post,
+                    TOPICS,
+                    body = Gson().toJson(PostTopicBody("tpc-alldown")),
+                    security = true,
+                    response = HttpStatusCode.Unauthorized),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.ServiceUnavailable)
             )
 
             val kafkaDownScenarios = listOf(
-                    Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(
-                            HttpMethod.Post,
-                            TOPICS,
-                            body = Gson().toJson(PostTopicBody("tpc-alldown")),
-                            security = true,
-                            response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.OK)
+                Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(
+                    HttpMethod.Post,
+                    TOPICS,
+                    body = Gson().toJson(PostTopicBody("tpc-alldown")),
+                    security = true,
+                    response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.OK)
             )
 
             val ldapGroupDown = listOf(
-                    Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.OK),
-                    Scenario(
-                            HttpMethod.Post,
-                            TOPICS,
-                            body = Gson().toJson(PostTopicBody("tpc-alldown")),
-                            security = true,
-                            response = HttpStatusCode.ServiceUnavailable),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.ServiceUnavailable)
+                Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.OK),
+                Scenario(
+                    HttpMethod.Post,
+                    TOPICS,
+                    body = Gson().toJson(PostTopicBody("tpc-alldown")),
+                    security = true,
+                    response = HttpStatusCode.ServiceUnavailable),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.ServiceUnavailable)
             )
 
             val ldapAuthDown = listOf(
-                    Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.Unauthorized),
-                    Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.OK),
-                    Scenario(
-                            HttpMethod.Post,
-                            TOPICS,
-                            body = Gson().toJson(PostTopicBody("tpc-alldown")),
-                            security = true,
-                            response = HttpStatusCode.Unauthorized),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.OK),
-                    Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.OK)
+                Scenario(HttpMethod.Get, ACLS, security = true, response = HttpStatusCode.Unauthorized),
+                Scenario(HttpMethod.Get, BROKERS, response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$BROKERS/0", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, GROUPS, response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$GROUPS/tpc-02", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, TOPICS, response = HttpStatusCode.OK),
+                Scenario(
+                    HttpMethod.Post,
+                    TOPICS,
+                    body = Gson().toJson(PostTopicBody("tpc-alldown")),
+                    security = true,
+                    response = HttpStatusCode.Unauthorized),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.OK),
+                Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.OK)
             )
 
             val srvsDown = listOf(
-                    ServiceDown(
-                            SERVICES_ERR_GAK,
-                            correctFP.injectValues(0, 0, "Wrong_Broker_URL"),
-                            allDownServices
-                    ),
-                    ServiceDown(
-                            SERVICES_ERR_A,
-                            correctFP.injectValues(portLDAPAuth = 0),
-                            ldapAuthDown
-                    ),
-                    ServiceDown(
-                            SERVICES_ERR_G,
-                            correctFP.injectValues(portLDAPGroup = 0),
-                            ldapGroupDown
-                    ),
-                    ServiceDown(
-                            SERVICES_ERR_K,
-                            correctFP.injectValues(kafkaURL = "Wrong_Broker_URL"),
-                            kafkaDownScenarios,
-                            "invalid broker url"
-                    ),
-                    ServiceDown(
-                            SERVICES_ERR_K,
-                            correctFP.injectValues(kafkaURL = "SASL_PLAINTEXT://localhost:01"),
-                            kafkaDownScenarios,
-                            "wrong broker port"
-                    )
+                ServiceDown(
+                    SERVICES_ERR_GAK,
+                    correctFP.injectValues(0, 0, "Wrong_Broker_URL"),
+                    allDownServices
+                ),
+                ServiceDown(
+                    SERVICES_ERR_A,
+                    correctFP.injectValues(portLDAPAuth = 0),
+                    ldapAuthDown
+                ),
+                ServiceDown(
+                    SERVICES_ERR_G,
+                    correctFP.injectValues(portLDAPGroup = 0),
+                    ldapGroupDown
+                ),
+                ServiceDown(
+                    SERVICES_ERR_K,
+                    correctFP.injectValues(kafkaURL = "Wrong_Broker_URL"),
+                    kafkaDownScenarios,
+                    "invalid broker url"
+                ),
+                ServiceDown(
+                    SERVICES_ERR_K,
+                    correctFP.injectValues(kafkaURL = "SASL_PLAINTEXT://localhost:01"),
+                    kafkaDownScenarios,
+                    "wrong broker port"
+                )
             )
 
             srvsDown.forEach { srvDown ->
@@ -273,8 +277,8 @@ object KafkaAdminRestSpec : Spek({
                                 }
 
                                 val result: AnError = Gson().fromJson(
-                                        call.response.content ?: "",
-                                        object : TypeToken<AnError>() {}.type)
+                                    call.response.content ?: "",
+                                    object : TypeToken<AnError>() {}.type)
 
                                 call.response.status() shouldBe HttpStatusCode.ServiceUnavailable
                                 result.error shouldBeEqualTo srvDown.error
@@ -290,8 +294,8 @@ object KafkaAdminRestSpec : Spek({
                                         addHeader(HttpHeaders.Accept, "application/json")
                                         addHeader(HttpHeaders.ContentType, "application/json")
                                         addHeader(
-                                                HttpHeaders.Authorization,
-                                                "Basic ${encodeBase64("n000002:itest2".toByteArray())}"
+                                            HttpHeaders.Authorization,
+                                            "Basic ${encodeBase64("n000002:itest2".toByteArray())}"
                                         )
                                         setBody(scenario.body)
                                     }
@@ -318,14 +322,14 @@ object KafkaAdminRestSpec : Spek({
             // Combining srv users in ServiceAccounts and the node below, ApplAccounts (Basta)
             // to be added and removed from tpc-01
             val usersToManage = mapOf(
-                    "srvp01" to KafkaGroupType.PRODUCER,
-                    "srvc02" to KafkaGroupType.CONSUMER,
-                    "n145821" to KafkaGroupType.MANAGER
+                "srvp01" to KafkaGroupType.PRODUCER,
+                "srvc02" to KafkaGroupType.CONSUMER,
+                "n145821" to KafkaGroupType.MANAGER
             )
 
             val invalidTopics = mapOf(
-                    "invalid_test" to 1,
-                    "too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-" to 1
+                "invalid_test" to 1,
+                "too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-too00-lo0ng-" to 1
             )
 
             val engine2 = TestApplicationEngine(createTestEnvironment())
@@ -352,8 +356,8 @@ object KafkaAdminRestSpec : Spek({
                         }
 
                         val result: GetBrokersModel = Gson().fromJson(
-                                call.response.content ?: "",
-                                object : TypeToken<GetBrokersModel>() {}.type)
+                            call.response.content ?: "",
+                            object : TypeToken<GetBrokersModel>() {}.type)
 
                         call.response.status() shouldBe HttpStatusCode.OK
                         result.brokers.size shouldEqualTo kCluster.brokers.size
@@ -366,8 +370,8 @@ object KafkaAdminRestSpec : Spek({
                         }
 
                         val result: GetBrokerConfigModel = Gson().fromJson(
-                                call.response.content ?: "",
-                                object : TypeToken<GetBrokerConfigModel>() {}.type)
+                            call.response.content ?: "",
+                            object : TypeToken<GetBrokerConfigModel>() {}.type)
 
                         call.response.status() shouldBe HttpStatusCode.OK
                         result.id shouldBeEqualTo "0"
@@ -383,17 +387,17 @@ object KafkaAdminRestSpec : Spek({
                         }
 
                         val result: GetGroupsModel = Gson().fromJson(
-                                call.response.content ?: "",
-                                object : TypeToken<GetGroupsModel>() {}.type)
+                            call.response.content ?: "",
+                            object : TypeToken<GetGroupsModel>() {}.type)
 
                         call.response.status() shouldBe HttpStatusCode.OK
                         result.groups shouldContainAll listOf("KC-tpc-01", "KC-tpc-02", "KC-tpc-03", "KP-tpc-01", "KP-tpc-02", "KP-tpc-03")
                     }
 
                     val groups = mapOf(
-                            "KP-tpc-01" to emptyList(),
-                            "KC-tpc-02" to listOf("uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local"),
-                            "KP-tpc-03" to listOf("uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local")
+                        "KP-tpc-01" to emptyList(),
+                        "KC-tpc-02" to listOf("uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local"),
+                        "KP-tpc-03" to listOf("uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local")
                     )
 
                     groups.forEach { group, members ->
@@ -404,8 +408,8 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             val result: GetGroupMembersModel = Gson().fromJson(
-                                    call.response.content ?: "",
-                                    object : TypeToken<GetGroupMembersModel>() {}.type)
+                                call.response.content ?: "",
+                                object : TypeToken<GetGroupMembersModel>() {}.type)
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.members shouldContainAll members
@@ -424,8 +428,8 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             val result: GetTopicsModel = Gson().fromJson(
-                                    call.response.content ?: "",
-                                    object : TypeToken<GetTopicsModel>() {}.type)
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicsModel>() {}.type)
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.topics shouldContainAll preTopics
@@ -446,8 +450,8 @@ object KafkaAdminRestSpec : Spek({
                                 }
 
                                 val result: PostTopicModel = Gson().fromJson(
-                                        call.response.content ?: "",
-                                        object : TypeToken<PostTopicModel>() {}.type)
+                                    call.response.content ?: "",
+                                    object : TypeToken<PostTopicModel>() {}.type)
 
                                 call.response.status() shouldBe HttpStatusCode.OK
 
@@ -465,8 +469,8 @@ object KafkaAdminRestSpec : Spek({
                                     addHeader(HttpHeaders.ContentType, "application/json")
                                     // relevant user is in the right place in UserAndGroups.ldif
                                     addHeader(
-                                            HttpHeaders.Authorization,
-                                            "Basic ${encodeBase64("srvp01:dummy".toByteArray())}")
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("srvp01:dummy".toByteArray())}")
 
                                     val jsonPayload = Gson().toJson(PostTopicBody(topicName, numPartitions))
                                     setBody(jsonPayload)
@@ -500,8 +504,8 @@ object KafkaAdminRestSpec : Spek({
                                 }
 
                                 val result: DeleteTopicModel = Gson().fromJson(
-                                        call.response.content ?: "",
-                                        object : TypeToken<DeleteTopicModel>() {}.type)
+                                    call.response.content ?: "",
+                                    object : TypeToken<DeleteTopicModel>() {}.type)
 
                                 call.response.status() shouldBe HttpStatusCode.OK
 
@@ -541,11 +545,11 @@ object KafkaAdminRestSpec : Spek({
                                 addHeader(HttpHeaders.ContentType, "application/json")
                                 // relevant user is in the right place in UserAndGroups.ldif
                                 addHeader(
-                                        HttpHeaders.Authorization,
-                                        "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
 
                                 val jsonPayload = Gson().toJson(
-                                        PutTopicConfigEntryBody(AllowedConfigEntries.RETENTION_BYTES, "6600666"))
+                                    PutTopicConfigEntryBody(AllowedConfigEntries.RETENTION_BYTES, "6600666"))
                                 setBody(jsonPayload)
                             }
 
@@ -559,8 +563,8 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             val result: GetTopicConfigModel = Gson().fromJson(
-                                    call.response.content ?: "",
-                                    object : TypeToken<GetTopicConfigModel>() {}.type)
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicConfigModel>() {}.type)
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.config.find { it.name() == "retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
@@ -573,11 +577,11 @@ object KafkaAdminRestSpec : Spek({
                                 addHeader(HttpHeaders.ContentType, "application/json")
                                 // relevant user is in the right place in UserAndGroups.ldif
                                 addHeader(
-                                        HttpHeaders.Authorization,
-                                        "Basic ${encodeBase64("N145821:itest3".toByteArray())}")
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("N145821:itest3".toByteArray())}")
 
                                 val jsonPayload = Gson().toJson(
-                                        ConfigEntry("max.message.bytes", "51000012")
+                                    ConfigEntry("max.message.bytes", "51000012")
                                 )
                                 setBody(jsonPayload)
                             }
@@ -597,13 +601,13 @@ object KafkaAdminRestSpec : Spek({
                                 }
 
                                 val result: GetTopicACLModel = Gson().fromJson(
-                                        call.response.content ?: "",
-                                        object : TypeToken<GetTopicACLModel>() {}.type)
+                                    call.response.content ?: "",
+                                    object : TypeToken<GetTopicACLModel>() {}.type)
 
                                 val expectedResult = KafkaGroupType.values()
-                                        .filter { it != KafkaGroupType.MANAGER }
-                                        .map { grType -> grType.intoAcls(tpcACL) }
-                                        .flatten()
+                                    .filter { it != KafkaGroupType.MANAGER }
+                                    .map { grType -> grType.intoAcls(tpcACL) }
+                                    .flatten()
 
                                 call.response.status() shouldBe HttpStatusCode.OK
                                 result.acls shouldContainAll expectedResult
@@ -620,8 +624,8 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             val result: GetTopicGroupsModel = Gson().fromJson(
-                                    call.response.content ?: "",
-                                    object : TypeToken<GetTopicGroupsModel>() {}.type)
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicGroupsModel>() {}.type)
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
@@ -635,15 +639,15 @@ object KafkaAdminRestSpec : Spek({
                                     addHeader(HttpHeaders.ContentType, "application/json")
                                     // relevant user is in the right place in UserAndGroups.ldif
                                     addHeader(
-                                            HttpHeaders.Authorization,
-                                            "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
 
                                     val jsonPayload = Gson().toJson(
-                                            UpdateKafkaGroupMember(
-                                                    role,
-                                                    GroupMemberOperation.ADD,
-                                                    srvUser
-                                            )
+                                        UpdateKafkaGroupMember(
+                                            role,
+                                            GroupMemberOperation.ADD,
+                                            srvUser
+                                        )
                                     )
                                     setBody(jsonPayload)
                                 }
@@ -659,16 +663,16 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             val result: GetTopicGroupsModel = Gson().fromJson(
-                                    call.response.content ?: "",
-                                    object : TypeToken<GetTopicGroupsModel>() {}.type)
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicGroupsModel>() {}.type)
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
                             result.groups.flatMap { it.members } shouldContainAll listOf(
-                                    "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
-                                    "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local",
-                                    "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
-                                    "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
+                                "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
+                                "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local",
+                                "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
+                                "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
                             )
                         }
 
@@ -679,15 +683,15 @@ object KafkaAdminRestSpec : Spek({
                                 addHeader(HttpHeaders.ContentType, "application/json")
                                 // relevant user is in the right place in UserAndGroups.ldif
                                 addHeader(
-                                        HttpHeaders.Authorization,
-                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
 
                                 val jsonPayload = Gson().toJson(
-                                        UpdateKafkaGroupMember(
-                                                KafkaGroupType.PRODUCER,
-                                                GroupMemberOperation.ADD,
-                                                "non-existing"
-                                        )
+                                    UpdateKafkaGroupMember(
+                                        KafkaGroupType.PRODUCER,
+                                        GroupMemberOperation.ADD,
+                                        "non-existing"
+                                    )
                                 )
                                 setBody(jsonPayload)
                             }
@@ -703,15 +707,15 @@ object KafkaAdminRestSpec : Spek({
                                     addHeader(HttpHeaders.ContentType, "application/json")
                                     // relevant user is in the right place in UserAndGroups.ldif
                                     addHeader(
-                                            HttpHeaders.Authorization,
-                                            "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
 
                                     val jsonPayload = Gson().toJson(
-                                            UpdateKafkaGroupMember(
-                                                    role,
-                                                    GroupMemberOperation.REMOVE,
-                                                    srvUser
-                                            )
+                                        UpdateKafkaGroupMember(
+                                            role,
+                                            GroupMemberOperation.REMOVE,
+                                            srvUser
+                                        )
                                     )
                                     setBody(jsonPayload)
                                 }
@@ -727,8 +731,8 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             val result: GetTopicGroupsModel = Gson().fromJson(
-                                    call.response.content ?: "",
-                                    object : TypeToken<GetTopicGroupsModel>() {}.type)
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicGroupsModel>() {}.type)
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
@@ -744,13 +748,13 @@ object KafkaAdminRestSpec : Spek({
                             addHeader(HttpHeaders.ContentType, "application/json")
                             addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("igroup:itest".toByteArray())}")
                             setBody(Gson().toJson(OneshotCreationRequest(
-                                    topics = listOf(
-                                            TopicCreation(
-                                                    topicName = "integrationTestNoUpdate",
-                                                    members = listOf(RoleMember("srvp01", KafkaGroupType.CONSUMER)),
-                                                    configEntries = mapOf(),
-                                                    numPartitions = 3
-                                            )))))
+                                topics = listOf(
+                                    TopicCreation(
+                                        topicName = "integrationTestNoUpdate",
+                                        members = listOf(RoleMember("srvp01", KafkaGroupType.CONSUMER)),
+                                        configEntries = mapOf(),
+                                        numPartitions = 3
+                                    )))))
                         }
 
                         println(call.response.content)

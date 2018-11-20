@@ -65,20 +65,20 @@ import java.util.regex.Pattern
  */
 
 // a wrapper for this api to be installed as routes
-fun Routing.topicsAPI(adminClient: AdminClient?, config: FasitProperties) {
+fun Routing.topicsAPI(adminClient: AdminClient?, fasitConfig: FasitProperties) {
 
-    getTopics(adminClient)
-    createNewTopic(adminClient, config)
+    getTopics(adminClient, fasitConfig)
+    createNewTopic(adminClient, fasitConfig)
 
-    deleteTopic(adminClient, config)
+    deleteTopic(adminClient, fasitConfig)
 
-    getTopicConfig(adminClient)
-    updateTopicConfig(adminClient, config)
+    getTopicConfig(adminClient, fasitConfig)
+    updateTopicConfig(adminClient, fasitConfig)
 
-    getTopicAcls(adminClient)
+    getTopicAcls(adminClient, fasitConfig)
 
-    getTopicGroups(config)
-    updateTopicGroup(config)
+    getTopicGroups(fasitConfig)
+    updateTopicGroup(fasitConfig)
 }
 
 private const val swGroup = "Topics"
@@ -93,14 +93,14 @@ class GetTopics
 
 data class GetTopicsModel(val topics: List<String>)
 
-fun Routing.getTopics(adminClient: AdminClient?) =
+fun Routing.getTopics(adminClient: AdminClient?, fasitConfig: FasitProperties) =
         get<GetTopics>("all topics".responds(ok<GetTopicsModel>(), serviceUnavailable<AnError>())) {
             respondOrServiceUnavailable {
 
                 val topics = adminClient
                         ?.listTopics()
                         ?.names()
-                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                         ?.toList()
                         ?: throw Exception(SERVICES_ERR_K)
 
@@ -119,11 +119,11 @@ fun Routing.getTopics(adminClient: AdminClient?) =
 
 // get the default replication factor from 1st broker configuration. Due to puppet, consistency across brokers in a
 // kafka cluster
-fun getDefaultReplicationFactor(adminClient: AdminClient?): Short =
+fun getDefaultReplicationFactor(adminClient: AdminClient?, fasitConfig: FasitProperties): Short =
         adminClient?.let { ac ->
             ac.describeCluster()
                 .nodes()
-                .get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                .get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                 .first().let { node ->
                     ac.describeConfigs(
                             listOf(
@@ -134,7 +134,7 @@ fun getDefaultReplicationFactor(adminClient: AdminClient?): Short =
                             )
                     )
                             .all()
-                            .get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                            .get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                             .values.first()
                             .get("default.replication.factor")
                             .value()
@@ -158,7 +158,7 @@ data class PostTopicModel(
     val aclStatus: String
 )
 
-fun Routing.createNewTopic(adminClient: AdminClient?, config: FasitProperties) =
+fun Routing.createNewTopic(adminClient: AdminClient?, fasitConfig: FasitProperties) =
         post<PostTopic, PostTopicBody>(
                 "new topic. The authenticated user becomes member of KM-{newTopic}. Please add other team members"
                         .securityAndReponds(
@@ -179,7 +179,7 @@ fun Routing.createNewTopic(adminClient: AdminClient?, config: FasitProperties) =
              */
 
             val userExist = try {
-                LDAPGroup(config).use { ldap -> ldap.userExists(currentUser) }
+                LDAPGroup(fasitConfig).use { ldap -> ldap.userExists(currentUser) }
             } catch (e: Exception) { false }
 
             if (!userExist) {
@@ -212,7 +212,7 @@ fun Routing.createNewTopic(adminClient: AdminClient?, config: FasitProperties) =
 
             val repFactorError = (-1).toShort()
             val defaultRepFactor = try {
-                getDefaultReplicationFactor(adminClient)
+                getDefaultReplicationFactor(adminClient, fasitConfig)
             } catch (e: Exception) { repFactorError }
 
             if (defaultRepFactor == repFactorError) {
@@ -226,7 +226,7 @@ fun Routing.createNewTopic(adminClient: AdminClient?, config: FasitProperties) =
 
             val (topicIsOk, topicResult) = try {
                 adminClient?.let { ac ->
-                    ac.createTopics(mutableListOf(newTopic)).all().get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                    ac.createTopics(mutableListOf(newTopic)).all().get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                     application.environment.log.info("Topic created - $newTopic")
                     Pair(true, "created topic $newTopic")
                 } ?: Pair(false, "failure for topic $newTopic creation, $SERVICES_ERR_K")
@@ -236,7 +236,7 @@ fun Routing.createNewTopic(adminClient: AdminClient?, config: FasitProperties) =
                 Pair(false, "failure for topic $newTopic creation, $e")
             }
 
-            val groupsResult = LDAPGroup(config).use { ldap -> ldap.createKafkaGroups(newTopic.name(), currentUser) }
+            val groupsResult = LDAPGroup(fasitConfig).use { ldap -> ldap.createKafkaGroups(newTopic.name(), currentUser) }
 
             val groupsAreOk = groupsResult
                     .asSequence()
@@ -258,7 +258,7 @@ fun Routing.createNewTopic(adminClient: AdminClient?, config: FasitProperties) =
 
             val (aclsAreOk, aclsResult) = try {
                 adminClient?.let { ac ->
-                    ac.createAcls(acls.toList()).all().get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                    ac.createAcls(acls.toList()).all().get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                     application.environment.log.info("ACLs created - $acls")
                     Pair(true, "created $acls")
                 } ?: Pair(false, "failure for $acls creation, $SERVICES_ERR_K")
@@ -282,11 +282,11 @@ private enum class UserIsManager { LDAP_NOT_AVAILABLE, IS_NOT_MANAGER, IS_MANAGE
 private suspend fun PipelineContext<Unit, ApplicationCall>.userTopicManagerStatus(
     user: String,
     topicName: String,
-    config: FasitProperties
+    fasitConfig: FasitProperties
 ): UserIsManager {
 
     val (isMngRequestOk, authorized) = try {
-        Pair(true, LDAPGroup(config).use { ldap -> ldap.userIsManager(topicName, user) })
+        Pair(true, LDAPGroup(fasitConfig).use { ldap -> ldap.userIsManager(topicName, user) })
     } catch (e: Exception) { Pair(false, false) }
 
     if (!isMngRequestOk) {
@@ -320,7 +320,7 @@ data class DeleteTopicModel(
     val aclStatus: String
 )
 
-fun Routing.deleteTopic(adminClient: AdminClient?, config: FasitProperties) =
+fun Routing.deleteTopic(adminClient: AdminClient?, fasitConfig: FasitProperties) =
         delete<DeleteTopic>(
                 "a topic. Only members in KM-{topicName} are authorized".securityAndReponds(
                         BasicAuthSecurity(),
@@ -336,7 +336,7 @@ fun Routing.deleteTopic(adminClient: AdminClient?, config: FasitProperties) =
             val logEntry = "Topic deletion request by $currentUser - $topicName"
             application.environment.log.info(logEntry)
 
-            when (userTopicManagerStatus(currentUser, topicName, config)) {
+            when (userTopicManagerStatus(currentUser, topicName, fasitConfig)) {
                 UserIsManager.LDAP_NOT_AVAILABLE -> return@delete
                 UserIsManager.IS_NOT_MANAGER -> return@delete
                 else -> {}
@@ -352,7 +352,7 @@ fun Routing.deleteTopic(adminClient: AdminClient?, config: FasitProperties) =
 
             val (aclsAreOk, aclsResult) = try {
                 adminClient?.let { ac ->
-                    ac.deleteAcls(mutableListOf(acls)).all().get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                    ac.deleteAcls(mutableListOf(acls)).all().get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                     application.environment.log.info("ACLs deleted - $acls")
                     Pair(true, "deleted $acls")
                 } ?: Pair(false, "failure for $acls deletion, $SERVICES_ERR_K")
@@ -362,7 +362,7 @@ fun Routing.deleteTopic(adminClient: AdminClient?, config: FasitProperties) =
             }
 
             // delete related kafka ldap groups
-            val groupsResult = LDAPGroup(config).use { ldap -> ldap.deleteKafkaGroups(topicName) }
+            val groupsResult = LDAPGroup(fasitConfig).use { ldap -> ldap.deleteKafkaGroups(topicName) }
             val groupsAreOk = groupsResult
                     .asSequence()
                     .map { it.ldapResult.resultCode }
@@ -371,7 +371,7 @@ fun Routing.deleteTopic(adminClient: AdminClient?, config: FasitProperties) =
             // delete the topic itself
             val (topicIsOk, topicResult) = try {
                 adminClient?.let { ac ->
-                    ac.deleteTopics(listOf(topicName)).all().get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                    ac.deleteTopics(listOf(topicName)).all().get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                     application.environment.log.info("Topic deleted - $topicName")
                     Pair(true, "deleted topic $topicName")
                 } ?: Pair(false, "failure for topic $topicName deletion, $SERVICES_ERR_K")
@@ -400,7 +400,7 @@ data class GetTopicConfig(val topicName: String)
 
 data class GetTopicConfigModel(val name: String, val config: List<ConfigEntry>)
 
-fun Routing.getTopicConfig(adminClient: AdminClient?) =
+fun Routing.getTopicConfig(adminClient: AdminClient?, fasitConfig: FasitProperties) =
         get<GetTopicConfig>("a topic's configuration".responds(
                 ok<GetTopicConfigModel>(),
                 serviceUnavailable<AnError>(),
@@ -413,7 +413,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient?) =
                 Pair(true, adminClient?.let { ac ->
                     ac.listTopics()
                             .listings()
-                            .get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                            .get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                             .map { it.name() }
                 } ?: throw Exception(SERVICES_ERR_K)
                 )
@@ -436,7 +436,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient?) =
                 Pair(true, adminClient?.let { ac ->
                     ac.describeConfigs(mutableListOf(ConfigResource(ConfigResource.Type.TOPIC, topicName)))
                             .all()
-                            .get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                            .get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                             .values
                             .first()
                             .entries()
@@ -479,7 +479,7 @@ data class PutTopicConfigEntryModel(
     val status: String
 )
 
-fun Routing.updateTopicConfig(adminClient: AdminClient?, config: FasitProperties) =
+fun Routing.updateTopicConfig(adminClient: AdminClient?, fasitConfig: FasitProperties) =
         put<PutTopicConfigEntry, PutTopicConfigEntryBody>(
                 "a configuration entry for a topic. Only members in KM-{topicName} are authorized".securityAndReponds(
                         BasicAuthSecurity(),
@@ -495,7 +495,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, config: FasitProperties
             val logEntry = "Topic config. update request by $currentUser - $topicName"
             application.environment.log.info(logEntry)
 
-            when (userTopicManagerStatus(currentUser, topicName, config)) {
+            when (userTopicManagerStatus(currentUser, topicName, fasitConfig)) {
                 UserIsManager.LDAP_NOT_AVAILABLE -> return@put
                 UserIsManager.IS_NOT_MANAGER -> return@put
                 else -> {}
@@ -532,7 +532,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, config: FasitProperties
                     ac.alterConfigs(configReq)
                             .values()
                             .get(configResource)
-                            ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS) ?: Unit
+                            ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS) ?: Unit
                 } ?: throw Exception(SERVICES_ERR_K)
                 )
             } catch (e: Exception) { Pair(false, Unit) }
@@ -556,7 +556,7 @@ data class GetTopicACL(val topicName: String)
 
 data class GetTopicACLModel(val name: String, val acls: List<AclBinding>)
 
-fun Routing.getTopicAcls(adminClient: AdminClient?) =
+fun Routing.getTopicAcls(adminClient: AdminClient?, fasitConfig: FasitProperties) =
         get<GetTopicACL>("a topic's access control lists".responds(
                 ok<GetTopicACLModel>(),
                 serviceUnavailable<AnError>())
@@ -572,7 +572,7 @@ fun Routing.getTopicAcls(adminClient: AdminClient?) =
                 Pair(true, adminClient
                         ?.describeAcls(aclFilter)
                         ?.values()
-                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                         ?.toList()
                         ?: throw Exception(SERVICES_ERR_K)
                 )
@@ -597,12 +597,12 @@ data class GetTopicGroups(val topicName: String)
 
 data class GetTopicGroupsModel(val name: String, val groups: List<KafkaGroup>)
 
-fun Routing.getTopicGroups(config: FasitProperties) =
+fun Routing.getTopicGroups(fasitConfig: FasitProperties) =
         get<GetTopicGroups>("a topic's groups".responds(
                 ok<GetTopicGroupsModel>(),
                 serviceUnavailable<AnError>())
         ) { param ->
-            respondOrServiceUnavailable(config) { lc ->
+            respondOrServiceUnavailable(fasitConfig) { lc ->
 
                 val topicName = param.topicName
                 GetTopicGroupsModel(topicName, lc.getKafkaGroupsAndMembers(topicName))
@@ -623,7 +623,7 @@ data class PutTopicGMemberModel(
     val status: SLDAPResult
 )
 
-fun Routing.updateTopicGroup(config: FasitProperties) =
+fun Routing.updateTopicGroup(fasitConfig: FasitProperties) =
         put<PutTopicGMember, UpdateKafkaGroupMember>(
                 "add/remove members in topic groups. Only members in KM-{topicName} are authorized ".securityAndReponds(
                         BasicAuthSecurity(),
@@ -640,14 +640,14 @@ fun Routing.updateTopicGroup(config: FasitProperties) =
                     "${this.context.authentication.principal} - $topicName "
             application.environment.log.info(logEntry)
 
-            when (userTopicManagerStatus(currentUser, topicName, config)) {
+            when (userTopicManagerStatus(currentUser, topicName, fasitConfig)) {
                 UserIsManager.LDAP_NOT_AVAILABLE -> return@put
                 UserIsManager.IS_NOT_MANAGER -> return@put
                 else -> {}
             }
 
             val (updateRequestOk, result) = try {
-                Pair(true, LDAPGroup(config).use { lc -> lc.updateKafkaGroupMembership(topicName, body) })
+                Pair(true, LDAPGroup(fasitConfig).use { lc -> lc.updateKafkaGroupMembership(topicName, body) })
             } catch (e: Exception) { Pair(false, SLDAPResult()) }
 
             // TODO 1) User not found 2) user account not allowed in KP and KC groups

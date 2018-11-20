@@ -30,6 +30,7 @@ data class FasitProperties(
     val kafkaSaslMec: String = System.getenv("KAFKA_SASLMEC")?.toString() ?: "",
     val kafkaUser: String = System.getenv("KAFKA_USER")?.toString() ?: "",
     val kafkaPassword: String = System.getenv("KAFKA_PASSWORD")?.toString() ?: "",
+    val kafkaTimeout: Long = System.getenv("KAFKA_CONNTIMEOUT")?.toLong() ?: 3_000,
 
     // common ldap details for both authentication and group management
     val ldapConnTimeout: Int = System.getenv("LDAP_CONNTIMEOUT")?.toInt() ?: 2_000,
