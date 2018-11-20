@@ -86,7 +86,7 @@ object KafkaAdminRestSpec : Spek({
         ldapGrpMemberAttrName = "member",
         ldapUser = "igroup",
         ldapPassword = "itest",
-        kafkaTimeout = 1_000L
+        kafkaTimeout = 250L
     )
 
     fun FasitProperties.injectValues(
