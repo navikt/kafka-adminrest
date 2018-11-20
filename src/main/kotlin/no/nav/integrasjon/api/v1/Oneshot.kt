@@ -98,35 +98,35 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
             }
 
             log.info("Validating config entries$logFormat", *logKeys)
-            if (request.topics.flatMap { it.configEntries?.entries ?: setOf() }.filter { entry ->
+            request.topics.flatMap { it.configEntries?.entries ?: setOf() }.filter { entry ->
                 AllowedConfigEntries.values().none { it.entryName == entry.key }
-            }.any()) {
+            }.any {
                 val err = OneshotResponse(
                     status = OneshotStatus.ERROR,
-                    message = "configEntry it.key is not allowed to update automatically")
+                    message = "configEntry ${it.key} is not allowed to update automatically")
                 call.respond(HttpStatusCode.BadRequest, err)
                 return@put
             }
             val existingTopics = adminClient?.listTopics()?.listings()?.get()?.map { it.name() } ?: emptyList()
 
             log.info("Checking if user has access to all topics in request$logFormat", *logKeys)
-            if (request.topics.map { it.topicName }
+            request.topics.map { it.topicName }
                 .filter { existingTopics.contains(it) }
                 .filter { !ldap.userIsManager(it, currentUser) }
-                .any()) {
+                .any {
                     val err = OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "The user $currentUser does not have access to modify topic it"
+                        message = "The user $currentUser does not have access to modify topic $it"
                     )
                     call.respond(HttpStatusCode.Unauthorized, err)
                     return@put
                 }
 
             log.info("Validating topic names$logFormat", *logKeys)
-            if (request.topics.map { it.topicName }.filterNot { it.isValidTopicName() }.any()) {
+            request.topics.map { it.topicName }.filterNot { it.isValidTopicName() }.any {
                 val err = OneshotResponse(
                     status = OneshotStatus.ERROR,
-                    message = "Invalid topic name - it. Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
+                    message = "Invalid topic name - $it. Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
                         "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}"
                 )
                 call.respond(HttpStatusCode.BadRequest, err)
@@ -134,13 +134,13 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
             }
 
             log.debug("Validating user names$logFormat", *logKeys)
-            if (request.topics
+            request.topics
                 .flatMap {
                     it.members
                 }
                 .filterNot { ldap.userExists(it.member) }
-                .any()) {
-                    log.info("Tried to add the user it.member who doesn't exist in AD$logFormat", *logKeys)
+                .any {
+                    log.info("Tried to add the user ${it.member} who doesn't exist in AD$logFormat", *logKeys)
                     val err = OneshotResponse(
                         status = OneshotStatus.ERROR,
                         message = "The user it.member does not exist")
