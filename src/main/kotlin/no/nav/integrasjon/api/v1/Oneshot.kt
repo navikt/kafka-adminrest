@@ -31,6 +31,7 @@ import org.apache.kafka.common.config.ConfigResource
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 val log: Logger = LoggerFactory.getLogger("kafka-adminrest.oneshot.v1")
 
@@ -222,12 +223,21 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                         ?.map { ConfigEntry(it.key, it.value) } ?: listOf())
                 }.toMap())
 
-            adminClient?.createTopics(request.topics
-                .filterNot { existingTopics.contains(it.topicName) }
-                .map {
-                    NewTopic(it.topicName, it.numPartitions, getDefaultReplicationFactor(adminClient, fasitConfig))
-                        .configs(it.configEntries)
-                })?.all()?.get()
+            try {
+                adminClient?.createTopics(request.topics
+                    .filterNot { existingTopics.contains(it.topicName) }
+                    .map {
+                        NewTopic(it.topicName, it.numPartitions, getDefaultReplicationFactor(adminClient, fasitConfig))
+                            .configs(it.configEntries)
+                    })?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+            } catch (e: Exception) {
+                log.error("Exception caught while creating topic(s), request: {} $logFormat", logKeys, e)
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    OneshotResponse(
+                        status = OneshotStatus.ERROR,
+                        message = "Failed to create topic"))
+            }
 
             log.debug("Creating ACLs$logFormat", *logKeys)
             val acl = request.topics
@@ -236,7 +246,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                 .flatMap { (topic, groupType) -> groupType.intoAcls(topic) }
 
             try {
-                adminClient?.createAcls(acl)?.all()?.get()
+                adminClient?.createAcls(acl)?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                 log.info("Successfully updated acl for topic(s) - {} $logFormat", acl, logKeys)
                 call.respond(OneshotResponse(
                     status = OneshotStatus.OK,
@@ -249,7 +259,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                     HttpStatusCode.ServiceUnavailable,
                     OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "Failed to create topic"))
+                        message = "Failed to create ACL for topic(s)"))
             }
         }
     }
