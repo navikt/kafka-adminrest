@@ -108,7 +108,19 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                 call.respond(HttpStatusCode.BadRequest, err)
                 return@put
             }
-            val existingTopics = adminClient?.listTopics()?.listings()?.get()?.map { it.name() } ?: emptyList()
+
+            val existingTopics = try {
+                adminClient?.listTopics()?.listings()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.map { it.name() }
+                    ?: emptyList()
+            } catch (e: Exception) {
+                log.error("Exception caught while getting existing topic(s) $logFormat", logKeys, e)
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    OneshotResponse(
+                        status = OneshotStatus.ERROR,
+                        message = "Failed to get topic from kafka"))
+                return@put
+            }
 
             log.info("Checking if user has access to all topics in request$logFormat", *logKeys)
             request.topics.map { it.topicName }
