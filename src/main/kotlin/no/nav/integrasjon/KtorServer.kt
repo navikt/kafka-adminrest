@@ -64,6 +64,7 @@ val swagger = Swagger(
 
 internal const val JAAS_PLAIN_LOGIN = "org.apache.kafka.common.security.plain.PlainLoginModule"
 internal const val JAAS_REQUIRED = "required"
+internal const val SWAGGER_URL_V1 = "$API_V1/apidocs/index.html?url=swagger.json"
 
 fun Application.kafkaAdminREST() {
 
@@ -133,9 +134,11 @@ fun Application.kafkaAdminREST() {
 
     log.info { "Installing routes" }
     install(Routing) {
-
         // swagger UI trigger routes
-        get(API_V1) { call.respondRedirect("$API_V1/apidocs/index.html?url=swagger.json") }
+        get("/") { call.respondRedirect(SWAGGER_URL_V1) }
+        get("/api") { call.respondRedirect(SWAGGER_URL_V1) }
+        get("/api/v1") { call.respondRedirect(SWAGGER_URL_V1) }
+        get("/api/v1/apidocs") { call.respondRedirect(SWAGGER_URL_V1) }
         get("$API_V1/apidocs/{fileName}") {
             val fileName = call.parameters["fileName"]
             if (fileName == "swagger.json") call.respond(swagger) else swaggerUI.serve(fileName, call)
