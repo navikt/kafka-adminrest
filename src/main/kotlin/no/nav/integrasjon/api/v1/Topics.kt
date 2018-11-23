@@ -9,7 +9,7 @@ import io.ktor.auth.authentication
 import io.ktor.auth.principal
 import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
-import io.ktor.pipeline.PipelineContext
+import io.ktor.util.pipeline.PipelineContext
 import io.ktor.response.respond
 import io.ktor.routing.Routing
 import no.nav.integrasjon.EXCEPTION
