@@ -2,6 +2,7 @@ package no.nav.integrasjon.api.v1
 
 import io.ktor.locations.Location
 import io.ktor.routing.Routing
+import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
@@ -22,10 +23,10 @@ import java.util.concurrent.TimeUnit
  */
 
 // a wrapper for this api to be installed as routes
-fun Routing.brokersAPI(adminClient: AdminClient?) {
+fun Routing.brokersAPI(adminClient: AdminClient?, fasitConfig: FasitProperties) {
 
-    getBrokers(adminClient)
-    getBrokerConfig(adminClient)
+    getBrokers(adminClient, fasitConfig)
+    getBrokerConfig(adminClient, fasitConfig)
 }
 
 private const val swGroup = "Brokers"
@@ -40,14 +41,14 @@ class GetBrokers
 
 data class GetBrokersModel(val brokers: List<Node>)
 
-fun Routing.getBrokers(adminClient: AdminClient?) =
+fun Routing.getBrokers(adminClient: AdminClient?, fasitConfig: FasitProperties) =
         get<GetBrokers>("all brokers".responds(ok<GetBrokersModel>(), serviceUnavailable<AnError>())) {
             respondOrServiceUnavailable {
 
                 val nodes = adminClient
                         ?.describeCluster()
                         ?.nodes()
-                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                         ?.toList()
                 ?: throw Exception(SERVICES_ERR_K)
 
@@ -65,7 +66,7 @@ data class GetBrokerConfig(val brokerID: String)
 
 data class GetBrokerConfigModel(val id: String, val config: List<ConfigEntry>)
 
-fun Routing.getBrokerConfig(adminClient: AdminClient?) =
+fun Routing.getBrokerConfig(adminClient: AdminClient?, fasitProps: FasitProperties) =
         get<GetBrokerConfig>(
                 "a broker configuration".responds(ok<GetBrokerConfigModel>(),
                         serviceUnavailable<AnError>())) { broker ->
@@ -74,7 +75,7 @@ fun Routing.getBrokerConfig(adminClient: AdminClient?) =
                 val brokerConfig = adminClient
                         ?.describeConfigs(listOf(ConfigResource(ConfigResource.Type.BROKER, broker.brokerID)))
                         ?.all()
-                        ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)
+                        ?.get(fasitProps.kafkaTimeout, TimeUnit.MILLISECONDS)
                         ?.entries
                         ?.first()
                         ?.value

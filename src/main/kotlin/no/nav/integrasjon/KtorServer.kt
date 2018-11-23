@@ -151,8 +151,8 @@ fun Application.kafkaAdminREST() {
 
         registerOneshotApi(adminClient, fasitProps)
         topicsAPI(adminClient, fasitProps)
-        brokersAPI(adminClient)
-        aclAPI(adminClient)
+        brokersAPI(adminClient, fasitProps)
+        aclAPI(adminClient, fasitProps)
         groupsAPI(fasitProps)
     }
 }

@@ -7,7 +7,6 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.HttpStatusCode.Companion.BadRequest
 import io.ktor.http.HttpStatusCode.Companion.InternalServerError
-import io.ktor.http.HttpStatusCode.Companion.NotFound
 import io.ktor.http.HttpStatusCode.Companion.OK
 import io.ktor.http.HttpStatusCode.Companion.ServiceUnavailable
 import io.ktor.http.HttpStatusCode.Companion.Unauthorized
@@ -16,7 +15,7 @@ import io.ktor.locations.delete
 import io.ktor.locations.get
 import io.ktor.locations.post
 import io.ktor.locations.put
-import io.ktor.pipeline.PipelineContext
+import io.ktor.util.pipeline.PipelineContext
 import io.ktor.request.receive
 import io.ktor.routing.Route
 import no.nav.integrasjon.AUTHENTICATION_BASIC
@@ -83,16 +82,11 @@ fun String.responds(vararg pairs: Pair<HttpStatusCode, KClass<*>>): Metadata =
 fun String.securityAndReponds(security: Security, vararg pairs: Pair<HttpStatusCode, KClass<*>>): Metadata =
         Metadata(responses = mapOf(*pairs), summary = this, security = security)
 
-fun responds(pair: Pair<HttpStatusCode, KClass<*>>) = Metadata(responses = mapOf(pair))
-fun responses(vararg pairs: Pair<HttpStatusCode, KClass<*>>) = Metadata(responses = mapOf(*pairs))
-
 inline fun <reified T> ok(): Pair<HttpStatusCode, KClass<*>> = OK to T::class
 inline fun <reified T> failed(): Pair<HttpStatusCode, KClass<*>> = InternalServerError to T::class
 inline fun <reified T> serviceUnavailable(): Pair<HttpStatusCode, KClass<*>> = ServiceUnavailable to T::class
 inline fun <reified T> badRequest(): Pair<HttpStatusCode, KClass<*>> = BadRequest to T::class
 inline fun <reified T> unAuthorized(): Pair<HttpStatusCode, KClass<*>> = Unauthorized to T::class
-
-fun notFound(): Pair<HttpStatusCode, KClass<*>> = NotFound to Unit::class
 
 inline fun <reified LOCATION : Any, reified ENTITY : Any> Route.post(
     metadata: Metadata,

@@ -1,10 +1,10 @@
 buildscript {
-    ext.kotlin_version = '1.2.71'
+    ext.kotlin_version = '1.3.10'
     ext.kafka_version = '2.0.0'
     ext.embeddedkafka_version = '2.0.1'
     ext.coroutines_version = '0.22.5'
     ext.kotlin_loggin_version = '1.6.10'
-    ext.ktor_version = '0.9.5'
+    ext.ktor_version = '1.0.0'
     ext.prometheus_version = '0.5.0'
     ext.logstash_encoder_version = '5.2'
     ext.jackson_datatype_version = '2.9.7'
@@ -17,7 +17,7 @@ buildscript {
 }
 
 plugins{
-    id "org.jetbrains.kotlin.jvm" version "1.2.71"
+    id "org.jetbrains.kotlin.jvm" version "1.3.10"
     id 'org.jmailen.kotlinter' version '1.15.0'
     id 'maven-publish'
     id 'com.github.ben-manes.versions' version '0.20.0'
@@ -56,8 +56,6 @@ repositories {
 
 configurations {
     all*.exclude group: 'org.slf4j', module: 'slf4j-log4j12'
-    //all*.exclude group: 'log4j', module: 'log4j'
-    // cannot exclude line above, will give java.lang.NoClassDefFoundError: org/apache/log4j/jmx/HierarchyDynamicMBean
 }
 
 dependencies {
@@ -76,8 +74,6 @@ dependencies {
 
     implementation "io.github.microutils:kotlin-logging:$kotlin_loggin_version"
     implementation "ch.qos.logback:logback-classic:$logback_version"
-    //implementation "org.slf4j:log4j-over-slf4j:$log4j_version"
-    // cannot include library above, will give java.lang.NoClassDefFoundError: org/apache/log4j/jmx/HierarchyDynamicMBean
     implementation "net.logstash.logback:logstash-logback-encoder:$logstash_encoder_version"
 
     implementation "io.prometheus:simpleclient_common:$prometheus_version"

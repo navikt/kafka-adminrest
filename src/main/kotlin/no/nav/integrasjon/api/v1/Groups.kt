@@ -19,10 +19,10 @@ import no.nav.integrasjon.api.nielsfalk.ktor.swagger.serviceUnavailable
  */
 
 // a wrapper for this api to be installed as routes
-fun Routing.groupsAPI(config: FasitProperties) {
+fun Routing.groupsAPI(fasitConfig: FasitProperties) {
 
-    getGroups(config)
-    getGroupMembers(config)
+    getGroups(fasitConfig)
+    getGroupMembers(fasitConfig)
 }
 
 private const val swGroup = "Groups"
@@ -37,9 +37,9 @@ class GetGroups
 
 data class GetGroupsModel(val groups: List<String>)
 
-fun Routing.getGroups(config: FasitProperties) =
+fun Routing.getGroups(fasitConfig: FasitProperties) =
         get<GetGroups>("all groups".responds(ok<GetGroupsModel>(), serviceUnavailable<AnError>())) {
-            respondOrServiceUnavailable(config) { lc -> GetGroupsModel(lc.getKafkaGroups().toList()) }
+            respondOrServiceUnavailable(fasitConfig) { lc -> GetGroupsModel(lc.getKafkaGroups().toList()) }
         }
 
 /**
@@ -52,12 +52,12 @@ data class GetGroupMembers(val groupName: String)
 
 data class GetGroupMembersModel(val name: String, val members: List<String>)
 
-fun Routing.getGroupMembers(config: FasitProperties) =
+fun Routing.getGroupMembers(fasitConfig: FasitProperties) =
         get<GetGroupMembers>(
                 "members in a group".responds(ok<GetGroupMembersModel>(),
                         serviceUnavailable<AnError>())
         ) { group ->
-            respondOrServiceUnavailable(config) { lc ->
+            respondOrServiceUnavailable(fasitConfig) { lc ->
                 GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
             }
         }

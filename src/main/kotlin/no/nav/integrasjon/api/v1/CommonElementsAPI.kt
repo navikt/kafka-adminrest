@@ -4,7 +4,7 @@ import io.ktor.application.ApplicationCall
 import io.ktor.application.application
 import io.ktor.application.call
 import io.ktor.http.HttpStatusCode
-import io.ktor.pipeline.PipelineContext
+import io.ktor.util.pipeline.PipelineContext
 import io.ktor.response.respond
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
@@ -18,8 +18,6 @@ import java.util.concurrent.TimeUnit
 
 internal const val NAIS_ISALIVE = "/isAlive"
 internal const val NAIS_ISREADY = "/isReady"
-
-internal const val KAFKA_TIMEOUT = 2_000L
 
 // route starting point
 internal const val API_V1 = "/api/v1"
@@ -36,53 +34,44 @@ internal const val ONESHOT = "$API_V1/oneshot"
 // simple data class for exceptions
 internal data class AnError(val error: String)
 
-internal fun kafkaIsOk(adminClient: AdminClient?): Boolean =
+internal fun kafkaIsOk(adminClient: AdminClient?, fasitConfig: FasitProperties): Boolean =
     try {
         adminClient
                 ?.listTopics()
                 ?.namesToListings()
-                ?.get(KAFKA_TIMEOUT, TimeUnit.MILLISECONDS)?.isNotEmpty() ?: false
+                ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.isNotEmpty() ?: false
     } catch (e: Exception) { false }
 
 internal fun backEndServicesAreOk(
     adminClient: AdminClient?,
-    config: FasitProperties
+    fasitConfig: FasitProperties
 ): Triple<Boolean, Boolean, Boolean> =
 
     Triple(
-            LDAPGroup(config).use { ldapGroup -> ldapGroup.connectionOk },
-            LDAPAuthenticate(config).use { ldapAuthenticate -> ldapAuthenticate.connectionOk },
-            kafkaIsOk(adminClient)
+            LDAPGroup(fasitConfig).use { ldapGroup -> ldapGroup.connectionOk },
+            LDAPAuthenticate(fasitConfig).use { ldapAuthenticate -> ldapAuthenticate.connectionOk },
+            kafkaIsOk(adminClient, fasitConfig)
     )
 
-internal suspend fun PipelineContext<Unit, ApplicationCall>.respondSelectiveCatch(block: () -> Pair<HttpStatusCode, Any>) =
-        try {
-            val res = block()
-            call.respond(res.first, res.second)
-        } catch (e: Exception) {
-            application.environment.log.error(EXCEPTION, e)
-            call.respond(HttpStatusCode.InternalServerError, AnError("$EXCEPTION$e"))
-        }
-
 internal suspend fun PipelineContext<Unit, ApplicationCall>.respondOrServiceUnavailable(block: () -> Any) =
-        try {
-            val res = block()
-            call.respond(res)
-        } catch (e: Exception) {
-            application.environment.log.error(EXCEPTION, e)
-            val eMsg = when (e) {
-                is java.util.concurrent.TimeoutException -> SERVICES_ERR_K
-                else -> if (e.localizedMessage != null) e.localizedMessage else "exception occurred"
-            }
-            call.respond(HttpStatusCode.ServiceUnavailable, AnError(eMsg))
+    try {
+        val res = block()
+        call.respond(res)
+    } catch (e: Exception) {
+        application.environment.log.error(EXCEPTION, e)
+        val eMsg = when (e) {
+            is java.util.concurrent.TimeoutException -> SERVICES_ERR_K
+            else -> if (e.localizedMessage != null) e.localizedMessage else "exception occurred"
         }
+        call.respond(HttpStatusCode.ServiceUnavailable, AnError(eMsg))
+    }
 
 internal suspend fun PipelineContext<Unit, ApplicationCall>.respondOrServiceUnavailable(
-    config: FasitProperties,
+    fasitConfig: FasitProperties,
     block: (lc: LDAPGroup) -> Any
-) =
-        try { LDAPGroup(config).use { lc -> call.respond(block(lc)) }
-        } catch (e: Exception) {
-            application.environment.log.error(EXCEPTION, e)
-            call.respond(HttpStatusCode.ServiceUnavailable, AnError(e.localizedMessage))
-        }
+) = try {
+        LDAPGroup(fasitConfig).use { lc -> call.respond(block(lc)) }
+    } catch (e: Exception) {
+        application.environment.log.error(EXCEPTION, e)
+        call.respond(HttpStatusCode.ServiceUnavailable, AnError(e.localizedMessage))
+    }
