@@ -26,9 +26,9 @@ pipeline {
                 slackStatus status: 'passed'
             }
         }
-        stage('generate distribution files') {
+        stage('create ubar JAR') {
             steps {
-                sh './gradlew installDist'
+                sh './gradlew shadowJar'
             }
         }
         stage('push docker image') {

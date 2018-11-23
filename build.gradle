@@ -21,11 +21,20 @@ plugins{
     id 'org.jmailen.kotlinter' version '1.15.0'
     id 'maven-publish'
     id 'com.github.ben-manes.versions' version '0.20.0'
-    id 'application'
+    id 'com.github.johnrengelman.shadow' version '4.0.3'
 }
 
 group 'no.nav.integrasjon'
-mainClassName = 'no.nav.integrasjon.MainKt'
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'no.nav.integrasjon.MainKt'
+    }
+}
+
+shadowJar {
+    classifier = null
+}
 
 // suppress warning for experimental coroutines
 kotlin { experimental { coroutines "enable"} }
