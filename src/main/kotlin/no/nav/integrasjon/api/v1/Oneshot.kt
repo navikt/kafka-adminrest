@@ -59,7 +59,7 @@ data class OneshotResult(val creationId: String)
 @Group("Oneshot")
 @Location(ONESHOT)
 class Oneshot
-fun Routing.registerOneshotApi(adminClient: AdminClient, fasit: FasitProperties) {
+fun Routing.registerOneshotApi(adminClient: AdminClient?, fasit: FasitProperties) {
     put<Oneshot, OneshotCreationRequest>(
             "Provides a one-shot kafka topic creation and ACL creation, it returns an ID and an endpoint where you can await a result from this request"
                     .securityAndReponds(BasicAuthSecurity(),
@@ -91,7 +91,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient, fasit: FasitProperties)
                 request.topics.flatMap { it.configEntries?.entries ?: setOf() }.filter { entry ->
                     AllowedConfigEntries.values().none { it.entryName == entry.key }
                 }.any { return@respondSelectiveCatch HttpStatusCode.BadRequest to Exception("configEntry ${it.key} is not allowed to update automatically") }
-                val existingTopics = adminClient.listTopics().listings().get().map { it.name() }
+                val existingTopics = adminClient?.listTopics()?.listings()?.get()?.map { it.name() } ?: emptyList()
 
                 log.info("Checking if user has access to all topics in request$logFormat", *logKeys)
                 request.topics.map { it.topicName }
@@ -195,18 +195,18 @@ fun Routing.registerOneshotApi(adminClient: AdminClient, fasit: FasitProperties)
 
                 // Create topics that are missing
                 log.debug("Creating topics$logFormat", *logKeys)
-                adminClient.alterConfigs(request.topics.filter { existingTopics.contains(it.topicName) }
+                adminClient?.alterConfigs(request.topics.filter { existingTopics.contains(it.topicName) }
                         .map {
                             ConfigResource(ConfigResource.Type.TOPIC, it.topicName) to Config(it.configEntries
                                     ?.map { ConfigEntry(it.key, it.value) } ?: listOf())
                         }.toMap())
 
-                adminClient.createTopics(request.topics
+                adminClient?.createTopics(request.topics
                         .filterNot { existingTopics.contains(it.topicName) }
                         .map {
                             NewTopic(it.topicName, it.numPartitions, getDefaultReplicationFactor(adminClient))
                                     .configs(it.configEntries)
-                        }).all().get()
+                        })?.all()?.get()
 
                 log.debug("Creating ACLs$logFormat", *logKeys)
                 val acl = request.topics
@@ -215,7 +215,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient, fasit: FasitProperties)
                         .flatMap { (topic, groupType) -> groupType.intoAcls(topic) }
 
                 try {
-                    adminClient.createAcls(acl).all().get()
+                    adminClient?.createAcls(acl)?.all()?.get()
                     log.info("Successfully updated acl for topic(s) - {} $logFormat", acl, logKeys)
                     HttpStatusCode.OK to
                             OneshotResponse(OneshotStatus.OK, "Successfully created topic", OneshotResult(uuid))

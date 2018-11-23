@@ -19,8 +19,10 @@ class LDAPAuthenticate(private val config: FasitProperties) :
         LDAPBase(config.getConnectionInfo(LdapConnectionType.AUTHENTICATION)) {
 
     fun canUserAuthenticate(user: String, pwd: String): Boolean =
-            if (!ldapConnection.isConnected) false
-            else {
+            if (!ldapConnection.isConnected) {
+                log.error { "Cannot authenticate, connection to ldap is down" }
+                false
+            } else {
                 // fold over resolved DNs, NAV ident or service accounts (normal + Basta)
                 resolveDNs(user).fold(false) { acc, dn -> acc || authenticated(dn, pwd, acc) }.also {
 

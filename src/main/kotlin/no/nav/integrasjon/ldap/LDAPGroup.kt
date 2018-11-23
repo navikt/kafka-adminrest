@@ -28,7 +28,8 @@ import org.apache.kafka.common.acl.AccessControlEntry
 import org.apache.kafka.common.acl.AclBinding
 import org.apache.kafka.common.acl.AclOperation
 import org.apache.kafka.common.acl.AclPermissionType
-import org.apache.kafka.common.resource.Resource
+import org.apache.kafka.common.resource.PatternType
+import org.apache.kafka.common.resource.ResourcePattern
 import org.apache.kafka.common.resource.ResourceType
 
 /**
@@ -381,7 +382,7 @@ fun KafkaGroupType.into(): List<AclOperation> = when (this) {
 
 fun KafkaGroupType.intoAcls(topicName: String): List<AclBinding> = into()
         .map { AccessControlEntry("Group:${toGroupName(prefix, topicName)}", "*", it, AclPermissionType.ALLOW) }
-        .map { AclBinding(Resource(ResourceType.TOPIC, topicName), it) }
+        .map { AclBinding(ResourcePattern(ResourceType.TOPIC, topicName, PatternType.LITERAL), it) }
 
 /**
  * Enum class KafkaGroupOperation

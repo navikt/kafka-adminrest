@@ -1,21 +1,13 @@
 package no.nav.integrasjon.api.v1
 
-import io.ktor.application.ApplicationCall
-import io.ktor.application.application
-import io.ktor.application.call
-import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
-import io.ktor.pipeline.PipelineContext
-import io.ktor.response.respond
 import io.ktor.routing.Routing
-import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
-import no.nav.integrasjon.api.nielsfalk.ktor.swagger.failed
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
-import no.nav.integrasjon.ldap.LDAPGroup
+import no.nav.integrasjon.api.nielsfalk.ktor.swagger.serviceUnavailable
 
 /**
  * Groups API
@@ -35,20 +27,6 @@ fun Routing.groupsAPI(config: FasitProperties) {
 
 private const val swGroup = "Groups"
 
-// a wrapper for each call to ldap - used in routes
-private suspend fun PipelineContext<Unit, ApplicationCall>.ldapRespondCatch(
-    config: FasitProperties,
-    block: (lc: LDAPGroup) -> Any
-) =
-        try {
-            LDAPGroup(config).use { lc ->
-                call.respond(block(lc))
-            }
-        } catch (e: Exception) {
-            application.environment.log.error(EXCEPTION, e)
-            call.respond(HttpStatusCode.ExceptionFailed, AnError("$EXCEPTION$e"))
-        }
-
 /**
  * See LDAPGroup::getKafkaGroups
  */
@@ -60,10 +38,8 @@ class GetGroups
 data class GetGroupsModel(val groups: List<String>)
 
 fun Routing.getGroups(config: FasitProperties) =
-        get<GetGroups>("all groups".responds(ok<GetGroupsModel>(), failed<AnError>())) {
-            ldapRespondCatch(config) { lc ->
-                GetGroupsModel(lc.getKafkaGroups().toList())
-            }
+        get<GetGroups>("all groups".responds(ok<GetGroupsModel>(), serviceUnavailable<AnError>())) {
+            respondOrServiceUnavailable(config) { lc -> GetGroupsModel(lc.getKafkaGroups().toList()) }
         }
 
 /**
@@ -77,8 +53,11 @@ data class GetGroupMembers(val groupName: String)
 data class GetGroupMembersModel(val name: String, val members: List<String>)
 
 fun Routing.getGroupMembers(config: FasitProperties) =
-        get<GetGroupMembers>("members in a group".responds(ok<GetGroupMembersModel>(), failed<AnError>())) { group ->
-            ldapRespondCatch(config) { lc ->
+        get<GetGroupMembers>(
+                "members in a group".responds(ok<GetGroupMembersModel>(),
+                        serviceUnavailable<AnError>())
+        ) { group ->
+            respondOrServiceUnavailable(config) { lc ->
                 GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
             }
         }
