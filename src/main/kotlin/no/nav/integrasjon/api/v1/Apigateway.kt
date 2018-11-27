@@ -147,7 +147,7 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
                     .map { it }
                     .filter { !groupMembers.contains(it) }
                 ldap.addToGroup(apiGwGroup, userADDBase)
-                application.environment.log.info("$apiGwGroup group has been updated with members: $userADDBase")
+                application.environment.log.info("$apiGwGroup group got updated: added member(s): $userADDBase")
             }
 
             if (!usersToBeRemoved.isEmpty()) {
@@ -155,7 +155,7 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
                     .map { it }
                     .filter { ldap.userExists(it) }
                 ldap.removeGroupMembers(apiGwGroup, userREMOVEBase)
-                application.environment.log.info("$apiGwGroup group has been updated with members: $userREMOVEBase")
+                application.environment.log.info("$apiGwGroup group has been updated: removed member(s): $userREMOVEBase")
             }
             // OK Scenario
             call.respond(ApiGwResult(apiGwGroup, body))
