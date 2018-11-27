@@ -122,6 +122,16 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
                     return@put
                 }
 
+            // Check if user is allowed to be in environment
+            usersToBeRemoved.map { it }
+                .filterNot { ldap.userExists(it) }
+                .any {
+                    val msg = "Tried to remove the user $it. who doesn't exist in AD"
+                    application.environment.log.error(msg)
+                    call.respond(HttpStatusCode.BadRequest, AnError(msg))
+                    return@put
+                }
+
             // Group do not exist, in environment - create and add currentUser As first?
             val groups = ldap.getKafkaGroups()
             if (!groups.contains(apiGwGroup)) {
