@@ -98,27 +98,19 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             return@put
         }
 
-        // Check request body for users to add
-        val usersToBeAdded = body.members.map { member ->
-            body.members
-                .map {
-                    member.operation
-                }
-                .filter { GroupMemberOperation.ADD == it }
-            member.memberName
-        }
-
-        // Check request body for users to remove
-        val usersToBeRemoved = body.members.map { member ->
-            body.members
-                .map {
-                    member.operation
-                }
-                .filter { GroupMemberOperation.REMOVE == it }
-            member.memberName
-        }
-
         LDAPGroup(fasitConfig).use { ldap ->
+
+            // Check request body for users to add
+            val usersToBeAdded = body.members.map { member ->
+                body.members.map { member.operation }.filter { GroupMemberOperation.ADD == it }
+                member.memberName
+            }
+
+            // Check request body for users to remove
+            val usersToBeRemoved = body.members.map { member ->
+                body.members.map { member.operation }.filter { GroupMemberOperation.REMOVE == it }
+                member.memberName
+            }
 
             // Check if user is allowed to be in environment
             usersToBeAdded.map { it }
@@ -146,15 +138,16 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
                     .filter { !groupMembers.contains(it) }
                 ldap.addToGroup(apiGwGroup, userADDBase)
                 application.environment.log.info("$apiGwGroup group has been updated with members: $userADDBase")
-
-                if (!usersToBeRemoved.isEmpty()) {
-                    val userREMOVEBase = usersToBeRemoved
-                        .map { it }
-                        .filter { ldap.userExists(it) }
-                    ldap.removeGroupMembers(apiGwGroup, userREMOVEBase)
-                    application.environment.log.info("$apiGwGroup group has been updated with members: $userREMOVEBase")
-                }
-                call.respond(ApiGwResult(apiGwGroup, body))
             }
+
+            if (!usersToBeRemoved.isEmpty()) {
+                val userREMOVEBase = usersToBeRemoved
+                    .map { it }
+                    .filter { ldap.userExists(it) }
+                ldap.removeGroupMembers(apiGwGroup, userREMOVEBase)
+                application.environment.log.info("$apiGwGroup group has been updated with members: $userREMOVEBase")
+            }
+            // OK Scenario
+            call.respond(ApiGwResult(apiGwGroup, body))
         }
     }
