@@ -1,3 +1,5 @@
+package no.nav.integrasjon.api.v1
+
 import io.ktor.application.application
 import io.ktor.application.call
 import io.ktor.auth.UserIdPrincipal
@@ -18,9 +20,6 @@ import no.nav.integrasjon.api.nielsfalk.ktor.swagger.responds
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.securityAndReponds
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.serviceUnavailable
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.unAuthorized
-import no.nav.integrasjon.api.v1.APIGW
-import no.nav.integrasjon.api.v1.AnError
-import no.nav.integrasjon.api.v1.respondOrServiceUnavailable
 import no.nav.integrasjon.ldap.GroupMemberOperation
 import no.nav.integrasjon.ldap.LDAPGroup
 
@@ -31,32 +30,30 @@ fun Routing.apigwAPI(fasitConfig: FasitProperties) {
 }
 
 private const val swGroup = "ApiGW"
-
-enum class ApiGwGroup(val groupName: String) {
-    APIGW_GROUP_NAME("apigw")
-}
+private const val apiGw = "apigw"
 
 @Group(swGroup)
 @Location(APIGW)
+class GetApiGatewayGroup
 
 data class GetApiGwGroupMembersModel(val name: String, val members: List<String>)
 
 fun Routing.getAllowedUsersInApiGwGroup(fasitConfig: FasitProperties) =
-    get<ApiGwGroup>("members in apigw group".responds(
+    get<GetApiGatewayGroup>("members in apigw group".responds(
         ok<GetApiGwGroupMembersModel>(),
         serviceUnavailable<AnError>())
-    ) { group ->
+    ) {
         respondOrServiceUnavailable(fasitConfig) { lc ->
-            GetApiGwGroupMembersModel(group.groupName, lc.getGroupMembers(group.groupName))
+            GetApiGwGroupMembersModel(apiGw, lc.getGroupMembers(apiGw))
         }
     }
 
 @Group(swGroup)
 @Location(APIGW)
+class PutApiGatewayMember
 
 enum class AdminOfApiGwGroup(val user: String) {
-    ADMIN01("M151886"),
-    ADMIN02("M141212")
+    ADMIN01("M151886")
 }
 
 data class ApiGwRequest(
@@ -74,17 +71,17 @@ data class ApiGwResult(
 )
 
 fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
-    put<ApiGwGroup, ApiGwRequest>(
+    put<PutApiGatewayMember, ApiGwRequest>(
         "add/remove members in apigw group. Only members defined as Admin are authorized".securityAndReponds(
             BasicAuthSecurity(),
             ok<ApiGwResult>(),
             badRequest<AnError>(),
             unAuthorized<AnError>())
-    ) { gwGroup, body ->
+    ) { _, body ->
 
         // Get Information from param
         val currentUser = call.principal<UserIdPrincipal>()!!.name
-        val apiGwGroup = gwGroup.groupName
+        val apiGwGroup = apiGw
 
         val logEntry = "Group membership update request by " +
             "${this.context.authentication.principal} - $apiGwGroup "

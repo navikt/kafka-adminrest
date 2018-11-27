@@ -20,11 +20,13 @@ import no.nav.integrasjon.api.nais.client.SERVICES_ERR_G
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_GAK
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
 import no.nav.integrasjon.api.v1.ACLS
+import no.nav.integrasjon.api.v1.APIGW
 import no.nav.integrasjon.api.v1.AllowedConfigEntries
 import no.nav.integrasjon.api.v1.AnError
 import no.nav.integrasjon.api.v1.BROKERS
 import no.nav.integrasjon.api.v1.DeleteTopicModel
 import no.nav.integrasjon.api.v1.GROUPS
+import no.nav.integrasjon.api.v1.GetApiGwGroupMembersModel
 import no.nav.integrasjon.api.v1.GetBrokerConfigModel
 import no.nav.integrasjon.api.v1.GetBrokersModel
 import no.nav.integrasjon.api.v1.GetGroupMembersModel
@@ -65,6 +67,9 @@ object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
     val preTopics = setOf("tpc-01", "tpc-02", "tpc-03")
+
+    // Admin of apigw
+    val preApiGwMember = setOf("M151887")
 
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
     val kCluster = KafkaEnvironment(1, topics = preTopics.toList(), withSecurity = true, autoStart = true)
@@ -791,6 +796,50 @@ object KafkaAdminRestSpec : Spek({
 
                         println(call.response.content)
                         call.response.status() shouldBe HttpStatusCode.OK
+                    }
+                }
+
+                context("Route $APIGW") {
+
+                    context("Get apigw group members") {
+
+                        it("should list all group members $preApiGwMember in apigw") {
+
+                            val call = handleRequest(HttpMethod.Get, APIGW) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                            }
+
+                            val result: GetApiGwGroupMembersModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetApiGwGroupMembersModel>() {}.type)
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            result.members shouldContainAll preApiGwMember
+                        }
+                    }
+
+                    context("Put apigw group members") {
+
+                        (topics2CreateDelete + topics4ACLTesting).forEach { topicToCreate ->
+
+                            it("should create topic $topicToCreate") {
+
+                                val call = handleRequest(HttpMethod.Put, APIGW) {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                    addHeader(HttpHeaders.ContentType, "application/json")
+                                    addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                    setBody(Gson().toJson(PostTopicBody(topicToCreate)))
+                                }
+
+                                val result: GetApiGwGroupMembersModel = Gson().fromJson(
+                                    call.response.content ?: "",
+                                    object : TypeToken<GetApiGwGroupMembersModel>() {}.type)
+
+                                call.response.status() shouldBe HttpStatusCode.OK
+                                result.members shouldContainAll preApiGwMember
+                                result.name shouldContain "apigw"
+                            }
+                        }
                     }
                 }
             }
