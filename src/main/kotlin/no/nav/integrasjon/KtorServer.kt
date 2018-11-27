@@ -1,5 +1,6 @@
 package no.nav.integrasjon
 
+import apigwAPI
 import io.ktor.application.Application
 import io.ktor.application.call
 import io.ktor.application.install
@@ -154,5 +155,6 @@ fun Application.kafkaAdminREST() {
         brokersAPI(adminClient, fasitProps)
         aclAPI(adminClient, fasitProps)
         groupsAPI(fasitProps)
+        apigwAPI(fasitProps)
     }
 }
