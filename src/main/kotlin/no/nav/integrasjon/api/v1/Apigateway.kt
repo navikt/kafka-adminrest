@@ -67,7 +67,7 @@ data class ApiGwGroupMember(
 
 data class ApiGwResult(
     val memberGroup: String,
-    val action: ApiGwRequest
+    val result: ApiGwRequest
 )
 
 fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
@@ -81,15 +81,14 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
 
         // Get Information from param
         val currentUser = call.principal<UserIdPrincipal>()!!.name
-        val apiGwGroup = apiGw
 
         val logEntry = "Group membership update request by " +
-            "${this.context.authentication.principal} - $apiGwGroup "
+            "${this.context.authentication.principal} - $apiGw "
         application.environment.log.info(logEntry)
 
         // Is current User an Admin?
         if (!AdminOfApiGwGroup.values().map { it.user }.contains(currentUser)) {
-            val msg = "Authenticated user: $currentUser is not allowed to update $apiGwGroup automatically"
+            val msg = "Authenticated user: $currentUser is not allowed to update $apiGw automatically"
             application.environment.log.error(msg)
             call.respond(HttpStatusCode.Unauthorized, AnError(msg))
             return@put
@@ -98,14 +97,14 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
         LDAPGroup(fasitConfig).use { ldap ->
             // Group do not exist, in environment - create and add currentUser As first?
             val groups = ldap.getKafkaGroups()
-            if (!groups.contains(apiGwGroup)) {
-                ldap.createGroup(apiGwGroup, currentUser)
-                application.environment.log.info("Created ldap Group: $apiGwGroup")
+            if (!groups.contains(apiGw)) {
+                ldap.createGroup(apiGw, currentUser)
+                application.environment.log.info("Created ldap Group: $apiGw")
             }
 
             // Group is already in environment - add to group, get Group Members
-            val groupMembers = ldap.getGroupMembers(apiGwGroup)
-            application.environment.log.debug("Get ldap Group members in: $apiGwGroup, members: $groupMembers")
+            val groupMembers = ldap.getGroupMembers(apiGw)
+            application.environment.log.debug("Get ldap Group members in: $apiGw, members: $groupMembers")
 
             // 1. Check request body for users to add
             val usersToBeAdded = body.members
@@ -144,18 +143,18 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
 
             if (!usersToBeAdded.isEmpty()) {
                 val userResult = usersToBeAdded.map { it.first }
-                ldap.addToGroup(apiGwGroup, userResult)
-                val msg = "$apiGwGroup group got updated: added member(s): $userResult"
+                ldap.addToGroup(apiGw, userResult)
+                val msg = "$apiGw group got updated: added member(s): $userResult"
                 application.environment.log.info(msg)
             }
 
             if (!usersToBeRemoved.isEmpty()) {
                 val userResult = usersToBeRemoved.map { it.first }
-                ldap.removeGroupMembers(apiGwGroup, userResult)
-                val msg = "$apiGwGroup group has been updated: removed member(s): $userResult"
+                ldap.removeGroupMembers(apiGw, userResult)
+                val msg = "$apiGw group has been updated: removed member(s): $userResult"
                 application.environment.log.info(msg)
             }
             // OK Scenario
-            call.respond(ApiGwResult(apiGwGroup, body))
+            call.respond(ApiGwResult(apiGw, body))
         }
     }
