@@ -39,12 +39,12 @@ class GetApiGatewayGroup
 data class GetApiGwGroupMembersModel(val name: String, val members: List<String>)
 
 fun Routing.getAllowedUsersInApiGwGroup(fasitConfig: FasitProperties) =
-    get<GetApiGatewayGroup>("members in apigw group".responds(
+    get<GetApiGatewayGroup>("all members in $apiGw group".responds(
         ok<GetApiGwGroupMembersModel>(),
         serviceUnavailable<AnError>())
     ) {
         respondOrServiceUnavailable(fasitConfig) { lc ->
-            GetApiGwGroupMembersModel(apiGw, lc.getGroupMembers(apiGw))
+            GetApiGwGroupMembersModel(apiGw, lc.getGroupMembers(apiGw).toList())
         }
     }
 
@@ -53,7 +53,8 @@ fun Routing.getAllowedUsersInApiGwGroup(fasitConfig: FasitProperties) =
 class PutApiGatewayMember
 
 enum class AdminOfApiGwGroup(val user: String) {
-    ADMIN01("M151886")
+    ADMIN01("n151886"),
+    ADMIN02("n145821")
 }
 
 data class ApiGwRequest(
@@ -61,12 +62,12 @@ data class ApiGwRequest(
 )
 
 data class ApiGwGroupMember(
-    val memberName: String,
+    val member: String,
     val operation: GroupMemberOperation
 )
 
-data class ApiGwResult(
-    val memberGroup: String,
+data class ApiGwResultModel(
+    val group: String,
     val result: ApiGwRequest
 )
 
@@ -74,13 +75,13 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
     put<PutApiGatewayMember, ApiGwRequest>(
         "add/remove members in apigw group. Only members defined as Admin are authorized".securityAndReponds(
             BasicAuthSecurity(),
-            ok<ApiGwResult>(),
+            ok<ApiGwResultModel>(),
             badRequest<AnError>(),
             unAuthorized<AnError>())
     ) { _, body ->
 
         // Get Information from param
-        val currentUser = call.principal<UserIdPrincipal>()!!.name
+        val currentUser = call.principal<UserIdPrincipal>()!!.name.toLowerCase()
 
         val logEntry = "Group membership update request by " +
             "${this.context.authentication.principal} - $apiGw "
@@ -104,21 +105,23 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
 
             // Group is already in environment - add to group, get Group Members
             val groupMembers = ldap.getGroupMembers(apiGw)
-            application.environment.log.debug("Get ldap Group members in: $apiGw, members: $groupMembers")
+            application.environment.log.debug("Get ldap Group member(s) in: $apiGw, member(s): $groupMembers")
 
             // 1. Check request body for users to add
             val usersToBeAdded = body.members
                 .map { member ->
-                    Pair(member.memberName, member.operation)
+                    Pair(member.member, member.operation)
                 }.filter { it.second == GroupMemberOperation.ADD }
+                .filter { !groupMembers.contains(it.first) }
             application.environment.log.debug("Users that will be added: $usersToBeAdded")
 
             // 2. Check if user is allowed to be in environment
+            // 3. Add only users already in group
             usersToBeAdded
-                .filter { !groupMembers.contains(it.first) }
-                .filterNot { ldap.userExists(it.first) }
+                .map { it.first }
+                .filterNot { ldap.userExists(it) }
                 .any {
-                    val msg = "Tried to remove the user $it. who doesn't exist in AD"
+                    val msg = "Tried to add the user: $it. who doesn't exist in current AD environment"
                     application.environment.log.error(msg)
                     call.respond(HttpStatusCode.BadRequest, AnError(msg))
                     return@put
@@ -127,15 +130,18 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             // 1. Check request body for users to remove
             val usersToBeRemoved = body.members
                 .map { member ->
-                    Pair(member.memberName, member.operation)
+                    Pair(member.member, member.operation)
                 }.filter { GroupMemberOperation.REMOVE == it.second }
+                .filter { groupMembers.contains(it.first) }
             application.environment.log.debug("Users that will be removed: $usersToBeRemoved")
 
             // 2. Check if user is allowed to be in environment
+            // 3. Remove only users already in group
             usersToBeRemoved
-                .filterNot { ldap.userExists(it.first) }
+                .map { it.first }
+                .filterNot { ldap.userExists(it) }
                 .any {
-                    val msg = "Tried to add the user $it. who doesn't exist in AD"
+                    val msg = "Tried to remove the user: $it. who doesn't exist in current AD environment"
                     application.environment.log.error(msg)
                     call.respond(HttpStatusCode.BadRequest, AnError(msg))
                     return@put
@@ -151,10 +157,10 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             if (!usersToBeRemoved.isEmpty()) {
                 val userResult = usersToBeRemoved.map { it.first }
                 ldap.removeGroupMembers(apiGw, userResult)
-                val msg = "$apiGw group has been updated: removed member(s): $userResult"
+                val msg = "$apiGw group got updated: removed member(s): $userResult"
                 application.environment.log.info(msg)
             }
             // OK Scenario
-            call.respond(ApiGwResult(apiGw, body))
+            call.respond(ApiGwResultModel(apiGw, body))
         }
     }

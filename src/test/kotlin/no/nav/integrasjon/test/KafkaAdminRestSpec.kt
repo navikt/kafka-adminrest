@@ -23,6 +23,9 @@ import no.nav.integrasjon.api.v1.ACLS
 import no.nav.integrasjon.api.v1.APIGW
 import no.nav.integrasjon.api.v1.AllowedConfigEntries
 import no.nav.integrasjon.api.v1.AnError
+import no.nav.integrasjon.api.v1.ApiGwGroupMember
+import no.nav.integrasjon.api.v1.ApiGwRequest
+import no.nav.integrasjon.api.v1.ApiGwResultModel
 import no.nav.integrasjon.api.v1.BROKERS
 import no.nav.integrasjon.api.v1.DeleteTopicModel
 import no.nav.integrasjon.api.v1.GROUPS
@@ -67,9 +70,6 @@ object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
     val preTopics = setOf("tpc-01", "tpc-02", "tpc-03")
-
-    // Admin of apigw
-    val preApiGwMember = setOf("M151887")
 
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
     val kCluster = KafkaEnvironment(1, topics = preTopics.toList(), withSecurity = true, autoStart = true)
@@ -801,9 +801,11 @@ object KafkaAdminRestSpec : Spek({
 
                 context("Route $APIGW") {
 
-                    context("Get apigw group members") {
+                    val apigwGroup = "apigw"
 
-                        it("should list all group members $preApiGwMember in apigw") {
+                    context("Get / Put $apigwGroup group member(s)") {
+
+                        it("Get - should return empty list group member(s) in $apigwGroup") {
 
                             val call = handleRequest(HttpMethod.Get, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
@@ -814,31 +816,145 @@ object KafkaAdminRestSpec : Spek({
                                 object : TypeToken<GetApiGwGroupMembersModel>() {}.type)
 
                             call.response.status() shouldBe HttpStatusCode.OK
-                            result.members shouldContainAll preApiGwMember
+                            result.members.toList() shouldBe emptyList()
                         }
                     }
 
-                    context("Put apigw group members") {
+                    context("Put $apigwGroup group member(s)") {
 
-                        (topics2CreateDelete + topics4ACLTesting).forEach { topicToCreate ->
+                        val newUser01 = "srvp01"
+                        val newUser02 = "srvc02"
+                        val userDoNotExistInLdap = "nonExisting"
+                        val apiGwgroupMemberToAdd = ApiGwGroupMember(newUser01, GroupMemberOperation.ADD)
+                        val apiGwgroupMemberToAdd02 = ApiGwGroupMember(newUser02, GroupMemberOperation.ADD)
+                        val apiGwgroupMemberToRemove = ApiGwGroupMember(newUser01, GroupMemberOperation.REMOVE)
+                        val nonAdminUser = "n000002"
+                        val nonAdminPwd = "itest2"
+                        val admin = "n145821"
+                        val adminPwd = "itest3"
 
-                            it("should create topic $topicToCreate") {
+                        it("Put - $apigwGroup group member(s), should return Unauthorized, User: $nonAdminUser is not an Admin") {
 
-                                val call = handleRequest(HttpMethod.Put, APIGW) {
-                                    addHeader(HttpHeaders.Accept, "application/json")
-                                    addHeader(HttpHeaders.ContentType, "application/json")
-                                    addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
-                                    setBody(Gson().toJson(PostTopicBody(topicToCreate)))
-                                }
-
-                                val result: GetApiGwGroupMembersModel = Gson().fromJson(
-                                    call.response.content ?: "",
-                                    object : TypeToken<GetApiGwGroupMembersModel>() {}.type)
-
-                                call.response.status() shouldBe HttpStatusCode.OK
-                                result.members shouldContainAll preApiGwMember
-                                result.name shouldContain "apigw"
+                            val call = handleRequest(HttpMethod.Put, APIGW) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$nonAdminUser:$nonAdminPwd".toByteArray())}")
+                                setBody(Gson().toJson(ApiGwRequest(listOf(apiGwgroupMemberToAdd))))
                             }
+
+                            call.response.status() shouldBe HttpStatusCode.Unauthorized
+                            call.response.content!! shouldBeEqualTo Gson().toJson(AnError("Authenticated user: $nonAdminUser is not allowed to update $apigwGroup automatically"))
+                        }
+
+                        it("Put - $apigwGroup ADD group member(s), should return OK, User: $admin is Admin") {
+
+                            val call = handleRequest(HttpMethod.Put, APIGW) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
+                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(newUser01, GroupMemberOperation.ADD)))))
+                            }
+
+                            val result: ApiGwResultModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<ApiGwResultModel>() {}.type)
+
+                            val expectedResult = Gson().toJson(ApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd))))
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            Gson().toJson(result) shouldBeEqualTo expectedResult
+                        }
+
+                        it("Put - $apigwGroup group member(s), should return OK, User is $admin but $newUser01 is already in group") {
+
+                            val call = handleRequest(HttpMethod.Put, APIGW) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
+                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(newUser01, GroupMemberOperation.ADD)))))
+                            }
+
+                            val result: ApiGwResultModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<ApiGwResultModel>() {}.type)
+
+                            val expectedResult = Gson().toJson(ApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd))))
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            Gson().toJson(result) shouldBeEqualTo expectedResult
+                        }
+
+                        it("Put - $apigwGroup group member(s), should return BadRequest, User is $admin but $userDoNotExistInLdap is not i ldap") {
+
+                            val call = handleRequest(HttpMethod.Put, APIGW) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
+                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(userDoNotExistInLdap, GroupMemberOperation.ADD)))))
+                            }
+
+                            val result: AnError = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<AnError>() {}.type)
+
+                            val expectedResult = Gson().toJson(AnError("Tried to add the user: $userDoNotExistInLdap. who doesn't exist in current AD environment"))
+
+                            call.response.status() shouldBe HttpStatusCode.BadRequest
+                            Gson().toJson(result) shouldBeEqualTo expectedResult
+                        }
+
+                        it("Put - $apigwGroup REMOVE group member(s), should return OK, User: $admin is Admin") {
+
+                            val call = handleRequest(HttpMethod.Put, APIGW) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
+                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(newUser01, GroupMemberOperation.REMOVE)))))
+                            }
+
+                            val result: ApiGwResultModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<ApiGwResultModel>() {}.type)
+
+                            val expectedResult = Gson().toJson(ApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToRemove))))
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            Gson().toJson(result) shouldBeEqualTo expectedResult
+                        }
+
+                        it("Get - should return group member(s) in $apigwGroup") {
+
+                            val call = handleRequest(HttpMethod.Get, APIGW) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                            }
+
+                            val result: GetApiGwGroupMembersModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetApiGwGroupMembersModel>() {}.type)
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            Gson().toJson(result) shouldBeEqualTo Gson().toJson(GetApiGwGroupMembersModel(apigwGroup, listOf(admin)))
+                        }
+
+                        it("Put - $apigwGroup ADD group member(s), should return OK, User: $admin is Admin") {
+
+                            val removeAdminUserFromGroup = ApiGwGroupMember(admin, GroupMemberOperation.REMOVE)
+
+                            val call = handleRequest(HttpMethod.Put, APIGW) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
+                                setBody(Gson().toJson(ApiGwRequest(listOf(apiGwgroupMemberToAdd, apiGwgroupMemberToAdd02, removeAdminUserFromGroup))))
+                            }
+
+                            val result: ApiGwResultModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<ApiGwResultModel>() {}.type)
+
+                            val expectedResult = Gson().toJson(ApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd, apiGwgroupMemberToAdd02, removeAdminUserFromGroup))))
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            Gson().toJson(result) shouldBeEqualTo expectedResult
                         }
                     }
                 }
