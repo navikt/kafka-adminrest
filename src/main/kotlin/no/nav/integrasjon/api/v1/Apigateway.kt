@@ -53,7 +53,7 @@ fun Routing.getAllowedUsersInApiGwGroup(fasitConfig: FasitProperties) =
 class PutApiGatewayMember
 
 enum class AdminOfApiGwGroup(val user: String) {
-    ADMIN01("n151886"),
+    ADMIN01("m151886"),
     ADMIN02("n145821")
 }
 
