@@ -115,11 +115,11 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             // 1. Check request body for users to add
             val usersToBeAdded = try {
                 body.members.map { member ->
-                    Pair(member.member, member.operation)
-                }.filter { it.second == GroupMemberOperation.ADD }
+                    Pair(member.member, member.operation) }
+                    .filter { it.second == GroupMemberOperation.ADD }
                     .filter { !groupMembers.contains(it.first) }
             } catch (e: Exception) {
-                val msg = "Request body is not valid. Check swagger documentation and model: ${ApiGwRequest::javaClass}"
+                val msg = "Request body is not valid. Check swagger documentation and model"
                 application.environment.log.error(msg)
                 call.respond(HttpStatusCode.BadRequest, AnError(msg))
                 return@put
@@ -148,8 +148,8 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             // 1. Check request body for users to remove
             val usersToBeRemoved = try {
                 body.members.map { member ->
-                    Pair(member.member, member.operation)
-                }.filter { GroupMemberOperation.REMOVE == it.second }
+                    Pair(member.member, member.operation) }
+                    .filter { GroupMemberOperation.REMOVE == it.second }
                     .filter { groupMembers.contains(it.first) }
             } catch (e: Exception) {
                 val msg = "Request body is not valid. Check swagger documentation and model"
