@@ -84,7 +84,6 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             unAuthorized<AnError>())
     ) { _, body ->
 
-        // Get Information from param
         val currentUser = call.principal<UserIdPrincipal>()!!.name.toLowerCase()
 
         val logEntry = "Group membership update request by " +
@@ -104,6 +103,8 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             val groups = ldap.getKafkaGroups()
             if (!groups.contains(apiGw)) {
                 ldap.createGroup(apiGw, currentUser)
+                // is this necessary or should it be handled differently?
+                // ldap.removeGroupMembers(apiGw, listOf(currentUser))
                 application.environment.log.info("Created ldap Group: $apiGw")
             }
 
