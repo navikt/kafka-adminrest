@@ -54,7 +54,11 @@ class PutApiGatewayMember
 
 enum class AdminOfApiGwGroup(val user: String) {
     ADMIN01("m151886"),
-    ADMIN02("n145821")
+    ADMIN02("n145821"),
+    ADMIN03("n151873"),
+    ADMIN04("s151890"),
+    ADMIN05("s150563"),
+    ADMIN06("r150567")
 }
 
 data class ApiGwRequest(
