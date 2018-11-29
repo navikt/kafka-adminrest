@@ -25,7 +25,6 @@ import no.nav.integrasjon.api.v1.AllowedConfigEntries
 import no.nav.integrasjon.api.v1.AnError
 import no.nav.integrasjon.api.v1.ApiGwGroupMember
 import no.nav.integrasjon.api.v1.ApiGwRequest
-import no.nav.integrasjon.api.v1.ApiGwResultModel
 import no.nav.integrasjon.api.v1.BROKERS
 import no.nav.integrasjon.api.v1.DeleteTopicModel
 import no.nav.integrasjon.api.v1.GROUPS
@@ -44,6 +43,7 @@ import no.nav.integrasjon.api.v1.ONESHOT
 import no.nav.integrasjon.api.v1.OneshotCreationRequest
 import no.nav.integrasjon.api.v1.PostTopicBody
 import no.nav.integrasjon.api.v1.PostTopicModel
+import no.nav.integrasjon.api.v1.PutApiGwResultModel
 import no.nav.integrasjon.api.v1.PutTopicConfigEntryBody
 import no.nav.integrasjon.api.v1.RoleMember
 import no.nav.integrasjon.api.v1.TOPICS
@@ -803,7 +803,7 @@ object KafkaAdminRestSpec : Spek({
 
                     val apigwGroup = "apigw"
 
-                    context("Get / Put $apigwGroup group member(s)") {
+                    context("Get $apigwGroup group member(s)") {
 
                         it("Get - should return empty list group member(s) in $apigwGroup") {
 
@@ -825,7 +825,8 @@ object KafkaAdminRestSpec : Spek({
 
                         val newUser01 = "srvp01"
                         val newUser02 = "srvc02"
-                        val userDoNotExistInLdap = "nonExisting"
+                        val userDoNotExistInLdap = "srvNonExisting"
+                        val notAsystemUser = "m151888"
                         val apiGwgroupMemberToAdd = ApiGwGroupMember(newUser01, GroupMemberOperation.ADD)
                         val apiGwgroupMemberToAdd02 = ApiGwGroupMember(newUser02, GroupMemberOperation.ADD)
                         val apiGwgroupMemberToRemove = ApiGwGroupMember(newUser01, GroupMemberOperation.REMOVE)
@@ -861,11 +862,11 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             val status = call.response.status()
-                            val result: ApiGwResultModel = Gson().fromJson(
+                            val result: PutApiGwResultModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<ApiGwResultModel>() {}.type)
+                                object : TypeToken<PutApiGwResultModel>() {}.type)
 
-                            val expectedResult = Gson().toJson(ApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd))))
+                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd))))
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -881,11 +882,11 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             val status = call.response.status()
-                            val result: ApiGwResultModel = Gson().fromJson(
+                            val result: PutApiGwResultModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<ApiGwResultModel>() {}.type)
+                                object : TypeToken<PutApiGwResultModel>() {}.type)
 
-                            val expectedResult = Gson().toJson(ApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd))))
+                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd))))
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -905,7 +906,27 @@ object KafkaAdminRestSpec : Spek({
                                 call.response.content ?: "",
                                 object : TypeToken<AnError>() {}.type)
 
-                            val expectedResult = Gson().toJson(AnError("Tried to add the user: $userDoNotExistInLdap. who doesn't exist in current AD environment"))
+                            val expectedResult = Gson().toJson(AnError("Tried to add the user: $userDoNotExistInLdap. Who do not exist in current AD environment"))
+
+                            status shouldBe HttpStatusCode.BadRequest
+                            Gson().toJson(result) shouldBeEqualTo expectedResult
+                        }
+
+                        it("Put - $apigwGroup group member(s), should return BadRequest, User is $admin but $notAsystemUser is not system user") {
+
+                            val call = handleRequest(HttpMethod.Put, APIGW) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
+                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(notAsystemUser, GroupMemberOperation.ADD)))))
+                            }
+
+                            val status = call.response.status()
+                            val result: AnError = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<AnError>() {}.type)
+
+                            val expectedResult = Gson().toJson(AnError("Tried to add the user: $notAsystemUser. Who is not an system user"))
 
                             status shouldBe HttpStatusCode.BadRequest
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -921,11 +942,11 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             val status = call.response.status()
-                            val result: ApiGwResultModel = Gson().fromJson(
+                            val result: PutApiGwResultModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<ApiGwResultModel>() {}.type)
+                                object : TypeToken<PutApiGwResultModel>() {}.type)
 
-                            val expectedResult = Gson().toJson(ApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToRemove))))
+                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToRemove))))
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -960,11 +981,11 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             val status = call.response.status()
-                            val result: ApiGwResultModel = Gson().fromJson(
+                            val result: PutApiGwResultModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<ApiGwResultModel>() {}.type)
+                                object : TypeToken<PutApiGwResultModel>() {}.type)
 
-                            val expectedResult = Gson().toJson(ApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd, apiGwgroupMemberToAdd02, removeAdminUserFromGroup))))
+                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd, apiGwgroupMemberToAdd02, removeAdminUserFromGroup))))
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
