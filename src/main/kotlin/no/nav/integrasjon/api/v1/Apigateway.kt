@@ -77,7 +77,7 @@ data class PutApiGwResultModel(
 
 fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
     put<PutApiGatewayMember, ApiGwRequest>(
-        "add/remove members in apigw group. Only members defined as Admin are authorized".securityAndReponds(
+        "add/remove members in apigw group. Request add/removal on Slack in #kafka".securityAndReponds(
             BasicAuthSecurity(),
             ok<PutApiGwResultModel>(),
             badRequest<AnError>(),
@@ -115,7 +115,7 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
                 body.members.map { member ->
                     Pair(member.member, member.operation) }
                     .filter { it.second == GroupMemberOperation.ADD }
-                    .filter { !groupMembers.contains(it.first) }
+                    .filter { !groupMembers.contains(it.first) } // 2. Add only users not already in group
             } catch (e: Exception) {
                 val msg = "Request body is not valid. Check swagger documentation and model"
                 application.environment.log.error(msg)
@@ -124,7 +124,7 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             }
             application.environment.log.debug("Users that will be added: $usersToBeAdded")
 
-            // Check for srv user
+            // 3. Check for srv user
             usersToBeAdded.map { it.first }.filterNot { it.startsWith("srv") }
                 .any {
                     val msg = "Tried to add the user: $it. Who is not an system user"
@@ -133,11 +133,10 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
                     return@put
                 }
 
-            // 2. Check if user is allowed to be in environment
-            // 3. Add only users already in group
+            // 4. Check if user exists in environment
             usersToBeAdded.map { it.first }.filterNot { ldap.userExists(it) }
                 .any {
-                    val msg = "Tried to add the user: $it. Who do not exist in current AD environment"
+                    val msg = "Tried to add the user: $it. Who does not exist in current AD environment"
                     application.environment.log.error(msg)
                     call.respond(HttpStatusCode.BadRequest, AnError(msg))
                     return@put
@@ -156,16 +155,6 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
                 return@put
             }
             application.environment.log.debug("Users that will be removed: $usersToBeRemoved")
-
-            // 2. Check if user is allowed to be in environment
-            // 3. Remove only users already in group
-            usersToBeRemoved.map { it.first }.filterNot { ldap.userExists(it) }
-                .any {
-                    val msg = "Tried to remove the user: $it. Who do not exist in current AD environment"
-                    application.environment.log.error(msg)
-                    call.respond(HttpStatusCode.BadRequest, AnError(msg))
-                    return@put
-                }
 
             if (!usersToBeAdded.isEmpty()) {
                 val userResult = usersToBeAdded.map { it.first }

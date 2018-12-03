@@ -156,7 +156,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                     log.info("Tried to add the user ${it.member} who doesn't exist in AD$logFormat", *logKeys)
                     val err = OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "The user it.member does not exist")
+                        message = "The user ${it.member} does not exist")
                     call.respond(HttpStatusCode.BadRequest, err)
                     return@put
                 }

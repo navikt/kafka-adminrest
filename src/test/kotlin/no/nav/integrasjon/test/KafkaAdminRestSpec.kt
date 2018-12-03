@@ -892,7 +892,7 @@ object KafkaAdminRestSpec : Spek({
                             Gson().toJson(result) shouldBeEqualTo expectedResult
                         }
 
-                        it("Put - $apigwGroup group member(s), should return BadRequest, User is $admin but $userDoNotExistInLdap is not i ldap") {
+                        it("Put - $apigwGroup group member(s), should return BadRequest, User is $admin but $userDoNotExistInLdap is not in ldap") {
 
                             val call = handleRequest(HttpMethod.Put, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
@@ -906,9 +906,28 @@ object KafkaAdminRestSpec : Spek({
                                 call.response.content ?: "",
                                 object : TypeToken<AnError>() {}.type)
 
-                            val expectedResult = Gson().toJson(AnError("Tried to add the user: $userDoNotExistInLdap. Who do not exist in current AD environment"))
+                            val expectedResult = Gson().toJson(AnError("Tried to add the user: $userDoNotExistInLdap. Who does not exist in current AD environment"))
 
                             status shouldBe HttpStatusCode.BadRequest
+                            Gson().toJson(result) shouldBeEqualTo expectedResult
+                        }
+
+                        it("Put - $apigwGroup group member(s), should return BadRequest, User is $admin but $userDoNotExistInLdap is not in ldap") {
+
+                            val call = handleRequest(HttpMethod.Put, APIGW) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
+                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(userDoNotExistInLdap, GroupMemberOperation.REMOVE)))))
+                            }
+
+                            val status = call.response.status()
+                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(ApiGwGroupMember(userDoNotExistInLdap, GroupMemberOperation.REMOVE)))))
+                            val result: PutApiGwResultModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<PutApiGwResultModel>() {}.type)
+
+                            status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
                         }
 
