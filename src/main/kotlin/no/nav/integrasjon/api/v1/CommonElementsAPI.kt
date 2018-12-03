@@ -31,6 +31,9 @@ internal const val GROUPS = "$API_V1/groups"
 internal const val TOPICS = "$API_V1/topics"
 internal const val ONESHOT = "$API_V1/oneshot"
 
+// Route for apigw
+internal const val APIGW = "$API_V1/apigw"
+
 // simple data class for exceptions
 internal data class AnError(val error: String)
 

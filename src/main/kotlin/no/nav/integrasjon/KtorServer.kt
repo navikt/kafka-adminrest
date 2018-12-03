@@ -34,6 +34,7 @@ import no.nav.integrasjon.api.v1.topicsAPI
 import no.nav.integrasjon.api.v1.brokersAPI
 import no.nav.integrasjon.api.v1.groupsAPI
 import no.nav.integrasjon.api.v1.aclAPI
+import no.nav.integrasjon.api.v1.apigwAPI
 import no.nav.integrasjon.api.v1.registerOneshotApi
 import no.nav.integrasjon.ldap.LDAPAuthenticate
 import org.apache.kafka.clients.CommonClientConfigs
@@ -154,5 +155,6 @@ fun Application.kafkaAdminREST() {
         brokersAPI(adminClient, fasitProps)
         aclAPI(adminClient, fasitProps)
         groupsAPI(fasitProps)
+        apigwAPI(fasitProps)
     }
 }
