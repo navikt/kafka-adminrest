@@ -102,9 +102,7 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             // Group do not exist, in environment - create and add currentUser As first?
             val groups = ldap.getKafkaGroups()
             if (!groups.contains(apiGw)) {
-                ldap.createGroup(apiGw, currentUser)
-                // is this necessary or should it be handled differently?
-                // ldap.removeGroupMembers(apiGw, listOf(currentUser))
+                ldap.createGroup(apiGw)
                 application.environment.log.info("Created ldap Group: $apiGw")
             }
 

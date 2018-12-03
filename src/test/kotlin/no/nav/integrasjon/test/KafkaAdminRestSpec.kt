@@ -952,6 +952,26 @@ object KafkaAdminRestSpec : Spek({
                             Gson().toJson(result) shouldBeEqualTo expectedResult
                         }
 
+                        it("Put - $apigwGroup ADD group member(s), should return OK, User: $admin add 2 users") {
+
+                            val call = handleRequest(HttpMethod.Put, APIGW) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
+                                setBody(Gson().toJson(ApiGwRequest(listOf(apiGwgroupMemberToAdd, apiGwgroupMemberToAdd02))))
+                            }
+
+                            val status = call.response.status()
+                            val result: PutApiGwResultModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<PutApiGwResultModel>() {}.type)
+
+                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd, apiGwgroupMemberToAdd02))))
+
+                            status shouldBe HttpStatusCode.OK
+                            Gson().toJson(result) shouldBeEqualTo expectedResult
+                        }
+
                         it("Get - should return group member(s) in $apigwGroup") {
 
                             val call = handleRequest(HttpMethod.Get, APIGW) {
@@ -963,21 +983,19 @@ object KafkaAdminRestSpec : Spek({
                                 call.response.content ?: "",
                                 object : TypeToken<GetApiGwGroupMembersModel>() {}.type)
 
-                            val expectedResult = Gson().toJson(GetApiGwGroupMembersModel(apigwGroup, listOf(admin)))
+                            val expectedResult = Gson().toJson(GetApiGwGroupMembersModel(apigwGroup, listOf(newUser01, newUser02)))
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
                         }
 
-                        it("Put - $apigwGroup ADD group member(s), should return OK, User: $admin is Admin") {
-
-                            val removeAdminUserFromGroup = ApiGwGroupMember(admin, GroupMemberOperation.REMOVE)
+                        it("Put - $apigwGroup ADD group member(s), should return OK, User: $admin is Admin, Add one and remove one") {
 
                             val call = handleRequest(HttpMethod.Put, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
                                 addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
-                                setBody(Gson().toJson(ApiGwRequest(listOf(apiGwgroupMemberToAdd, apiGwgroupMemberToAdd02, removeAdminUserFromGroup))))
+                                setBody(Gson().toJson(ApiGwRequest(listOf(apiGwgroupMemberToRemove, apiGwgroupMemberToAdd02))))
                             }
 
                             val status = call.response.status()
@@ -985,7 +1003,7 @@ object KafkaAdminRestSpec : Spek({
                                 call.response.content ?: "",
                                 object : TypeToken<PutApiGwResultModel>() {}.type)
 
-                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd, apiGwgroupMemberToAdd02, removeAdminUserFromGroup))))
+                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToRemove, apiGwgroupMemberToAdd02))))
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
