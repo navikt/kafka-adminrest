@@ -42,7 +42,10 @@ task printVersion() {
     }
 }
 
-test { useJUnitPlatform { includeEngines 'spek2' } }
+test {
+    testLogging.events("passed", "skipped", "failed")
+    useJUnitPlatform { includeEngines 'spek2' }
+}
 
 repositories {
     maven { url "http://packages.confluent.io/maven" }
