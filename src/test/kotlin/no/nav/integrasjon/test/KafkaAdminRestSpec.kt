@@ -76,7 +76,7 @@ object KafkaAdminRestSpec : Spek({
         kCluster.brokersURL, "kafka-adminrest", "TRUE",
         "SASL_PLAINTEXT", "PLAIN",
         "srvkafkaclient", "kafkaclient", // see predfined users in embedded kafka
-        ldapConnTimeout = 250,
+        ldapConnTimeout = 1000,
         ldapUserAttrName = "uid",
         ldapAuthHost = "localhost",
         ldapAuthPort = InMemoryLDAPServer.LPORT,
@@ -89,7 +89,7 @@ object KafkaAdminRestSpec : Spek({
         ldapGrpMemberAttrName = "member",
         ldapUser = "igroup",
         ldapPassword = "itest",
-        kafkaTimeout = 250L
+        kafkaTimeout = 1000L
     )
 
     fun FasitProperties.injectValues(
@@ -310,7 +310,7 @@ object KafkaAdminRestSpec : Spek({
                     }
 
                     afterGroup {
-                        engine.stop(100, 250, TimeUnit.MILLISECONDS)
+                        engine.stop(1000, 2000, TimeUnit.MILLISECONDS)
                     }
                 }
             }
@@ -422,23 +422,6 @@ object KafkaAdminRestSpec : Spek({
 
                 context("Route $TOPICS") {
 
-                    context("Get topics") {
-
-                        it("should list all topics $preTopics in kafka cluster") {
-
-                            val call = handleRequest(HttpMethod.Get, TOPICS) {
-                                addHeader(HttpHeaders.Accept, "application/json")
-                            }
-
-                            val result: GetTopicsModel = Gson().fromJson(
-                                call.response.content ?: "",
-                                object : TypeToken<GetTopicsModel>() {}.type)
-
-                            call.response.status() shouldBe HttpStatusCode.OK
-                            result.topics shouldContainAll preTopics
-                        }
-                    }
-
                     context("Create topics") {
 
                         (topics2CreateDelete + topics4ACLTesting).forEach { topicToCreate ->
@@ -484,38 +467,20 @@ object KafkaAdminRestSpec : Spek({
                         }
                     }
 
-                    context("Delete topics") {
+                    context("Get topics") {
 
-                        it("should not be possible to delete ${topics2CreateDelete.first()} for non-member in KM-") {
-                            val call = handleRequest(HttpMethod.Delete, "$TOPICS/${topics2CreateDelete.first()}") {
+                        it("should list all topics $preTopics in kafka cluster") {
+
+                            val call = handleRequest(HttpMethod.Get, TOPICS) {
                                 addHeader(HttpHeaders.Accept, "application/json")
-                                addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("igroup:itest".toByteArray())}")
                             }
 
-                            call.response.status() shouldBe HttpStatusCode.BadRequest
-                        }
+                            val result: GetTopicsModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicsModel>() {}.type)
 
-                        topics2CreateDelete.forEach { topicToDelete ->
-
-                            it("should delete topic $topicToDelete for member in KM-") {
-
-                                val call = handleRequest(HttpMethod.Delete, "$TOPICS/$topicToDelete") {
-                                    addHeader(HttpHeaders.Accept, "application/json")
-                                    addHeader(HttpHeaders.ContentType, "application/json")
-                                    addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
-                                }
-
-                                val result: DeleteTopicModel = Gson().fromJson(
-                                    call.response.content ?: "",
-                                    object : TypeToken<DeleteTopicModel>() {}.type)
-
-                                call.response.status() shouldBe HttpStatusCode.OK
-
-                                result.topicStatus shouldContain "deleted topic"
-                                result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
-                                result.aclStatus shouldContain "deleted"
-                            }
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            result.topics shouldContainAll preTopics
                         }
                     }
 
@@ -622,6 +587,41 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             call.response.status() shouldBe HttpStatusCode.BadRequest
+                        }
+                    }
+
+                    context("Delete topics") {
+
+                        it("should not be possible to delete ${topics2CreateDelete.first()} for non-member in KM-") {
+                            val call = handleRequest(HttpMethod.Delete, "$TOPICS/${topics2CreateDelete.first()}") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("igroup:itest".toByteArray())}")
+                            }
+
+                            call.response.status() shouldBe HttpStatusCode.BadRequest
+                        }
+
+                        topics2CreateDelete.forEach { topicToDelete ->
+
+                            it("should delete topic $topicToDelete for member in KM-") {
+
+                                val call = handleRequest(HttpMethod.Delete, "$TOPICS/$topicToDelete") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                    addHeader(HttpHeaders.ContentType, "application/json")
+                                    addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                }
+
+                                val result: DeleteTopicModel = Gson().fromJson(
+                                    call.response.content ?: "",
+                                    object : TypeToken<DeleteTopicModel>() {}.type)
+
+                                call.response.status() shouldBe HttpStatusCode.OK
+
+                                result.topicStatus shouldContain "deleted topic"
+                                result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
+                                result.aclStatus shouldContain "deleted"
+                            }
                         }
                     }
 
@@ -1030,7 +1030,7 @@ object KafkaAdminRestSpec : Spek({
             }
 
             afterGroup {
-                engine2.stop(100, 250, TimeUnit.MILLISECONDS)
+                engine2.stop(1000, 2000, TimeUnit.MILLISECONDS)
                 InMemoryLDAPServer.stop()
                 kCluster.tearDown()
             }
