@@ -10,8 +10,6 @@ import io.ktor.server.testing.TestApplicationEngine
 import io.ktor.server.testing.createTestEnvironment
 import io.ktor.server.testing.handleRequest
 import io.ktor.server.testing.setBody
-import io.ktor.util.InternalAPI
-import io.ktor.util.encodeBase64
 import no.nav.common.KafkaEnvironment
 import no.nav.integrasjon.FasitPropFactory
 import no.nav.integrasjon.FasitProperties
@@ -63,9 +61,9 @@ import org.amshove.kluent.shouldEqualTo
 import org.apache.kafka.clients.admin.ConfigEntry
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
+import java.util.Base64
 import java.util.concurrent.TimeUnit
 
-@UseExperimental(InternalAPI::class)
 object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
@@ -1039,3 +1037,5 @@ object KafkaAdminRestSpec : Spek({
         }
     }
 })
+
+private fun encodeBase64(bytes: ByteArray): String = Base64.getEncoder().encodeToString(bytes)
