@@ -777,7 +777,7 @@ object KafkaAdminRestSpec : Spek({
                 }
 
                 context("Route $ONESHOT") {
-                    it("creates a topic with one consumer + manager") {
+                    it("creates a topic with one consumer + manager and adding another manager") {
                         val call = handleRequest(HttpMethod.Put, ONESHOT) {
                             addHeader(HttpHeaders.Accept, "application/json")
                             addHeader(HttpHeaders.ContentType, "application/json")
@@ -786,7 +786,7 @@ object KafkaAdminRestSpec : Spek({
                                 topics = listOf(
                                     TopicCreation(
                                         topicName = "integrationTestNoUpdate",
-                                        members = listOf(RoleMember("srvp01", KafkaGroupType.CONSUMER)),
+                                        members = listOf(RoleMember("srvp02", KafkaGroupType.CONSUMER), RoleMember("igroup", KafkaGroupType.MANAGER)),
                                         configEntries = mapOf(),
                                         numPartitions = 3
                                     )))))
@@ -794,6 +794,21 @@ object KafkaAdminRestSpec : Spek({
 
                         println(call.response.content)
                         call.response.status() shouldBe HttpStatusCode.OK
+                    }
+
+                    it("should report groups and 2 members for topic integrationTestNoUpdate, KM:igroup and KC:srvp02") {
+
+                        val call = handleRequest(HttpMethod.Get, "$TOPICS/integrationTestNoUpdate/groups") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                        }
+
+                        val result: GetTopicGroupsModel = Gson().fromJson(
+                            call.response.content ?: "",
+                            object : TypeToken<GetTopicGroupsModel>() {}.type)
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+                        result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
+                        result.groups.flatMap { it.members }.size shouldEqualTo 2
                     }
                 }
 
