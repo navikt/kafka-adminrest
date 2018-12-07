@@ -777,7 +777,7 @@ object KafkaAdminRestSpec : Spek({
                 }
 
                 context("Route $ONESHOT") {
-                    it("creates a topic with one consumer + manager") {
+                    it("should successfully create a topic for duplicate combinations of roles and members (including both implicit and explicit MANAGER)") {
                         val call = handleRequest(HttpMethod.Put, ONESHOT) {
                             addHeader(HttpHeaders.Accept, "application/json")
                             addHeader(HttpHeaders.ContentType, "application/json")
@@ -786,14 +786,33 @@ object KafkaAdminRestSpec : Spek({
                                 topics = listOf(
                                     TopicCreation(
                                         topicName = "integrationTestNoUpdate",
-                                        members = listOf(RoleMember("srvp01", KafkaGroupType.CONSUMER)),
+                                        members = listOf(
+                                            RoleMember("srvp02", KafkaGroupType.CONSUMER),
+                                            RoleMember("igroup", KafkaGroupType.MANAGER),
+                                            RoleMember("igroup", KafkaGroupType.PRODUCER),
+                                            RoleMember("igroup", KafkaGroupType.PRODUCER),
+                                            RoleMember("igroup", KafkaGroupType.CONSUMER),
+                                            RoleMember("igroup", KafkaGroupType.CONSUMER)),
                                         configEntries = mapOf(),
                                         numPartitions = 3
                                     )))))
                         }
-
-                        println(call.response.content)
                         call.response.status() shouldBe HttpStatusCode.OK
+                    }
+
+                    it("should report groups and 2 members for topic integrationTestNoUpdate, KM:igroup and KC:srvp02") {
+
+                        val call = handleRequest(HttpMethod.Get, "$TOPICS/integrationTestNoUpdate/groups") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                        }
+
+                        val result: GetTopicGroupsModel = Gson().fromJson(
+                            call.response.content ?: "",
+                            object : TypeToken<GetTopicGroupsModel>() {}.type)
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+                        result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
+                        result.groups.flatMap { it.members }.size shouldEqualTo 4
                     }
                 }
 
