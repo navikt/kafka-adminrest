@@ -181,8 +181,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
             val requestedGroupMembers = request.topics.flatMap { topic ->
                 topic.members
                     .map { GroupMember(toGroupName(it.role.prefix, topic.topicName), it.member) }
-                    .filter { it.user != currentUser }
-                    .toMutableList().apply {
+                    .toMutableSet().apply {
                         val groupName = toGroupName(KafkaGroupType.MANAGER.prefix, topic.topicName)
                         add(GroupMember(groupName, currentUser))
                     }

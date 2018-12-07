@@ -786,7 +786,11 @@ object KafkaAdminRestSpec : Spek({
                                 topics = listOf(
                                     TopicCreation(
                                         topicName = "integrationTestNoUpdate",
-                                        members = listOf(RoleMember("srvp02", KafkaGroupType.CONSUMER), RoleMember("igroup", KafkaGroupType.MANAGER)),
+                                        members = listOf(
+                                            RoleMember("srvp02", KafkaGroupType.CONSUMER),
+                                            RoleMember("igroup", KafkaGroupType.MANAGER),
+                                            RoleMember("igroup", KafkaGroupType.PRODUCER),
+                                            RoleMember("igroup", KafkaGroupType.CONSUMER)),
                                         configEntries = mapOf(),
                                         numPartitions = 3
                                     )))))
@@ -808,7 +812,7 @@ object KafkaAdminRestSpec : Spek({
 
                         call.response.status() shouldBe HttpStatusCode.OK
                         result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
-                        result.groups.flatMap { it.members }.size shouldEqualTo 2
+                        result.groups.flatMap { it.members }.size shouldEqualTo 4
                     }
                 }
 
