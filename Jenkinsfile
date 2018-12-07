@@ -50,9 +50,15 @@ pipeline {
                     }
                 }
 
-                stage('deploy to preprod') {
+                stage('deploy to preprod - namespace q4') {
                     steps {
                         deployApp action: 'jiraPreprod', environment: 'q4', namespace: 'q4'
+                    }
+                }
+
+                stage('deploy to preprod - namespace default') {
+                    steps {
+                        deployApp action: 'jiraPreprod', environment: 'q4', namespace: 'default'
                     }
                 }
 
