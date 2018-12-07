@@ -777,7 +777,7 @@ object KafkaAdminRestSpec : Spek({
                 }
 
                 context("Route $ONESHOT") {
-                    it("creates a topic with one consumer + manager and adding another manager") {
+                    it("should successfully create a topic for duplicate combinations of roles and members (including both implicit and explicit MANAGER)") {
                         val call = handleRequest(HttpMethod.Put, ONESHOT) {
                             addHeader(HttpHeaders.Accept, "application/json")
                             addHeader(HttpHeaders.ContentType, "application/json")
@@ -790,13 +790,13 @@ object KafkaAdminRestSpec : Spek({
                                             RoleMember("srvp02", KafkaGroupType.CONSUMER),
                                             RoleMember("igroup", KafkaGroupType.MANAGER),
                                             RoleMember("igroup", KafkaGroupType.PRODUCER),
+                                            RoleMember("igroup", KafkaGroupType.PRODUCER),
+                                            RoleMember("igroup", KafkaGroupType.CONSUMER),
                                             RoleMember("igroup", KafkaGroupType.CONSUMER)),
                                         configEntries = mapOf(),
                                         numPartitions = 3
                                     )))))
                         }
-
-                        println(call.response.content)
                         call.response.status() shouldBe HttpStatusCode.OK
                     }
 
