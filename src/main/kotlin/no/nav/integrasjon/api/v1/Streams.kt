@@ -49,13 +49,19 @@ fun Routing.streamsAPI(adminClient: AdminClient?, fasitConfig: FasitProperties) 
                             unAuthorized<Unit>()
                     )
     ) { _, body ->
-        val streamsAcl = AclBinding(
-                ResourcePattern(ResourceType.TOPIC, body.applicationName, PatternType.PREFIXED),
-                AccessControlEntry("User:${body.user}", "*", AclOperation.ALL, AclPermissionType.ALLOW)
+        val streamsAcl = listOf(
+                AclBinding(
+                    ResourcePattern(ResourceType.TOPIC, body.applicationName, PatternType.PREFIXED),
+                    AccessControlEntry("User:${body.user}", "*", AclOperation.ALL, AclPermissionType.ALLOW)
+            ),
+            AclBinding(
+                    ResourcePattern(ResourceType.GROUP, body.applicationName, PatternType.PREFIXED),
+                    AccessControlEntry("User:${body.user}", "*", AclOperation.ALL, AclPermissionType.ALLOW)
+            )
         )
 
         try {
-            adminClient?.createAcls(listOf(streamsAcl))?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+            adminClient?.createAcls(streamsAcl)?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
             log.info("Successfully updated acl for stream app ${body.applicationName}")
             call.respond(PostStreamResponse(
                     status = PostStreamStatus.OK,
