@@ -36,6 +36,7 @@ import no.nav.integrasjon.api.v1.groupsAPI
 import no.nav.integrasjon.api.v1.aclAPI
 import no.nav.integrasjon.api.v1.apigwAPI
 import no.nav.integrasjon.api.v1.registerOneshotApi
+import no.nav.integrasjon.api.v1.streamsAPI
 import no.nav.integrasjon.ldap.LDAPAuthenticate
 import org.apache.kafka.clients.CommonClientConfigs
 import org.apache.kafka.clients.admin.AdminClient
@@ -150,6 +151,7 @@ fun Application.kafkaAdminREST() {
 
         // provide the essential, management of kafka environment, topic creation and authorization
 
+        streamsAPI(adminClient, fasitProps)
         registerOneshotApi(adminClient, fasitProps)
         topicsAPI(adminClient, fasitProps)
         brokersAPI(adminClient, fasitProps)

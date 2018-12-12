@@ -4,8 +4,8 @@ import io.ktor.application.ApplicationCall
 import io.ktor.application.application
 import io.ktor.application.call
 import io.ktor.http.HttpStatusCode
-import io.ktor.util.pipeline.PipelineContext
 import io.ktor.response.respond
+import io.ktor.util.pipeline.PipelineContext
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
@@ -30,6 +30,9 @@ internal const val GROUPS = "$API_V1/groups"
 // route for topics in kafka environment, and zoom into related acls and groups per topic
 internal const val TOPICS = "$API_V1/topics"
 internal const val ONESHOT = "$API_V1/oneshot"
+
+// Route for streams
+internal const val STREAMS = "$API_V1/streams"
 
 // Route for apigw
 internal const val APIGW = "$API_V1/apigw"
