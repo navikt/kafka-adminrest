@@ -49,30 +49,40 @@ fun Routing.streamsAPI(adminClient: AdminClient?, fasitConfig: FasitProperties) 
                             unAuthorized<Unit>()
                     )
     ) { _, body ->
-        val streamsAcl = listOf(
-                AclBinding(
-                    ResourcePattern(ResourceType.TOPIC, body.applicationName, PatternType.PREFIXED),
-                    AccessControlEntry("User:${body.user}", "*", AclOperation.ALL, AclPermissionType.ALLOW)
-            ),
-            AclBinding(
-                    ResourcePattern(ResourceType.GROUP, body.applicationName, PatternType.PREFIXED),
-                    AccessControlEntry("User:${body.user}", "*", AclOperation.ALL, AclPermissionType.ALLOW)
-            )
-        )
-
-        try {
-            adminClient?.createAcls(streamsAcl)?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
-            log.info("Successfully updated acl for stream app ${body.applicationName}")
-            call.respond(PostStreamResponse(
-                    status = PostStreamStatus.OK,
-                    message = "Successfully updated ACL"
-            ))
-        } catch (e: Exception) {
-            log.error("Exception caught while updating ACL for stream app ${body.applicationName}", e)
-            call.respond(HttpStatusCode.ServiceUnavailable, PostStreamResponse(
+        adminClient?.listTopics()?.names()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.filter {
+            it.startsWith(body.applicationName)
+        }?.firstOrNull()?.let {
+            log.error("Trying to register a stream app which is a prefix of ${it}")
+            call.respond(HttpStatusCode.BadRequest, PostStreamResponse(
                     status = PostStreamStatus.ERROR,
-                    message = "Failed to update ACL"
+                    message = "Stream name is prefix of a topic"
             ))
+        } ?: run {
+            val streamsAcl = listOf(
+                    AclBinding(
+                            ResourcePattern(ResourceType.TOPIC, body.applicationName, PatternType.PREFIXED),
+                            AccessControlEntry("User:${body.user}", "*", AclOperation.ALL, AclPermissionType.ALLOW)
+                    ),
+                    AclBinding(
+                            ResourcePattern(ResourceType.GROUP, body.applicationName, PatternType.PREFIXED),
+                            AccessControlEntry("User:${body.user}", "*", AclOperation.ALL, AclPermissionType.ALLOW)
+                    )
+            )
+
+            try {
+                adminClient?.createAcls(streamsAcl)?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                log.info("Successfully updated acl for stream app ${body.applicationName}")
+                call.respond(PostStreamResponse(
+                        status = PostStreamStatus.OK,
+                        message = "Successfully updated ACL"
+                ))
+            } catch (e: Exception) {
+                log.error("Exception caught while updating ACL for stream app ${body.applicationName}", e)
+                call.respond(HttpStatusCode.ServiceUnavailable, PostStreamResponse(
+                        status = PostStreamStatus.ERROR,
+                        message = "Failed to update ACL"
+                ))
+            }
         }
     }
 }
