@@ -39,11 +39,15 @@ import no.nav.integrasjon.api.v1.NAIS_ISALIVE
 import no.nav.integrasjon.api.v1.NAIS_ISREADY
 import no.nav.integrasjon.api.v1.ONESHOT
 import no.nav.integrasjon.api.v1.OneshotCreationRequest
+import no.nav.integrasjon.api.v1.PostStreamBody
+import no.nav.integrasjon.api.v1.PostStreamResponse
+import no.nav.integrasjon.api.v1.PostStreamStatus
 import no.nav.integrasjon.api.v1.PostTopicBody
 import no.nav.integrasjon.api.v1.PostTopicModel
 import no.nav.integrasjon.api.v1.PutApiGwResultModel
 import no.nav.integrasjon.api.v1.PutTopicConfigEntryBody
 import no.nav.integrasjon.api.v1.RoleMember
+import no.nav.integrasjon.api.v1.STREAMS
 import no.nav.integrasjon.api.v1.TOPICS
 import no.nav.integrasjon.api.v1.TopicCreation
 import no.nav.integrasjon.kafkaAdminREST
@@ -348,6 +352,28 @@ object KafkaAdminRestSpec : Spek({
 
                 context("Route $ACLS") {
                     // don't bother :-)
+                }
+
+                context("Route $STREAMS") {
+                    context("Create streams app ACLs") {
+                        it("should create ACL for streams app") {
+                            val call = handleRequest(HttpMethod.Post, "$STREAMS/") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                setBody(Gson().toJson(PostStreamBody("team1-streams-app1", "team1")))
+                            }
+
+                            println(call.response.content)
+
+                            val result: PostStreamResponse = Gson().fromJson(
+                                    call.response.content ?: "",
+                                    object : TypeToken<PostStreamResponse>() {}.type)
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            result.status shouldBe PostStreamStatus.OK
+                        }
+                    }
                 }
 
                 context("Route $BROKERS") {
