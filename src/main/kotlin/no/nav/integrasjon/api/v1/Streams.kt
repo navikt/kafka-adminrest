@@ -52,7 +52,7 @@ fun Routing.streamsAPI(adminClient: AdminClient?, fasitConfig: FasitProperties) 
         adminClient?.listTopics()?.names()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.filter {
             it.startsWith(body.applicationName)
         }?.firstOrNull()?.let {
-            log.error("Trying to register a stream app which is a prefix of ${it}")
+            log.error("Trying to register a stream app which is a prefix of $it")
             call.respond(HttpStatusCode.BadRequest, PostStreamResponse(
                     status = PostStreamStatus.ERROR,
                     message = "Stream name is prefix of a topic"
