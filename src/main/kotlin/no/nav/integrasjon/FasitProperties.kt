@@ -52,7 +52,9 @@ data class FasitProperties(
 
     // ldap user and pwd with enough authorization for managing ldap groups
     val ldapUser: String = System.getenv("LDAP_USER")?.toString() ?: "",
-    val ldapPassword: String = System.getenv("LDAP_PASSWORD")?.toString() ?: ""
+    val ldapPassword: String = System.getenv("LDAP_PASSWORD")?.toString() ?: "",
+
+    val ldapGroupInGroupBase: String = System.getenv("LDAP_GROUPINGROUPBASE")?.toString() ?: ""
 )
 
 // Checking that enough information is provided

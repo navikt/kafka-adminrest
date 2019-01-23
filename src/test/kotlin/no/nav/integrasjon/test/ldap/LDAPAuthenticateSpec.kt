@@ -23,7 +23,8 @@ object LDAPAuthenticateSpec : Spek({
             ldapGroupAttrName = "cn",
             ldapGrpMemberAttrName = "member",
             ldapUser = "igroup",
-            ldapPassword = "itest"
+            ldapPassword = "itest",
+            ldapGroupInGroupBase = "OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local"
     )
 
     describe("LDAPauthenticate class test specification") {

@@ -293,7 +293,7 @@ class LDAPGroup(private val config: FasitProperties) :
     private val searchInUserAccountsNode = searchXInY(
             inheritDNTail(config.ldapSrvUserBase, config.ldapAuthUserBase),
             SearchScope.SUB)
-    private val searchInGroupAccountsNode = searchXInY("OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local", SearchScope.SUB)
+    private val searchInGroupAccountsNode = searchXInY(config.ldapGroupInGroupBase, SearchScope.SUB)
 
     /**
      * Level 2 - Search functions getting attributes, based on search functions locked to nodes
