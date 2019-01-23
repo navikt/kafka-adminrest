@@ -79,10 +79,6 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun getKafkaGroups() = getKafkaGroupNames()
 
-    fun getGroupsInKafkaGroups(group: String) = getKafkaGroupMembers(group).filter { member ->
-        GroupInGroup.values().map { it.groupPrefix }.contains(member)
-    }
-
     enum class GroupInGroup(val groupPrefix: String) {
         AZURE_AD_GROUP("Group_"),
         ON_PREM_AD_GROUP("0000-")
@@ -208,8 +204,6 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun getKafkaGroupMembers(groupName: String) = getMembersInKafkaGroup(groupName)
 
-    fun kafkaGroupContainsGroupInGroup(entry: String, predicate: Boolean = true) = GroupInGroup.values().map { user -> entry.contains(user.groupPrefix) }.contains(predicate)
-
     fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): SLDAPResult =
 
             resolveUserDN(updateEntry.member).let { userDN ->
@@ -250,8 +244,11 @@ class LDAPGroup(private val config: FasitProperties) :
                 GroupMemberOperation.REMOVE -> !userInGroup(userDN, groupDN, groupName)
             }
 
+    private fun kafkaGroupContainsGroupInGroup(entry: String) =
+        entry.contains(GroupInGroup.AZURE_AD_GROUP.groupPrefix) || entry.contains(GroupInGroup.ON_PREM_AD_GROUP.groupPrefix)
+
     private fun groupMemberIsGroup(groupName: String): String? = getMembersInKafkaGroup(groupName).map { it }
-            .singleOrNull { it.contains(GroupInGroup.AZURE_AD_GROUP.groupPrefix) || it.contains(GroupInGroup.ON_PREM_AD_GROUP.groupPrefix) }
+            .singleOrNull { kafkaGroupContainsGroupInGroup(it) }
 
     private fun userInGroup(userDN: String, groupDN: String, groupName: String): Boolean =
             // careful, AD will raise exception if group is empty, thus, no member attribute issue
