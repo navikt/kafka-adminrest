@@ -11,6 +11,7 @@ import org.amshove.kluent.shouldBe
 import org.amshove.kluent.shouldContainAll
 import org.amshove.kluent.shouldEqual
 import org.amshove.kluent.shouldEqualTo
+import org.amshove.kluent.shouldHaveTheSameClassAs
 import org.amshove.kluent.shouldNotContainAny
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
@@ -121,6 +122,53 @@ object LDAPGroupSpec : Spek({
                         lc.getKafkaGroupMembers("KP-$topic")
                     } shouldContainAll listOf(
                             "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local")
+                }
+
+                it("should return the added Group_00020ec3-6592-4415-a563-1ed6768d6086 MANAGER when getting group members") {
+                    LDAPGroup(fp).use { lc ->
+                        lc.updateKafkaGroupMembership(
+                            topic,
+                            UpdateKafkaGroupMember(
+                                KafkaGroupType.MANAGER,
+                                GroupMemberOperation.ADD,
+                                "Group_00020ec3-6592-4415-a563-1ed6768d6086"
+                            ))
+                        lc.getKafkaGroupMembers("KM-$topic")
+                    } shouldContainAll listOf(
+                        "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
+                        "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
+                }
+
+                it("should return the added 0000-GA-BASTA_SUPERUSER MANAGER when getting group members") {
+                    LDAPGroup(fp).use { lc ->
+                        lc.updateKafkaGroupMembership(
+                            topic,
+                            UpdateKafkaGroupMember(
+                                KafkaGroupType.MANAGER,
+                                GroupMemberOperation.ADD,
+                                "0000-GA-BASTA_SUPERUSER"
+                            ))
+                        lc.getKafkaGroupMembers("KM-$topic")
+                    } shouldContainAll listOf(
+                        "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
+                        "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
+                        "cn=0000-GA-BASTA_SUPERUSER,OU=AccountGroups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
+                }
+
+                it("should throw error adding 0000-GA-BASTA_SUPERUSER as producer") {
+                    try {
+                        LDAPGroup(fp).use { lc ->
+                            lc.updateKafkaGroupMembership(
+                                topic,
+                                UpdateKafkaGroupMember(
+                                    KafkaGroupType.PRODUCER,
+                                    GroupMemberOperation.ADD,
+                                    "0000-GA-BASTA_SUPERUSER"
+                                ))
+                        }
+                    } catch (e: Exception) {
+                        e.shouldHaveTheSameClassAs(Exception("Cannot have 0000-GA-BASTA_SUPERUSER as consumer/producer"))
+                    }
                 }
 
                 it("should return the added srvp02 producer when getting group members") {

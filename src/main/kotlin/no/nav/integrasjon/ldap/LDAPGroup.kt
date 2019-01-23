@@ -79,6 +79,15 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun getKafkaGroups() = getKafkaGroupNames()
 
+    fun getGroupsInKafkaGroups(group: String) = getKafkaGroupMembers(group).filter { member ->
+        GroupInGroup.values().map { it.groupPrefix }.contains(member)
+    }
+
+    enum class GroupInGroup(val groupPrefix: String) {
+        AZURE_AD_GROUP("Group_"),
+        ON_PREM_AD_GROUP("0000-")
+    }
+
     /**
      * Generic function iterating group types and performing a couple of operations
      */
@@ -199,12 +208,17 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun getKafkaGroupMembers(groupName: String) = getMembersInKafkaGroup(groupName)
 
+    fun kafkaGroupContainsGroupInGroup(entry: String, predicate: Boolean = true) = GroupInGroup.values().map { user -> entry.contains(user.groupPrefix) }.contains(predicate)
+
     fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): SLDAPResult =
 
             resolveUserDN(updateEntry.member).let { userDN ->
+
                 if (userDN.isEmpty())
                     throw Exception("Cannot find ${updateEntry.member} under user - or service accounts")
                 else if (updateEntry.role != KafkaGroupType.MANAGER && isNAVIdent(updateEntry.member))
+                    throw Exception("Cannot have ${updateEntry.member} as consumer/producer")
+                else if (updateEntry.role != KafkaGroupType.MANAGER && kafkaGroupContainsGroupInGroup(updateEntry.member))
                     throw Exception("Cannot have ${updateEntry.member} as consumer/producer")
                 else
                     config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
@@ -279,6 +293,7 @@ class LDAPGroup(private val config: FasitProperties) :
     private val searchInUserAccountsNode = searchXInY(
             inheritDNTail(config.ldapSrvUserBase, config.ldapAuthUserBase),
             SearchScope.SUB)
+    private val searchInGroupAccountsNode = searchXInY("OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local", SearchScope.SUB)
 
     /**
      * Level 2 - Search functions getting attributes, based on search functions locked to nodes
@@ -288,6 +303,7 @@ class LDAPGroup(private val config: FasitProperties) :
 
     private val searchGetDNSAN = searchInServiceAccountsNode(SearchRequest.NO_ATTRIBUTES)
     private val searchGetDNUAN = searchInUserAccountsNode(SearchRequest.NO_ATTRIBUTES)
+    private val searchGetDNGROUP = searchInGroupAccountsNode(SearchRequest.NO_ATTRIBUTES)
 
     /**
      * Level 3 - Useful base functions, based on search functions returning attributes
@@ -313,7 +329,7 @@ class LDAPGroup(private val config: FasitProperties) :
                     }
 
     private fun getUserDN(userName: String): String =
-            searchGetDNUAN(Filter.createEqualityFilter(config.ldapUserAttrName, userName))
+                searchGetDNUAN(Filter.createEqualityFilter(config.ldapUserAttrName, userName))
                     .let { searchRes ->
                         when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
                             true -> searchRes.searchEntries[0].dn
@@ -321,13 +337,26 @@ class LDAPGroup(private val config: FasitProperties) :
                         }
                     }
 
+    private fun getGroupDN(userName: String): String =
+        searchGetDNGROUP(Filter.createEqualityFilter(config.ldapGroupAttrName, userName))
+            .let { searchRes ->
+                when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
+                    true -> searchRes.searchEntries[0].dn
+                    false -> ""
+                }
+            }
+
     /**
      * Level 4 - Useful base function, based on base functions
      */
     private fun groupEmpty(groupName: String) = getMembersInKafkaGroup(groupName).isEmpty()
 
     private fun resolveUserDN(userName: String) =
-            if (isNAVIdent(userName)) getUserDN(userName) else getServiceUserDN(userName)
+        when {
+            kafkaGroupContainsGroupInGroup(userName) -> getGroupDN(userName)
+            isNAVIdent(userName) -> getUserDN(userName)
+            else -> getServiceUserDN(userName)
+        }
 
     private fun inheritDNTail(srcDN: String, trgDN: String): String {
 
