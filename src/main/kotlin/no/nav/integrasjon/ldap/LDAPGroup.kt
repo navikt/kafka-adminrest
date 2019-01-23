@@ -250,12 +250,20 @@ class LDAPGroup(private val config: FasitProperties) :
                 GroupMemberOperation.REMOVE -> !userInGroup(userDN, groupDN, groupName)
             }
 
+    private fun groupMemberIsGroup(groupName: String): String? = getMembersInKafkaGroup(groupName).map { it }
+            .singleOrNull { it.contains(GroupInGroup.AZURE_AD_GROUP.groupPrefix) || it.contains(GroupInGroup.ON_PREM_AD_GROUP.groupPrefix) }
+
     private fun userInGroup(userDN: String, groupDN: String, groupName: String): Boolean =
             // careful, AD will raise exception if group is empty, thus, no member attribute issue
-            if (groupEmpty(groupName)) false
-            else ldapConnection
-                    .compare(CompareRequest(groupDN, config.ldapGrpMemberAttrName, userDN))
-                    .compareMatched()
+        when {
+            groupEmpty(groupName) -> false
+            groupMemberIsGroup(groupName) != null -> ldapConnection
+                .compare(CompareRequest(groupMemberIsGroup(groupName), config.ldapGrpMemberAttrName, userDN))
+                .compareMatched()
+            else -> ldapConnection
+                .compare(CompareRequest(groupDN, config.ldapGrpMemberAttrName, userDN))
+                .compareMatched()
+        }
 
     fun userIsManager(topicName: String, userName: String): Boolean =
             toGroupName(KafkaGroupType.MANAGER.prefix, topicName).let { groupName ->

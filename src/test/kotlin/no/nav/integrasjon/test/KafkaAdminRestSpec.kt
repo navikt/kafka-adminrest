@@ -798,7 +798,7 @@ object KafkaAdminRestSpec : Spek({
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
-                            result.groups.flatMap { it.members }.size shouldEqualTo 1
+                            result.groups.flatMap { it.members }.size shouldEqualTo 3
                         }
                     }
                 }
