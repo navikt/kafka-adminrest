@@ -140,23 +140,24 @@ object LDAPGroupSpec : Spek({
                         "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
                 }
 
-                it("should return the added 0000-GA-BASTA_SUPERUSER MANAGER when getting group members") {
-                    LDAPGroup(fp).use { lc ->
-                        lc.updateKafkaGroupMembership(
-                            topic,
-                            UpdateKafkaGroupMember(
-                                KafkaGroupType.MANAGER,
-                                GroupMemberOperation.ADD,
-                                "0000-GA-BASTA_SUPERUSER"
-                            ))
-                        lc.getKafkaGroupMembers("KM-$topic")
-                    } shouldContainAll listOf(
-                        "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
-                        "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
-                        "cn=0000-GA-BASTA_SUPERUSER,OU=AccountGroups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
+                it("should throw an Error adding 0000-GA-BASTA_SUPERUSER as MANAGER") {
+                    try {
+                        LDAPGroup(fp).use { lc ->
+                            lc.updateKafkaGroupMembership(
+                                topic,
+                                UpdateKafkaGroupMember(
+                                    KafkaGroupType.MANAGER,
+                                    GroupMemberOperation.ADD,
+                                    "0000-GA-BASTA_SUPERUSER"
+                                ))
+                            lc.getKafkaGroupMembers("KM-$topic")
+                        }
+                        } catch (e: LDAPGroup.GroupInGroupException) {
+                            e.shouldHaveTheSameClassAs(LDAPGroup.GroupInGroupException("Cannot have 0000-GA-BASTA_SUPERUSER as consumer/producer"))
+                        }
                 }
 
-                it("should throw error adding 0000-GA-BASTA_SUPERUSER as producer") {
+                it("should throw error adding 0000-GA-BASTA_SUPERUSER as Producer") {
                     try {
                         LDAPGroup(fp).use { lc ->
                             lc.updateKafkaGroupMembership(
@@ -167,8 +168,8 @@ object LDAPGroupSpec : Spek({
                                     "0000-GA-BASTA_SUPERUSER"
                                 ))
                         }
-                    } catch (e: Exception) {
-                        e.shouldHaveTheSameClassAs(Exception("Cannot have 0000-GA-BASTA_SUPERUSER as consumer/producer"))
+                    } catch (e: LDAPGroup.UserNotAllowedException) {
+                        e.shouldHaveTheSameClassAs(LDAPGroup.UserNotAllowedException("Cannot have 0000-GA-BASTA_SUPERUSER as consumer/producer"))
                     }
                 }
 

@@ -209,11 +209,11 @@ class LDAPGroup(private val config: FasitProperties) :
     // REGEX?
     private fun getCNFromDN(dNGroupName: String) = """([^,]*)""".toRegex().find(dNGroupName)!!.value.replace("cn=", "")
 
-    data class GroupInGroupException(val msg: String): Exception(msg)
+    data class GroupInGroupException(val msg: String) : Exception(msg)
 
-    data class UserNotAllowedException(val msg: String): Exception(msg)
+    data class UserNotAllowedException(val msg: String) : Exception(msg)
 
-    data class UserNotFound(val msg: String): Exception(msg)
+    data class UserNotFound(val msg: String) : Exception(msg)
 
     fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): SLDAPResult =
 
@@ -257,7 +257,7 @@ class LDAPGroup(private val config: FasitProperties) :
                 GroupMemberOperation.REMOVE -> !userInGroup(userDN, groupDN, groupName)
             }
 
-    private fun kafkaGroupContainsGroupInGroup(entry: String) : Boolean{
+    private fun kafkaGroupContainsGroupInGroup(entry: String): Boolean {
         log.info { "GROUPMEMBER IS ENTRY: $entry" }
         return entry.contains(GroupInGroup.AZURE_AD_GROUP.groupPrefix) || entry.contains(GroupInGroup.ON_PREM_AD_GROUP.groupPrefix)
     }
@@ -319,7 +319,8 @@ class LDAPGroup(private val config: FasitProperties) :
             inheritDNTail(config.ldapSrvUserBase, config.ldapAuthUserBase),
             SearchScope.SUB)
     private val searchInGroupAccountsNode = searchXInY(config.ldapGroupInGroupBase, SearchScope.SUB)
-    private val searchInGroupAccountsNodeInOffice = searchXInY("OU=O365Groups,${config.ldapGroupInGroupBase}", SearchScope.ONE)
+    private val searchInGroupAccountsNodeInOffice = searchXInY(config.ldapGroupInGroupBase, SearchScope.SUB)
+    // "OU=O365Groups,${config.ldapGroupInGroupBase}"
 
     /**
      * Level 2 - Search functions getting attributes, based on search functions locked to nodes
@@ -375,7 +376,6 @@ class LDAPGroup(private val config: FasitProperties) :
 
     private fun getMembersInGroupInGroup(groupName: String): List<String> =
         if (groupName.contains(GroupInGroup.AZURE_AD_GROUP.groupPrefix)) {
-            log.info { "REGEX: $groupName" }
             searchGetMembershipGroupNodeInOffice(Filter.createEqualityFilter(config.ldapGroupAttrName, groupName))
                 .searchEntries
                 .flatMap { it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: emptyList() }
