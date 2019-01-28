@@ -153,7 +153,7 @@ object LDAPGroupSpec : Spek({
                             lc.getKafkaGroupMembers("KM-$topic")
                         }
                         } catch (e: LDAPGroup.GroupInGroupException) {
-                            e.shouldHaveTheSameClassAs(LDAPGroup.GroupInGroupException("Cannot have 0000-GA-BASTA_SUPERUSER as consumer/producer"))
+                            e.shouldHaveTheSameClassAs(LDAPGroup.GroupInGroupException("Cannot have to groups: 0000-GA-BASTA_SUPERUSER as Manager"))
                         }
                 }
 

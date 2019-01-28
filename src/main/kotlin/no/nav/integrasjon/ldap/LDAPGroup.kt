@@ -212,7 +212,7 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun getKafkaGroupInGroupMembers(groupName: String) = getMembersInGroupInGroup(getCNFromDN(groupName))
 
-    // REGEX?
+    // REGEX approved?
     private fun getCNFromDN(dNGroupName: String) = """([^,]*)""".toRegex().find(dNGroupName)!!.value.replace("cn=", "")
 
     data class GroupInGroupException(val msg: String) : Exception(msg)
@@ -269,7 +269,8 @@ class LDAPGroup(private val config: FasitProperties) :
     private fun kafkaGroupContainsGroupInGroup(entry: String): Boolean =
         entry.contains(GroupInGroup.AZURE_AD_GROUP.groupPrefix) || entry.contains(GroupInGroup.ON_PREM_AD_GROUP.groupPrefix)
 
-    fun groupMemberIsGroup(groupName: String): String? = getMembersInKafkaGroup(groupName).map { it }
+    fun groupMemberIsGroup(groupName: String): String? =
+        getMembersInKafkaGroup(groupName).map { it }
         .singleOrNull { kafkaGroupContainsGroupInGroup(it) }
 
     private fun userInGroup(userDN: String, groupDN: String, groupName: String): Boolean =
