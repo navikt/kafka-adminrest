@@ -1101,6 +1101,7 @@ object KafkaAdminRestSpec : Spek({
                 context("Route GROUP IN GROUP Operations") {
 
                     val tp01 = "KM-tpc-01"
+                    val groupInGroupTopic = "groupInGroup"
 
                     it("should report groups, members and GROUP in GROUP MEMBERS for topic $tp01") {
 
@@ -1125,7 +1126,7 @@ object KafkaAdminRestSpec : Spek({
                         )
                     }
 
-                    it("should NOT add a new MANAGER cn=0000-GA-BASTA_SUPERUSER to topic tpc-01, with GROUP in GROUP MEMBER") {
+                    it("should NOT add a new MANAGER c0000-GA-BASTA_SUPERUSER to topic tpc-01, with GROUP in GROUP MEMBER") {
 
                         val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01/groups") {
                             addHeader(HttpHeaders.Accept, "application/json")
@@ -1140,7 +1141,7 @@ object KafkaAdminRestSpec : Spek({
                                 UpdateKafkaGroupMember(
                                     KafkaGroupType.MANAGER,
                                     GroupMemberOperation.ADD,
-                                    "cn=0000-GA-BASTA_SUPERUSER"
+                                    "0000-GA-BASTA_SUPERUSER"
                                 )
                             )
                             setBody(jsonPayload)
@@ -1193,7 +1194,7 @@ object KafkaAdminRestSpec : Spek({
                         call.response.status() shouldBe HttpStatusCode.OK
                     }
 
-                    it("should add a new MANAGER cn=0000-GA-BASTA_SUPERUSER to topic tpc-03") {
+                    it("should add a new MANAGER 0000-GA-BASTA_SUPERUSER to topic tpc-03") {
 
                         val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03/groups") {
                             addHeader(HttpHeaders.Accept, "application/json")
@@ -1208,13 +1209,76 @@ object KafkaAdminRestSpec : Spek({
                                 UpdateKafkaGroupMember(
                                     KafkaGroupType.MANAGER,
                                     GroupMemberOperation.ADD,
-                                    "cn=0000-GA-BASTA_SUPERUSER"
+                                    "0000-GA-BASTA_SUPERUSER"
                                 )
                             )
                             setBody(jsonPayload)
                         }
 
                         call.response.status() shouldBe HttpStatusCode.OK
+                    }
+
+                    it("should create topic $groupInGroupTopic") {
+
+                        val call = handleRequest(HttpMethod.Post, TOPICS) {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                            addHeader(HttpHeaders.ContentType, "application/json")
+                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
+                            setBody(Gson().toJson(PostTopicBody(groupInGroupTopic)))
+                        }
+
+                        val result: PostTopicModel = Gson().fromJson(
+                            call.response.content ?: "",
+                            object : TypeToken<PostTopicModel>() {}.type)
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+
+                        result.topicStatus shouldContain "created topic"
+                        result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
+                        result.aclStatus shouldContain "created"
+                    }
+
+                    it("should add a new MANAGER Group_00020ec3-6592-4415-a563-1ed6768d6086 to topic $groupInGroupTopic") {
+
+                        val call = handleRequest(HttpMethod.Put, "$TOPICS/$groupInGroupTopic/groups") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                            addHeader(HttpHeaders.ContentType, "application/json")
+                            // relevant user is in the right place in UserAndGroups.ldif
+                            addHeader(
+                                HttpHeaders.Authorization,
+                                "Basic ${encodeBase64("n145821:itest3".toByteArray())}"
+                            )
+
+                            val jsonPayload = Gson().toJson(
+                                UpdateKafkaGroupMember(
+                                    KafkaGroupType.MANAGER,
+                                    GroupMemberOperation.ADD,
+                                    "Group_00020ec3-6592-4415-a563-1ed6768d6086"
+                                )
+                            )
+                            setBody(jsonPayload)
+                        }
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+                    }
+
+                    it("should delete topic $groupInGroupTopic for member in KM-$groupInGroupTopic") {
+
+                        val call = handleRequest(HttpMethod.Delete, "$TOPICS/$groupInGroupTopic") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                            addHeader(HttpHeaders.ContentType, "application/json")
+                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000003:itest4".toByteArray())}")
+                        }
+
+                        val result: DeleteTopicModel = Gson().fromJson(
+                            call.response.content ?: "",
+                            object : TypeToken<DeleteTopicModel>() {}.type)
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+
+                        result.topicStatus shouldContain "deleted topic"
+                        result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
+                        result.aclStatus shouldContain "deleted"
                     }
                 }
             }
