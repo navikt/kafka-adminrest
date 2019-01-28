@@ -2,6 +2,7 @@ package no.nav.integrasjon.api.v1
 
 import io.ktor.locations.Location
 import io.ktor.routing.Routing
+import mu.KotlinLogging
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
@@ -51,13 +52,24 @@ fun Routing.getGroups(fasitConfig: FasitProperties) =
 data class GetGroupMembers(val groupName: String)
 
 data class GetGroupMembersModel(val name: String, val members: List<String>)
+data class GetGroupInGroupMembersModel(val groupInGroupName: String = "", val members: List<String> = emptyList())
+data class GetGroupMembersModelResponse(val kafkaGroup: GetGroupMembersModel, val aDGroup: GetGroupInGroupMembersModel)
 
 fun Routing.getGroupMembers(fasitConfig: FasitProperties) =
         get<GetGroupMembers>(
-                "members in a group".responds(ok<GetGroupMembersModel>(),
+                "members in a group".responds(ok<GetGroupMembersModelResponse>(),
                         serviceUnavailable<AnError>())
         ) { group ->
             respondOrServiceUnavailable(fasitConfig) { lc ->
-                GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
+                val log = KotlinLogging.logger { }
+
+                val groupInGroupName = lc.groupMemberIsGroup(group.groupName)
+                val kafkaGroupAndMembers = GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
+                when (groupInGroupName) {
+                    null -> GetGroupMembersModelResponse(
+                        kafkaGroup = kafkaGroupAndMembers, aDGroup = GetGroupInGroupMembersModel())
+                    else -> GetGroupMembersModelResponse(
+                        kafkaGroup = kafkaGroupAndMembers, aDGroup = GetGroupInGroupMembersModel(groupInGroupName, members = lc.getKafkaGroupInGroupMembers(groupInGroupName)))
+                }
             }
         }

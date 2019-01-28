@@ -649,10 +649,26 @@ fun Routing.updateTopicGroup(fasitConfig: FasitProperties) =
 
             val (updateRequestOk, result) = try {
                 Pair(true, LDAPGroup(fasitConfig).use { lc -> lc.updateKafkaGroupMembership(topicName, body) })
-            } catch (e: Exception) { Pair(false, SLDAPResult()) }
+            } catch (gpe: LDAPGroup.GroupInGroupException) {
+                val msg = "User: ${body.member} not allowed in KM group"
+                application.environment.log.error(msg)
+                call.respond(HttpStatusCode.ServiceUnavailable, AnError(msg))
+                return@put
+            } catch (ue: LDAPGroup.UserNotAllowedException) {
+                val msg = "User: ${body.member} not allowed in KM group"
+                application.environment.log.error(msg)
+                call.respond(HttpStatusCode.ServiceUnavailable, AnError(msg))
+                return@put
+            } catch (uf: LDAPGroup.UserNotFound) {
+                val msg = "User: ${body.member} not found in ldap"
+                application.environment.log.error(msg)
+                call.respond(HttpStatusCode.ServiceUnavailable, AnError(msg))
+                return@put
+            } catch (e: Exception) {
+                Pair(false, SLDAPResult())
+            }
 
-            // TODO 1) User not found 2) user account not allowed in KP and KC groups
-
+            // remove this?
             if (!updateRequestOk) {
                 val msg = "User not found, user not allowed in KP and KC, exception..."
                 application.environment.log.error(msg)

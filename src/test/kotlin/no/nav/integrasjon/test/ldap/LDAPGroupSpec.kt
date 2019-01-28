@@ -299,7 +299,8 @@ object LDAPGroupSpec : Spek({
             val topics = mapOf(
                     Pair("tpc-01", "n000002") to true,
                     Pair("tpc-02", "n141414") to false,
-                    Pair("tpc-03", "n145821") to true
+                    Pair("tpc-03", "n145821") to true,
+                    Pair("tpc-01", "n000003") to true
             )
 
             topics.forEach { pair, result ->

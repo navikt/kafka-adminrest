@@ -204,16 +204,29 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun getKafkaGroupMembers(groupName: String) = getMembersInKafkaGroup(groupName)
 
+    fun getKafkaGroupInGroupMembers(groupName: String) = getMembersInGroupInGroup(getCNFromDN(groupName))
+
+    // REGEX?
+    private fun getCNFromDN(dNGroupName: String) = """([^,]*)""".toRegex().find(dNGroupName)!!.value.replace("cn=", "")
+
+    data class GroupInGroupException(val msg: String): Exception(msg)
+
+    data class UserNotAllowedException(val msg: String): Exception(msg)
+
+    data class UserNotFound(val msg: String): Exception(msg)
+
     fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): SLDAPResult =
 
             resolveUserDN(updateEntry.member).let { userDN ->
 
                 if (userDN.isEmpty())
-                    throw Exception("Cannot find ${updateEntry.member} under user - or service accounts")
+                    throw UserNotFound("Cannot find ${updateEntry.member} under user - or service accounts")
                 else if (updateEntry.role != KafkaGroupType.MANAGER && isNAVIdent(updateEntry.member))
-                    throw Exception("Cannot have ${updateEntry.member} as consumer/producer")
+                    throw UserNotAllowedException("Cannot have ${updateEntry.member} as consumer/producer")
                 else if (updateEntry.role != KafkaGroupType.MANAGER && kafkaGroupContainsGroupInGroup(updateEntry.member))
-                    throw Exception("Cannot have ${updateEntry.member} as consumer/producer")
+                    throw UserNotAllowedException("Cannot have ${updateEntry.member} as consumer/producer")
+                else if (updateEntry.role == KafkaGroupType.MANAGER && kafkaGroupContainsGroupInGroup(updateEntry.member) && groupMemberIsGroup(toGroupName(KafkaGroupType.MANAGER.prefix, topicName)) != null)
+                    throw GroupInGroupException("Cannot have to groups: ${updateEntry.member} as Manager")
                 else
                     config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
 
@@ -244,11 +257,18 @@ class LDAPGroup(private val config: FasitProperties) :
                 GroupMemberOperation.REMOVE -> !userInGroup(userDN, groupDN, groupName)
             }
 
-    private fun kafkaGroupContainsGroupInGroup(entry: String) =
-        entry.contains(GroupInGroup.AZURE_AD_GROUP.groupPrefix) || entry.contains(GroupInGroup.ON_PREM_AD_GROUP.groupPrefix)
+    private fun kafkaGroupContainsGroupInGroup(entry: String) : Boolean{
+        log.info { "GROUPMEMBER IS ENTRY: $entry" }
+        return entry.contains(GroupInGroup.AZURE_AD_GROUP.groupPrefix) || entry.contains(GroupInGroup.ON_PREM_AD_GROUP.groupPrefix)
+    }
 
-    private fun groupMemberIsGroup(groupName: String): String? = getMembersInKafkaGroup(groupName).map { it }
+    fun groupMemberIsGroup(groupName: String): String? {
+        log.info { "GROUPMEMBER IS GROUP: $groupName" }
+        val result = getMembersInKafkaGroup(groupName).map { it }
             .singleOrNull { kafkaGroupContainsGroupInGroup(it) }
+        log.info { "GROUPMEMBER IS RESULT: $result" }
+        return result
+    }
 
     private fun userInGroup(userDN: String, groupDN: String, groupName: String): Boolean =
             // careful, AD will raise exception if group is empty, thus, no member attribute issue
@@ -299,12 +319,14 @@ class LDAPGroup(private val config: FasitProperties) :
             inheritDNTail(config.ldapSrvUserBase, config.ldapAuthUserBase),
             SearchScope.SUB)
     private val searchInGroupAccountsNode = searchXInY(config.ldapGroupInGroupBase, SearchScope.SUB)
+    private val searchInGroupAccountsNodeInOffice = searchXInY("OU=O365Groups,${config.ldapGroupInGroupBase}", SearchScope.ONE)
 
     /**
      * Level 2 - Search functions getting attributes, based on search functions locked to nodes
      */
     private val searchGetMembershipKN = searchInKafkaNode(config.ldapGrpMemberAttrName)
     private val searchGetNamesKN = searchInKafkaNode(config.ldapGroupAttrName)
+    private val searchGetMembershipGroupNodeInOffice = searchInGroupAccountsNodeInOffice(config.ldapGrpMemberAttrName)
 
     private val searchGetDNSAN = searchInServiceAccountsNode(SearchRequest.NO_ATTRIBUTES)
     private val searchGetDNUAN = searchInUserAccountsNode(SearchRequest.NO_ATTRIBUTES)
@@ -350,6 +372,17 @@ class LDAPGroup(private val config: FasitProperties) :
                     false -> ""
                 }
             }
+
+    private fun getMembersInGroupInGroup(groupName: String): List<String> =
+        if (groupName.contains(GroupInGroup.AZURE_AD_GROUP.groupPrefix)) {
+            log.info { "REGEX: $groupName" }
+            searchGetMembershipGroupNodeInOffice(Filter.createEqualityFilter(config.ldapGroupAttrName, groupName))
+                .searchEntries
+                .flatMap { it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: emptyList() }
+        } else
+            searchGetMembershipGroupNodeInOffice(Filter.createEqualityFilter(config.ldapGroupAttrName, groupName))
+                .searchEntries
+                .flatMap { it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: emptyList() }
 
     /**
      * Level 4 - Useful base function, based on base functions
