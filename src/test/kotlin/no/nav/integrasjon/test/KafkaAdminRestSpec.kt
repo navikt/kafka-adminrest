@@ -1100,86 +1100,98 @@ object KafkaAdminRestSpec : Spek({
 
                 context("Route GROUP IN GROUP Operations") {
 
-                        val tp01 = "KM-tpc-01"
+                    val tp01 = "KM-tpc-01"
 
-                        it("should report groups, members and GROUP in GROUP MEMBERS for topic $tp01") {
+                    it("should report groups, members and GROUP in GROUP MEMBERS for topic $tp01") {
 
-                            val call = handleRequest(HttpMethod.Get, "$GROUPS/$tp01") {
-                                addHeader(HttpHeaders.Accept, "application/json")
-                            }
-
-                            val result: GetGroupMembersModelResponse = Gson().fromJson(
-                                call.response.content ?: "",
-                                object : TypeToken<GetGroupMembersModelResponse>() {}.type)
-
-                            call.response.status() shouldBe HttpStatusCode.OK
-                            result.kafkaGroup.members shouldContainAll listOf(
-                                "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
-                                "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
-                            result.aDGroup.groupInGroupName shouldBeEqualTo "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local"
-                            result.aDGroup.members shouldContainAll listOf(
-                                "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
-                                "uid=n000003,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local")
+                        val call = handleRequest(HttpMethod.Get, "$GROUPS/$tp01") {
+                            addHeader(HttpHeaders.Accept, "application/json")
                         }
 
-                        it("should NOT add a new MANAGER cn=0000-GA-BASTA_SUPERUSER to topic tpc-01, with GROUP in GROUP MEMBER") {
+                        val result: GetGroupMembersModelResponse = Gson().fromJson(
+                            call.response.content ?: "",
+                            object : TypeToken<GetGroupMembersModelResponse>() {}.type
+                        )
 
-                            val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01/groups") {
-                                addHeader(HttpHeaders.Accept, "application/json")
-                                addHeader(HttpHeaders.ContentType, "application/json")
-                                // relevant user is in the right place in UserAndGroups.ldif
-                                addHeader(
-                                    HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("n000003:itest4".toByteArray())}")
+                        call.response.status() shouldBe HttpStatusCode.OK
+                        result.kafkaGroup.members shouldContainAll listOf(
+                            "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
+                            "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local"
+                        )
+                        result.aDGroup.groupInGroupName shouldBeEqualTo "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local"
+                        result.aDGroup.members shouldContainAll listOf(
+                            "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
+                            "uid=n000003,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
+                        )
+                    }
 
-                                val jsonPayload = Gson().toJson(
-                                    UpdateKafkaGroupMember(
-                                        KafkaGroupType.MANAGER,
-                                        GroupMemberOperation.ADD,
-                                        "cn=0000-GA-BASTA_SUPERUSER"
-                                    )
+                    it("should NOT add a new MANAGER cn=0000-GA-BASTA_SUPERUSER to topic tpc-01, with GROUP in GROUP MEMBER") {
+
+                        val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01/groups") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                            addHeader(HttpHeaders.ContentType, "application/json")
+                            // relevant user is in the right place in UserAndGroups.ldif
+                            addHeader(
+                                HttpHeaders.Authorization,
+                                "Basic ${encodeBase64("n000003:itest4".toByteArray())}"
+                            )
+
+                            val jsonPayload = Gson().toJson(
+                                UpdateKafkaGroupMember(
+                                    KafkaGroupType.MANAGER,
+                                    GroupMemberOperation.ADD,
+                                    "cn=0000-GA-BASTA_SUPERUSER"
                                 )
-                                setBody(jsonPayload)
-                            }
-
-                            call.response.status() shouldBe HttpStatusCode.ServiceUnavailable
+                            )
+                            setBody(jsonPayload)
                         }
 
-                        it("should report groups and 2 members for topic tpc-01") {
+                        call.response.status() shouldBe HttpStatusCode.ServiceUnavailable
+                    }
 
-                            val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-01/groups") {
-                                addHeader(HttpHeaders.Accept, "application/json")
-                            }
+                    it("should report groups and 2 members for topic tpc-01") {
 
-                            val result: GetTopicGroupsModel = Gson().fromJson(
-                                call.response.content ?: "",
-                                object : TypeToken<GetTopicGroupsModel>() {}.type)
-
-                            call.response.status() shouldBe HttpStatusCode.OK
-                            result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
-                            result.groups.flatMap { it.members }.size shouldEqualTo 2
-                            result.groups.flatMap { it.members } shouldContainAll listOf(
-                                "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
-                                "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
+                        val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-01/groups") {
+                            addHeader(HttpHeaders.Accept, "application/json")
                         }
 
-                        it("should update 'delete.retention.ms' configuration for tpc-01, with GROUP in GROUP MEMBER") {
+                        val result: GetTopicGroupsModel = Gson().fromJson(
+                            call.response.content ?: "",
+                            object : TypeToken<GetTopicGroupsModel>() {}.type
+                        )
 
-                            val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01") {
-                                addHeader(HttpHeaders.Accept, "application/json")
-                                addHeader(HttpHeaders.ContentType, "application/json")
-                                // relevant user is in the right place in UserAndGroups.ldif
-                                addHeader(
-                                    HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("n000003:itest4".toByteArray())}")
+                        call.response.status() shouldBe HttpStatusCode.OK
+                        result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(
+                            true,
+                            true,
+                            true
+                        )
+                        result.groups.flatMap { it.members }.size shouldEqualTo 2
+                        result.groups.flatMap { it.members } shouldContainAll listOf(
+                            "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
+                            "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local"
+                        )
+                    }
 
-                                val jsonPayload = Gson().toJson(
-                                    PutTopicConfigEntryBody(AllowedConfigEntries.DELETE_RETENTION_MS, "6600666"))
-                                setBody(jsonPayload)
-                            }
+                    it("should update 'delete.retention.ms' configuration for tpc-01, with GROUP in GROUP MEMBER") {
 
-                            call.response.status() shouldBe HttpStatusCode.OK
+                        val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                            addHeader(HttpHeaders.ContentType, "application/json")
+                            // relevant user is in the right place in UserAndGroups.ldif
+                            addHeader(
+                                HttpHeaders.Authorization,
+                                "Basic ${encodeBase64("n000003:itest4".toByteArray())}"
+                            )
+
+                            val jsonPayload = Gson().toJson(
+                                PutTopicConfigEntryBody(AllowedConfigEntries.DELETE_RETENTION_MS, "6600666")
+                            )
+                            setBody(jsonPayload)
                         }
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+                    }
 
                     it("should add a new MANAGER cn=0000-GA-BASTA_SUPERUSER to topic tpc-03") {
 
@@ -1189,7 +1201,8 @@ object KafkaAdminRestSpec : Spek({
                             // relevant user is in the right place in UserAndGroups.ldif
                             addHeader(
                                 HttpHeaders.Authorization,
-                                "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
+                                "Basic ${encodeBase64("n145821:itest3".toByteArray())}"
+                            )
 
                             val jsonPayload = Gson().toJson(
                                 UpdateKafkaGroupMember(
