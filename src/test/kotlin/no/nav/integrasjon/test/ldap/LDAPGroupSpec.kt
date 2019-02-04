@@ -296,6 +296,18 @@ object LDAPGroupSpec : Spek({
             }
         }
 
+        context("Get all groups and members of groups in a group") {
+            "KM-tpc-01".let { topic ->
+                it("should return all members groups in a Kafka groups") {
+                    LDAPGroup(fp).use { lc ->
+                        lc.memberIsGroup(topic)
+                            .map { group ->
+                                lc.getGroupInGroupMembers(group) }.get(index = 0) shouldContainAll listOf("uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local", "uid=n000003,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local")
+                    }
+                }
+            }
+        }
+
         context("Verify management access for topics") {
             val topics = mapOf(
                     Pair("tpc-01", "n000002") to true,

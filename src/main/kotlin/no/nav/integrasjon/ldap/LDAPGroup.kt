@@ -81,10 +81,14 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun getKafkaGroups() = getKafkaGroupNames()
 
-    enum class GroupInGroup(val groupPrefix: String) {
-        AZURE_AD_GROUP("Group_"),
-        ON_PREM_AD_GROUP("0000-")
-    }
+    // TODO check for groupType attribute to see if it is a group or others.
+    private fun checkAttributeForGroup(group: String, attribute: String): Boolean =
+        getGroupDN(group).let { groupName ->
+            when {
+                !groupName.isEmpty() -> ldapConnection.getEntry(groupName).getAttribute(attribute) != null
+                else -> false
+            }
+        }
 
     /**
      * Generic function iterating group types and performing a couple of operations
@@ -210,7 +214,7 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun getKafkaGroupMembers(groupName: String) = getMembersInKafkaGroup(groupName)
 
-    fun getKafkaGroupInGroupMembers(groupName: String) = getMembersInGroupInGroup(getCNFromDN(groupName))
+    fun getGroupInGroupMembers(groupName: String) = getMembersInGroupInGroup(getCNFromDN(groupName))
 
     // REGEX approved?
     private fun getCNFromDN(dNGroupName: String) = """([^,]*)""".toRegex().find(dNGroupName)!!.value.replace("cn=", "")
@@ -229,11 +233,11 @@ class LDAPGroup(private val config: FasitProperties) :
                 throw UserNotFound("Cannot find ${updateEntry.member} under user - or service accounts")
             else if (updateEntry.role != KafkaGroupType.MANAGER && isNAVIdent(updateEntry.member))
                 throw UserNotAllowedException("Cannot have ${updateEntry.member} as consumer/producer")
-            else if (updateEntry.role != KafkaGroupType.MANAGER && kafkaGroupContainsGroupInGroup(updateEntry.member))
+            else if (updateEntry.role != KafkaGroupType.MANAGER && isManagerGroup(updateEntry.member))
                 throw UserNotAllowedException("Cannot have ${updateEntry.member} as consumer/producer")
-            else if (updateEntry.role == KafkaGroupType.MANAGER && kafkaGroupContainsGroupInGroup(updateEntry.member) && groupMemberIsGroup(
+            else if (updateEntry.role == KafkaGroupType.MANAGER && isManagerGroup(updateEntry.member) && !memberIsGroup(
                     toGroupName(KafkaGroupType.MANAGER.prefix, topicName)
-                ) != null
+                ).isEmpty()
             )
                 throw GroupInGroupException("Cannot have to groups: ${updateEntry.member} as Manager")
             else
@@ -266,23 +270,30 @@ class LDAPGroup(private val config: FasitProperties) :
             GroupMemberOperation.REMOVE -> !userInGroup(userDN, groupDN, groupName)
         }
 
-    private fun kafkaGroupContainsGroupInGroup(entry: String): Boolean =
-        entry.contains(GroupInGroup.AZURE_AD_GROUP.groupPrefix) || entry.contains(GroupInGroup.ON_PREM_AD_GROUP.groupPrefix)
+    private fun isManagerGroup(groupName: String): Boolean = checkAttributeForGroup(groupName, "groupType")
 
-    fun groupMemberIsGroup(groupName: String): String? =
-        getMembersInKafkaGroup(groupName).map { it }
-        .singleOrNull { kafkaGroupContainsGroupInGroup(it) }
+    private fun ldapGetAttribute(groupNameDN: String, attr: String) =
+        ldapConnection.getEntry(groupNameDN).getAttribute(attr)
+
+    fun memberIsGroup(groupName: String): List<String> =
+        when {
+            ldapGetAttribute(getGroupDN(groupName), "member") != null ->
+                ldapGetAttribute(getGroupDN(groupName), "member").values.map { it }.filter { group ->
+                    ldapGetAttribute(
+                        group,
+                        "groupType"
+                    ) != null
+                }
+            else -> listOf()
+        }
 
     private fun userInGroup(userDN: String, groupDN: String, groupName: String): Boolean =
     // careful, AD will raise exception if group is empty, thus, no member attribute issue
         when {
             groupEmpty(groupName) -> false
-            groupMemberIsGroup(groupName) != null ->
-                when {
-                    comparedMatchedMemberIn(groupMemberIsGroup(groupName), userDN) -> true
-                    else -> comparedMatchedMemberIn(groupDN, userDN)
-                }
-            else -> comparedMatchedMemberIn(groupDN, userDN)
+            memberIsGroup(groupName).map { group -> comparedMatchedMemberIn(group, userDN) }.contains(true) -> true
+            else ->
+                comparedMatchedMemberIn(groupDN, userDN)
         }
 
     private fun comparedMatchedMemberIn(groupName: String?, userDN: String) = ldapConnection
@@ -394,7 +405,7 @@ class LDAPGroup(private val config: FasitProperties) :
 
     private fun resolveUserDN(userName: String) =
         when {
-            kafkaGroupContainsGroupInGroup(userName) -> getGroupDN(userName)
+            isManagerGroup(userName) -> getGroupDN(userName)
             isNAVIdent(userName) -> getUserDN(userName)
             else -> getServiceUserDN(userName)
         }

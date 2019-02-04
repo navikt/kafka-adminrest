@@ -4,7 +4,6 @@ import com.unboundid.ldap.listener.InMemoryDirectoryServer
 import com.unboundid.ldap.listener.InMemoryDirectoryServerConfig
 import com.unboundid.ldap.listener.InMemoryListenerConfig
 import com.unboundid.ldap.sdk.OperationType
-import com.unboundid.ldap.sdk.schema.Schema
 import com.unboundid.util.ssl.KeyStoreKeyManager
 import com.unboundid.util.ssl.SSLUtil
 import com.unboundid.util.ssl.TrustAllTrustManager
@@ -53,7 +52,8 @@ object InMemoryLDAPServer {
                     OperationType.DELETE
                     )
             // let the embedded server use identical schema as apache DS configured for AD support (group and sAMAcc..)
-            schema = Schema.getSchema("src/test/resources/apacheDS.ldif")
+            schema = null
+            // Schema.getSchema("src/test/resources/apacheDS.ldif")
         } catch (e: Exception) { log.error { "$EXCEPTION$e" } }
     }
 

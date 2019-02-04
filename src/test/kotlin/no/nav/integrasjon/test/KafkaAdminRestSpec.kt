@@ -46,6 +46,7 @@ import no.nav.integrasjon.api.v1.PostTopicBody
 import no.nav.integrasjon.api.v1.PostTopicModel
 import no.nav.integrasjon.api.v1.PutApiGwResultModel
 import no.nav.integrasjon.api.v1.PutTopicConfigEntryBody
+import no.nav.integrasjon.api.v1.PutTopicGMemberModel
 import no.nav.integrasjon.api.v1.RoleMember
 import no.nav.integrasjon.api.v1.STREAMS
 import no.nav.integrasjon.api.v1.TOPICS
@@ -1119,7 +1120,7 @@ object KafkaAdminRestSpec : Spek({
                             "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
                             "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local"
                         )
-                        result.aDGroup.groupInGroupName shouldBeEqualTo "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local"
+                        result.aDGroup.groupInGroupName shouldContainAll listOf("cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
                         result.aDGroup.members shouldContainAll listOf(
                             "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
                             "uid=n000003,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
@@ -1259,7 +1260,36 @@ object KafkaAdminRestSpec : Spek({
                             setBody(jsonPayload)
                         }
 
+                        val result: PutTopicGMemberModel = Gson().fromJson(
+                            call.response.content ?: "",
+                            object : TypeToken<PutTopicGMemberModel>() {}.type)
+
                         call.response.status() shouldBe HttpStatusCode.OK
+                        result.updaterequest.member shouldBeEqualTo "Group_00020ec3-6592-4415-a563-1ed6768d6086"
+                    }
+
+                    it("should report groups and 2 members for topic $groupInGroupTopic") {
+
+                        val call = handleRequest(HttpMethod.Get, "$TOPICS/$groupInGroupTopic/groups") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                        }
+
+                        val result: GetTopicGroupsModel = Gson().fromJson(
+                            call.response.content ?: "",
+                            object : TypeToken<GetTopicGroupsModel>() {}.type
+                        )
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+                        result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(
+                            true,
+                            true,
+                            true
+                        )
+                        result.groups.flatMap { it.members }.size shouldEqualTo 2
+                        result.groups.flatMap { it.members } shouldContainAll listOf(
+                            "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
+                            "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local"
+                        )
                     }
 
                     it("should delete topic $groupInGroupTopic for member in KM-$groupInGroupTopic") {
