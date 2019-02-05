@@ -300,7 +300,7 @@ object LDAPGroupSpec : Spek({
             "KM-tpc-01".let { topic ->
                 it("should return all members groups in a Kafka groups") {
                     LDAPGroup(fp).use { lc ->
-                        lc.memberIsGroup(topic)
+                        lc.findMembersAsGroup(topic)
                             .map { group ->
                                 lc.getGroupInGroupMembers(group) }.get(index = 0) shouldContainAll listOf("uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local", "uid=n000003,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local")
                     }

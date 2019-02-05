@@ -235,7 +235,7 @@ class LDAPGroup(private val config: FasitProperties) :
                 throw UserNotAllowedException("Cannot have ${updateEntry.member} as consumer/producer")
             else if (updateEntry.role != KafkaGroupType.MANAGER && isManagerGroup(updateEntry.member))
                 throw UserNotAllowedException("Cannot have ${updateEntry.member} as consumer/producer")
-            else if (updateEntry.role == KafkaGroupType.MANAGER && isManagerGroup(updateEntry.member) && !memberIsGroup(
+            else if (updateEntry.role == KafkaGroupType.MANAGER && isManagerGroup(updateEntry.member) && !findMembersAsGroup(
                     toGroupName(KafkaGroupType.MANAGER.prefix, topicName)
                 ).isEmpty()
             )
@@ -275,18 +275,6 @@ class LDAPGroup(private val config: FasitProperties) :
     private fun ldapGetAttribute(groupNameDN: String, attr: String) =
         ldapConnection.getEntry(groupNameDN).getAttribute(attr)
 
-    fun memberIsGroup(groupName: String): List<String> =
-        when {
-            ldapGetAttribute(getGroupDN(groupName), "member") != null ->
-                ldapGetAttribute(getGroupDN(groupName), "member").values.map { it }.filter { group ->
-                    ldapGetAttribute(
-                        group,
-                        "groupType"
-                    ) != null
-                }
-            else -> listOf()
-        }
-
     private tailrec fun findAllMembersFor(
         groupName: String,
         numberOfMembersAsGroup: Int,
@@ -318,7 +306,7 @@ class LDAPGroup(private val config: FasitProperties) :
         else -> listOf()
     }
 
-    private fun findMembersAsGroup(groupName: String) = when {
+    fun findMembersAsGroup(groupName: String) = when {
         members(groupName).isNotEmpty() ->
             members(groupName).filter { group -> ldapGetAttribute(group, "groupType") != null }
         else -> listOf()

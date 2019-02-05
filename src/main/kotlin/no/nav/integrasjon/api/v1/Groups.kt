@@ -68,7 +68,7 @@ fun Routing.getGroupMembers(fasitConfig: FasitProperties) =
     ) { group ->
         respondOrServiceUnavailable(fasitConfig) { lc ->
 
-            val groupInGroupName = lc.memberIsGroup(group.groupName)
+            val groupInGroupName = lc.findMembersAsGroup(group.groupName)
             val kafkaGroupAndMembers = GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
             when {
                 groupInGroupName.isEmpty() -> GetGroupMembersModelResponse(
