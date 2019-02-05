@@ -1219,6 +1219,26 @@ object KafkaAdminRestSpec : Spek({
                         call.response.status() shouldBe HttpStatusCode.OK
                     }
 
+                    it("should update 'delete.retention.ms' configuration for tpc-03, with GROUP in GROUP MEMBER") {
+
+                        val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
+                            addHeader(HttpHeaders.Accept, "application/json")
+                            addHeader(HttpHeaders.ContentType, "application/json")
+                            // relevant user is in the right place in UserAndGroups.ldif
+                            addHeader(
+                                HttpHeaders.Authorization,
+                                "Basic ${encodeBase64("n000010:itest5".toByteArray())}"
+                            )
+
+                            val jsonPayload = Gson().toJson(
+                                PutTopicConfigEntryBody(AllowedConfigEntries.DELETE_RETENTION_MS, "6600666")
+                            )
+                            setBody(jsonPayload)
+                        }
+
+                        call.response.status() shouldBe HttpStatusCode.OK
+                    }
+
                     it("should create topic $groupInGroupTopic") {
 
                         val call = handleRequest(HttpMethod.Post, TOPICS) {

@@ -287,18 +287,67 @@ class LDAPGroup(private val config: FasitProperties) :
             else -> listOf()
         }
 
+    private tailrec fun findAllMembersFor(
+        groupName: String,
+        numberOfMembersAsGroup: Int,
+        members: MutableList<String>
+    ): List<String> {
+        // val resultSoFar = members.toMutableList().apply { add(groupName) }
+        return when {
+            numberOfMembersAsGroup < 1 -> members
+            else -> {
+                val group =
+                    findMembersAsGroup(getCNFromDN(groupName)).map { it }[numberOfMembersAsGroup - 1].also { res -> log.info { "MEMBERS_RETURNED_$res" } }
+                findAllMembersFor(
+                    group,
+                    findMembersAsGroup(getCNFromDN(group)).size,
+                    members.toMutableList().apply {
+                        addAll(members)
+                        add(group)
+                    })
+            }
+        }
+    }
+
+    private fun members(groupName: String) = when {
+        ldapGetAttribute(getGroupDN(groupName), "member") != null ->
+            ldapGetAttribute(
+                getGroupDN(groupName),
+                "member"
+            ).values.map { it }.also { res -> log.info { "MEMBERS_ADDED_$res" } }
+        else -> listOf()
+    }
+
+    private fun findMembersAsGroup(groupName: String) = when {
+        members(groupName).isNotEmpty() ->
+            members(groupName).filter { group -> ldapGetAttribute(group, "groupType") != null }
+        else -> listOf()
+    }
+
     private fun userInGroup(userDN: String, groupDN: String, groupName: String): Boolean =
     // careful, AD will raise exception if group is empty, thus, no member attribute issue
         when {
             groupEmpty(groupName) -> false
-            memberIsGroup(groupName).map { group -> comparedMatchedMemberIn(group, userDN) }.contains(true) -> true
-            else ->
-                comparedMatchedMemberIn(groupDN, userDN)
+            groupInGroupSearch(groupName, userDN).contains(true) -> true
+            else -> comparedMatchedMemberIn(groupDN, userDN).also { res -> log.info { "RESULT_FROM_NO_2_$res" } }
         }
 
-    private fun comparedMatchedMemberIn(groupName: String?, userDN: String) = ldapConnection
-        .compare(CompareRequest(groupName, config.ldapGrpMemberAttrName, userDN))
-        .compareMatched()
+    private fun groupInGroupSearch(groupName: String, userDN: String): List<Boolean> {
+        val resultFromSearch = findAllMembersFor(
+            groupName,
+            findMembersAsGroup(groupName).size,
+            mutableListOf()
+        ).also { res -> log.info { "MEMBERS_RETURNED_$res" } }
+        return resultFromSearch.map { group -> comparedMatchedMemberIn(group, userDN) }
+    }
+
+    private fun comparedMatchedMemberIn(groupName: String?, userDN: String): Boolean {
+        log.info { "MEMBERS_TEST_$userDN" }
+        log.info { "IN_GROUP_$groupName" }
+        return ldapConnection
+            .compare(CompareRequest(groupName, config.ldapGrpMemberAttrName, userDN))
+            .compareMatched()
+    }
 
     fun userIsManager(topicName: String, userName: String): Boolean =
         toGroupName(KafkaGroupType.MANAGER.prefix, topicName).let { groupName ->
