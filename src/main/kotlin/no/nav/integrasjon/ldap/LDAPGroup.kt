@@ -288,13 +288,13 @@ class LDAPGroup(private val config: FasitProperties) :
 
     // BruteForce them nested groups
     private fun groupInGroupSearch(groupName: String, userDN: String) =
-        findAllMemberGroupsTEST(
+        findAllMemberGroups(
             groupName,
             findMembersAsGroup(groupName).size,
             mutableSetOf()
         ).map { group -> comparedMatchedMemberIn(group, userDN) }
 
-    private tailrec fun findAllMemberGroupsTEST(
+    private tailrec fun findAllMemberGroups(
         groupName: String,
         numberOfMembersAsGroup: Int,
         members: MutableSet<String>
@@ -325,7 +325,7 @@ class LDAPGroup(private val config: FasitProperties) :
     }
 
     private fun recurSeveral(groupName: String, members: MutableSet<String>, remainingMembers: Int, group: String) =
-        findAllMemberGroupsTEST(
+        findAllMemberGroups(
             groupName,
             remainingMembers,
             members
@@ -335,7 +335,7 @@ class LDAPGroup(private val config: FasitProperties) :
                     add(group)
                 })
 
-    private fun recurOne(group: String, members: MutableSet<String>, remainingMembers: Int) = findAllMemberGroupsTEST(
+    private fun recurOne(group: String, members: MutableSet<String>, remainingMembers: Int) = findAllMemberGroups(
         group,
         remainingMembers,
         members
