@@ -50,6 +50,7 @@ import org.apache.kafka.common.resource.ResourceType
 
 fun toGroupName(prefix: String, topicName: String) = "$prefix$topicName"
 
+@Suppress("NO_TAIL_CALLS_FOUND")
 class LDAPGroup(private val config: FasitProperties) :
     LDAPBase(config.getConnectionInfo(LdapConnectionType.GROUP)) {
 
@@ -216,7 +217,7 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun getGroupInGroupMembers(groupName: String) = getMembersInGroupInGroup(getCNFromDN(groupName))
 
-    // REGEX approved?
+    // REGEX approved Trong?
     private fun getCNFromDN(dNGroupName: String) = """([^,]*)""".toRegex().find(dNGroupName)!!.value.replace("cn=", "")
 
     data class GroupInGroupException(val msg: String) : Exception(msg)
@@ -290,13 +291,13 @@ class LDAPGroup(private val config: FasitProperties) :
 
     // BruteForce them nested groups
     private fun groupInGroupSearch(groupName: String, userDN: String) =
-        findAllMembersFor(
+        findAllMemberGroupsTEST(
             groupName,
             findMembersAsGroup(groupName).size,
-            mutableListOf()
+            mutableSetOf()
         ).map { group -> comparedMatchedMemberIn(group, userDN) }
 
-    private tailrec fun findAllMembersFor(
+    private tailrec fun findAllMemberGroups(
         groupName: String,
         numberOfMembersAsGroup: Int,
         members: MutableList<String>
@@ -308,10 +309,11 @@ class LDAPGroup(private val config: FasitProperties) :
                     findMembersAsGroup(getCNFromDN(groupName))
                         .map { it }[numberOfMembersAsGroup - 1].also { res -> log.info { "MEMBERS_RETURNED_$res" } }
                 // Recur the nested groups
-                findAllMembersFor(
+                findAllMemberGroups(
                     group,
                     findMembersAsGroup(getCNFromDN(group)).size,
                     members
+                        // accumulate group found and groups already found
                         .toMutableList().apply {
                             addAll(members)
                             add(group)
@@ -319,6 +321,88 @@ class LDAPGroup(private val config: FasitProperties) :
             }
         }
     }
+
+    private tailrec fun findAllMemberGroupsTEST(
+        groupName: String,
+        numberOfMembersAsGroup: Int,
+        members: MutableSet<String>
+    ): List<String> {
+        val group =
+            findMembersAsGroup(getCNFromDN(groupName))
+                .map { it }
+        when {
+            numberOfMembersAsGroup < 1 -> return members.toList()
+            numberOfMembersAsGroup > 1 -> {
+
+                //group.map { it }[numberOfMembersAsGroup - 1].also { res -> log.info { "MEMBERS_RETURNED_FROM_MULTI_GROUP$res" } }
+
+                return recurSeveral(groupName, members, numberOfMembersAsGroup - 1, group.map { it }[numberOfMembersAsGroup - 1])
+
+               // findAllMemberGroupsTEST(
+               //     groupName,
+               //     numberOfMembersAsGroup - 1,
+               //     members
+               //         // accumulate group found and groups already found
+               //         .toMutableSet().apply {
+               //             addAll(members)
+               //             add(group)
+               //         })
+            }
+            else -> {
+               //val group =
+               //    findMembersAsGroup(getCNFromDN(groupName))
+               //        .map { it }.also { res -> log.info { "MEMBERS_RETURNED_FROM_SINGLE_GROUP$res" } }
+               //log.info { "GROUPE_NAME$groupName" }
+
+                if(group.isEmpty()) {
+                    return recurOne(groupName, members, 0)
+                //   return findAllMemberGroupsTEST(
+                //       groupName,
+                //       0,
+                //       members
+                //           .toMutableSet().apply {
+                //       addAll(members)
+                //       add(groupName)
+                //   })
+                }
+
+                val hasMoreGroups = group[numberOfMembersAsGroup - 1]
+                // Recur the nested groups
+                return recurOne(hasMoreGroups, members, findMembersAsGroup(getCNFromDN(hasMoreGroups)).size)
+
+
+             //  findAllMemberGroupsTEST(
+             //      hasMoreGroups,
+             //      findMembersAsGroup(getCNFromDN(hasMoreGroups)).size,
+             //      members
+             //          // accumulate group found and groups already found
+             //          .toMutableSet().apply {
+             //              addAll(members)
+             //              add(hasMoreGroups)
+             //          })
+            }
+        }
+    }
+
+    private fun recurSeveral(groupName: String, members: MutableSet<String>, remainingMembers: Int, group: String) = findAllMemberGroupsTEST(
+        groupName,
+        remainingMembers,
+        members
+            // accumulate group found and groups already found
+            .toMutableSet().apply {
+                addAll(members)
+                add(group)
+            })
+
+    private fun recurOne(group: String, members: MutableSet<String>, remainingMembers: Int) = findAllMemberGroupsTEST(
+        group,
+        remainingMembers,
+        members
+            // accumulate group found and groups already found
+            .toMutableSet().apply {
+                addAll(members)
+                add(group)
+            })
 
     fun findMembersAsGroup(groupName: String) = when {
         members(groupName).isNotEmpty() ->
@@ -329,7 +413,7 @@ class LDAPGroup(private val config: FasitProperties) :
     private fun members(groupName: String) = when {
         ldapGetAttribute(getGroupDN(groupName), "member") != null ->
             ldapGetAttribute(getGroupDN(groupName), "member").values
-                .map { it }.also { res -> log.info { "MEMBERS_ADDED_$res" } }
+                .map { it }
         else -> listOf()
     }
 
