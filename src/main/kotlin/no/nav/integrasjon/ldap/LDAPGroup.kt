@@ -278,12 +278,10 @@ class LDAPGroup(private val config: FasitProperties) :
         when {
             groupEmpty(groupName) -> false
             groupInGroupSearch(groupName, userDN).contains(true) -> true
-            else -> comparedMatchedMemberIn(groupDN, userDN).also { res -> log.info { "RESULT_FROM_NO_2_$res" } }
+            else -> comparedMatchedMemberIn(groupDN, userDN)
         }
 
     private fun comparedMatchedMemberIn(groupName: String?, userDN: String): Boolean {
-        log.info { "MEMBERS_TEST_$userDN" }
-        log.info { "IN_GROUP_$groupName" }
         return ldapConnection
             .compare(CompareRequest(groupName, config.ldapGrpMemberAttrName, userDN))
             .compareMatched()
@@ -297,102 +295,48 @@ class LDAPGroup(private val config: FasitProperties) :
             mutableSetOf()
         ).map { group -> comparedMatchedMemberIn(group, userDN) }
 
-    private tailrec fun findAllMemberGroups(
-        groupName: String,
-        numberOfMembersAsGroup: Int,
-        members: MutableList<String>
-    ): List<String> {
-        return when {
-            numberOfMembersAsGroup < 1 -> members
-            else -> {
-                val group =
-                    findMembersAsGroup(getCNFromDN(groupName))
-                        .map { it }[numberOfMembersAsGroup - 1].also { res -> log.info { "MEMBERS_RETURNED_$res" } }
-                // Recur the nested groups
-                findAllMemberGroups(
-                    group,
-                    findMembersAsGroup(getCNFromDN(group)).size,
-                    members
-                        // accumulate group found and groups already found
-                        .toMutableList().apply {
-                            addAll(members)
-                            add(group)
-                        })
-            }
-        }
-    }
-
     private tailrec fun findAllMemberGroupsTEST(
         groupName: String,
         numberOfMembersAsGroup: Int,
         members: MutableSet<String>
     ): List<String> {
-        val group =
-            findMembersAsGroup(getCNFromDN(groupName))
-                .map { it }
+        val group = findMembersAsGroup(getCNFromDN(groupName))
+            .map { it }
         when {
             numberOfMembersAsGroup < 1 -> return members.toList()
             numberOfMembersAsGroup > 1 -> {
-
-                //group.map { it }[numberOfMembersAsGroup - 1].also { res -> log.info { "MEMBERS_RETURNED_FROM_MULTI_GROUP$res" } }
-
-                return recurSeveral(groupName, members, numberOfMembersAsGroup - 1, group.map { it }[numberOfMembersAsGroup - 1])
-
-               // findAllMemberGroupsTEST(
-               //     groupName,
-               //     numberOfMembersAsGroup - 1,
-               //     members
-               //         // accumulate group found and groups already found
-               //         .toMutableSet().apply {
-               //             addAll(members)
-               //             add(group)
-               //         })
+                return recurSeveral(
+                    groupName,
+                    members,
+                    numberOfMembersAsGroup - 1,
+                    group.map { it }[numberOfMembersAsGroup - 1]
+                )
             }
             else -> {
-               //val group =
-               //    findMembersAsGroup(getCNFromDN(groupName))
-               //        .map { it }.also { res -> log.info { "MEMBERS_RETURNED_FROM_SINGLE_GROUP$res" } }
-               //log.info { "GROUPE_NAME$groupName" }
+                return when {
+                    group.isEmpty() -> recurOne(groupName, members, 0)
 
-                if(group.isEmpty()) {
-                    return recurOne(groupName, members, 0)
-                //   return findAllMemberGroupsTEST(
-                //       groupName,
-                //       0,
-                //       members
-                //           .toMutableSet().apply {
-                //       addAll(members)
-                //       add(groupName)
-                //   })
+                    // Recur the nested groups
+                    else -> {
+                        val hasMoreGroups = group[numberOfMembersAsGroup - 1]
+                        // Recur the nested groups
+                        recurOne(hasMoreGroups, members, findMembersAsGroup(getCNFromDN(hasMoreGroups)).size)
+                    }
                 }
-
-                val hasMoreGroups = group[numberOfMembersAsGroup - 1]
-                // Recur the nested groups
-                return recurOne(hasMoreGroups, members, findMembersAsGroup(getCNFromDN(hasMoreGroups)).size)
-
-
-             //  findAllMemberGroupsTEST(
-             //      hasMoreGroups,
-             //      findMembersAsGroup(getCNFromDN(hasMoreGroups)).size,
-             //      members
-             //          // accumulate group found and groups already found
-             //          .toMutableSet().apply {
-             //              addAll(members)
-             //              add(hasMoreGroups)
-             //          })
             }
         }
     }
 
-    private fun recurSeveral(groupName: String, members: MutableSet<String>, remainingMembers: Int, group: String) = findAllMemberGroupsTEST(
-        groupName,
-        remainingMembers,
-        members
-            // accumulate group found and groups already found
-            .toMutableSet().apply {
-                addAll(members)
-                add(group)
-            })
+    private fun recurSeveral(groupName: String, members: MutableSet<String>, remainingMembers: Int, group: String) =
+        findAllMemberGroupsTEST(
+            groupName,
+            remainingMembers,
+            members
+                // accumulate group found and groups already found
+                .toMutableSet().apply {
+                    addAll(members)
+                    add(group)
+                })
 
     private fun recurOne(group: String, members: MutableSet<String>, remainingMembers: Int) = findAllMemberGroupsTEST(
         group,

@@ -29,7 +29,7 @@ import no.nav.integrasjon.api.v1.GROUPS
 import no.nav.integrasjon.api.v1.GetApiGwGroupMembersModel
 import no.nav.integrasjon.api.v1.GetBrokerConfigModel
 import no.nav.integrasjon.api.v1.GetBrokersModel
-import no.nav.integrasjon.api.v1.GetGroupMembersModelResponse
+import no.nav.integrasjon.api.v1.GetGroupMembersModel
 import no.nav.integrasjon.api.v1.GetGroupsModel
 import no.nav.integrasjon.api.v1.GetTopicACLModel
 import no.nav.integrasjon.api.v1.GetTopicConfigModel
@@ -438,12 +438,12 @@ object KafkaAdminRestSpec : Spek({
                                 addHeader(HttpHeaders.Accept, "application/json")
                             }
 
-                            val result: GetGroupMembersModelResponse = Gson().fromJson(
+                            val result: GetGroupMembersModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<GetGroupMembersModelResponse>() {}.type)
+                                object : TypeToken<GetGroupMembersModel>() {}.type)
 
                             call.response.status() shouldBe HttpStatusCode.OK
-                            result.kafkaGroup.members shouldContainAll members
+                            result.members shouldContainAll members
                         }
                     }
                 }
@@ -1110,20 +1110,15 @@ object KafkaAdminRestSpec : Spek({
                             addHeader(HttpHeaders.Accept, "application/json")
                         }
 
-                        val result: GetGroupMembersModelResponse = Gson().fromJson(
+                        val result: GetGroupMembersModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<GetGroupMembersModelResponse>() {}.type
+                            object : TypeToken<GetGroupMembersModel>() {}.type
                         )
 
                         call.response.status() shouldBe HttpStatusCode.OK
-                        result.kafkaGroup.members shouldContainAll listOf(
+                        result.members shouldContainAll listOf(
                             "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
                             "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local"
-                        )
-                        result.aDGroup.groupInGroupName shouldContainAll listOf("cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
-                        result.aDGroup.members shouldContainAll listOf(
-                            "uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
-                            "uid=n000003,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
                         )
                     }
 

@@ -19,10 +19,10 @@ import no.nav.integrasjon.api.nielsfalk.ktor.swagger.serviceUnavailable
  */
 
 // a wrapper for this api to be installed as routes
-fun Routing.groupsAPI(fasitConfig: FasitProperties) {
+fun Routing.groupsAPI(config: FasitProperties) {
 
-    getGroups(fasitConfig)
-    getGroupMembers(fasitConfig)
+    getGroups(config)
+    getGroupMembers(config)
 }
 
 private const val swGroup = "Groups"
@@ -37,9 +37,9 @@ class GetGroups
 
 data class GetGroupsModel(val groups: List<String>)
 
-fun Routing.getGroups(fasitConfig: FasitProperties) =
+fun Routing.getGroups(config: FasitProperties) =
     get<GetGroups>("all groups".responds(ok<GetGroupsModel>(), serviceUnavailable<AnError>())) {
-        respondOrServiceUnavailable(fasitConfig) { lc -> GetGroupsModel(lc.getKafkaGroups().toList()) }
+        respondOrServiceUnavailable(config) { lc -> GetGroupsModel(lc.getKafkaGroups().toList()) }
     }
 
 /**
@@ -52,37 +52,14 @@ data class GetGroupMembers(val groupName: String)
 
 data class GetGroupMembersModel(val name: String, val members: List<String>)
 
-data class GetGroupInGroupMembersModel(
-    val groupInGroupName: List<String> = emptyList(),
-    val members: List<String> = emptyList()
-)
-
-data class GetGroupMembersModelResponse(val kafkaGroup: GetGroupMembersModel, val aDGroup: GetGroupInGroupMembersModel)
-
-fun Routing.getGroupMembers(fasitConfig: FasitProperties) =
+fun Routing.getGroupMembers(config: FasitProperties) =
     get<GetGroupMembers>(
         "members in a group".responds(
-            ok<GetGroupMembersModelResponse>(),
+            ok<GetGroupMembersModel>(),
             serviceUnavailable<AnError>()
         )
     ) { group ->
-        respondOrServiceUnavailable(fasitConfig) { lc ->
-
-            val groupInGroupName = lc.findMembersAsGroup(group.groupName)
-            val kafkaGroupAndMembers = GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
-            when {
-                groupInGroupName.isEmpty() -> GetGroupMembersModelResponse(
-                    kafkaGroup = kafkaGroupAndMembers, aDGroup = GetGroupInGroupMembersModel()
-                )
-                else -> {
-                    val allMembers = groupInGroupName.flatMap {
-                        lc.getGroupInGroupMembers(it)
-                    }
-                    GetGroupMembersModelResponse(
-                        kafkaGroup = kafkaGroupAndMembers,
-                        aDGroup = GetGroupInGroupMembersModel(groupInGroupName, members = allMembers)
-                    )
-                }
-            }
+        respondOrServiceUnavailable(config) { lc ->
+            GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
         }
     }
