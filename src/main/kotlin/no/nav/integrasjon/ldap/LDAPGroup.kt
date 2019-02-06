@@ -82,7 +82,6 @@ class LDAPGroup(private val config: FasitProperties) :
 
     fun getKafkaGroups() = getKafkaGroupNames()
 
-    // TODO check for groupType attribute to see if it is a group or others.
     private fun checkAttributeForGroup(group: String, attribute: String): Boolean =
         getGroupDN(group).let { groupName ->
             when {
@@ -305,6 +304,7 @@ class LDAPGroup(private val config: FasitProperties) :
         when {
             numberOfMembersAsGroup < 1 -> return members.toList()
             numberOfMembersAsGroup > 1 -> {
+                // Recur the nested groups
                 return recurSeveral(
                     groupName,
                     members,
@@ -315,11 +315,8 @@ class LDAPGroup(private val config: FasitProperties) :
             else -> {
                 return when {
                     group.isEmpty() -> recurOne(groupName, members, 0)
-
-                    // Recur the nested groups
                     else -> {
                         val hasMoreGroups = group[numberOfMembersAsGroup - 1]
-                        // Recur the nested groups
                         recurOne(hasMoreGroups, members, findMembersAsGroup(getCNFromDN(hasMoreGroups)).size)
                     }
                 }
