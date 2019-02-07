@@ -2,6 +2,7 @@ package no.nav.integrasjon.test.ldap
 
 import com.unboundid.ldap.sdk.ResultCode
 import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.ldap.AccessCode
 import no.nav.integrasjon.ldap.GroupMemberOperation
 import no.nav.integrasjon.ldap.KafkaGroupType
 import no.nav.integrasjon.ldap.LDAPGroup
@@ -11,7 +12,6 @@ import org.amshove.kluent.shouldBe
 import org.amshove.kluent.shouldContainAll
 import org.amshove.kluent.shouldEqual
 import org.amshove.kluent.shouldEqualTo
-import org.amshove.kluent.shouldHaveTheSameClassAs
 import org.amshove.kluent.shouldNotContainAny
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
@@ -140,8 +140,7 @@ object LDAPGroupSpec : Spek({
                         "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
                 }
 
-                it("should throw an Error adding 0000-GA-BASTA_SUPERUSER as MANAGER") {
-                    try {
+                it("should NOT add 0000-GA-BASTA_SUPERUSER as MANAGER") {
                         LDAPGroup(fp).use { lc ->
                             lc.updateKafkaGroupMembership(
                                 topic,
@@ -149,16 +148,14 @@ object LDAPGroupSpec : Spek({
                                     KafkaGroupType.MANAGER,
                                     GroupMemberOperation.ADD,
                                     "0000-GA-BASTA_SUPERUSER"
-                                ))
+                                )).second shouldBe AccessCode.TOO_MANY_GROUPS
                             lc.getKafkaGroupMembers("KM-$topic")
-                        }
-                        } catch (e: LDAPGroup.GroupInGroupException) {
-                            e.shouldHaveTheSameClassAs(LDAPGroup.GroupInGroupException("Cannot have to groups: 0000-GA-BASTA_SUPERUSER as Manager"))
-                        }
+                        } shouldContainAll listOf(
+                            "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
+                            "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
                 }
 
-                it("should throw error adding 0000-GA-BASTA_SUPERUSER as Producer") {
-                    try {
+                it("should NOT add 0000-GA-BASTA_SUPERUSER as Producer") {
                         LDAPGroup(fp).use { lc ->
                             lc.updateKafkaGroupMembership(
                                 topic,
@@ -166,12 +163,13 @@ object LDAPGroupSpec : Spek({
                                     KafkaGroupType.PRODUCER,
                                     GroupMemberOperation.ADD,
                                     "0000-GA-BASTA_SUPERUSER"
-                                ))
-                        }
-                    } catch (e: LDAPGroup.UserNotAllowedException) {
-                        e.shouldHaveTheSameClassAs(LDAPGroup.UserNotAllowedException("Cannot have 0000-GA-BASTA_SUPERUSER as consumer/producer"))
+                                )
+                            ).second shouldBe AccessCode.MANAGER_GROUP_NOT_ALLOWED
+                            lc.getKafkaGroupMembers("KM-$topic")
+                        } shouldContainAll listOf(
+                            "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
+                            "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
                     }
-                }
 
                 it("should return the added srvp02 producer when getting group members") {
                     LDAPGroup(fp).use { lc ->
@@ -227,7 +225,7 @@ object LDAPGroupSpec : Spek({
                                         GroupMemberOperation.ADD,
                                         "srvc02"
                                 ))
-                    }.resultCode shouldBe ResultCode.SUCCESS
+                    }.third.resultCode shouldBe ResultCode.SUCCESS
                 }
             }
         }
@@ -273,7 +271,7 @@ object LDAPGroupSpec : Spek({
                                         GroupMemberOperation.REMOVE,
                                         "srvc01"
                                 ))
-                    }.resultCode shouldBe ResultCode.SUCCESS
+                    }.third.resultCode shouldBe ResultCode.SUCCESS
                 }
             }
         }
@@ -297,15 +295,27 @@ object LDAPGroupSpec : Spek({
         }
 
         context("Get all groups and members of groups in a group") {
-            "KM-tpc-01".let { topic ->
-                it("should return all members groups in a Kafka groups") {
-                    LDAPGroup(fp).use { lc ->
-                        lc.findMembersAsGroup(topic)
-                            .map { group ->
-                                lc.getGroupInGroupMembers(group) }.get(index = 0) shouldContainAll listOf("uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local", "uid=n000003,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local")
-                    }
+            it("should return all members groups in a Kafka groups") {
+                LDAPGroup(fp).use { lc ->
+                    lc.findMembersAsGroup("KM-tpc-01")
+                        .map { group ->
+                            lc.getGroupInGroupMembers(group) }.get(index = 0) shouldContainAll listOf("uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local", "uid=n000003,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local")
                 }
             }
+        }
+
+        it("add 0000-GA-BASTA_SUPERUSER as MANAGER") {
+            LDAPGroup(fp).use { lc ->
+                lc.updateKafkaGroupMembership(
+                    "tpc-02",
+                    UpdateKafkaGroupMember(
+                        KafkaGroupType.MANAGER,
+                        GroupMemberOperation.ADD,
+                        "0000-GA-BASTA_SUPERUSER"
+                    ))
+                lc.getKafkaGroupMembers("KM-tpc-02")
+            } shouldContainAll listOf(
+                "cn=0000-GA-BASTA_SUPERUSER,OU=AccountGroups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
         }
 
         context("Verify management access for topics") {
@@ -313,7 +323,8 @@ object LDAPGroupSpec : Spek({
                     Pair("tpc-01", "n000002") to true,
                     Pair("tpc-02", "n141414") to false,
                     Pair("tpc-03", "n145821") to true,
-                    Pair("tpc-01", "n000003") to true
+                    Pair("tpc-01", "n000003") to true,
+                    Pair("tpc-02", "n000011") to true
             )
 
             topics.forEach { pair, result ->

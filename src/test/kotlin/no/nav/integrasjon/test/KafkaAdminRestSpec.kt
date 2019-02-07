@@ -627,7 +627,7 @@ object KafkaAdminRestSpec : Spek({
                                 addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("igroup:itest".toByteArray())}")
                             }
 
-                            call.response.status() shouldBe HttpStatusCode.BadRequest
+                            call.response.status() shouldBe HttpStatusCode.Unauthorized
                         }
 
                         topics2CreateDelete.forEach { topicToDelete ->

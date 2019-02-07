@@ -48,7 +48,7 @@ abstract class LDAPBase(private val connInfo: LDAPBase.Companion.ConnectionInfo)
         ldapConnection.close()
     }
 
-    protected fun isNAVIdent(userName: String): Boolean = regexNAVIdent.matches(userName)
+    fun isNAVIdent(userName: String): Boolean = regexNAVIdent.matches(userName)
 
     companion object {
 

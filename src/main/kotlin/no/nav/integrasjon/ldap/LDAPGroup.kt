@@ -219,30 +219,16 @@ class LDAPGroup(private val config: FasitProperties) :
     // REGEX approved Trong?
     private fun getCNFromDN(dNGroupName: String) = """([^,]*)""".toRegex().find(dNGroupName)!!.value.replace("cn=", "")
 
-    data class GroupInGroupException(val msg: String) : Exception(msg)
-
-    data class UserNotAllowedException(val msg: String) : Exception(msg)
-
-    data class UserNotFound(val msg: String) : Exception(msg)
-
-    fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): SLDAPResult =
+    fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember) =
 
         resolveUserDN(updateEntry.member).let { userDN ->
 
-            if (userDN.isEmpty())
-                throw UserNotFound("Cannot find ${updateEntry.member} under user - or service accounts")
-            else if (updateEntry.role != KafkaGroupType.MANAGER && isNAVIdent(updateEntry.member))
-                throw UserNotAllowedException("Cannot have ${updateEntry.member} as consumer/producer")
-            else if (updateEntry.role != KafkaGroupType.MANAGER && isManagerGroup(updateEntry.member))
-                throw UserNotAllowedException("Cannot have ${updateEntry.member} as consumer/producer")
-            else if (updateEntry.role == KafkaGroupType.MANAGER && isManagerGroup(updateEntry.member) && !findMembersAsGroup(
-                    toGroupName(KafkaGroupType.MANAGER.prefix, topicName)
-                ).isEmpty()
-            )
-                throw GroupInGroupException("Cannot have to groups: ${updateEntry.member} as Manager")
-            else
+            val grantedAccess =
+                AccessControl(userDN, topicName, updateEntry, this).validateAccess()
+            if (!grantedAccess.first) {
+                grantedAccess
+            } else {
                 config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
-
                     val req = ModifyRequest(
                         groupDN,
                         Modification(
@@ -258,10 +244,11 @@ class LDAPGroup(private val config: FasitProperties) :
                     log.info { "Update group membership request: $req for $userDN" }
 
                     if (updateEntry.isRedundant(userDN, groupDN, toGroupName(updateEntry.role.prefix, topicName)))
-                        LDAPResult(0, ResultCode.SUCCESS).simplify()
+                        Triple(true, AccessCode.OK, LDAPResult(0, ResultCode.SUCCESS).simplify())
                     else
-                        ldapConnection.modify(req).simplify()
+                        Triple(true, AccessCode.OK, ldapConnection.modify(req).simplify())
                 }
+            }
         }
 
     private fun UpdateKafkaGroupMember.isRedundant(userDN: String, groupDN: String, groupName: String): Boolean =
@@ -270,7 +257,7 @@ class LDAPGroup(private val config: FasitProperties) :
             GroupMemberOperation.REMOVE -> !userInGroup(userDN, groupDN, groupName)
         }
 
-    private fun isManagerGroup(groupName: String): Boolean = checkAttributeForGroup(groupName, "groupType")
+    fun isManagerGroup(groupName: String): Boolean = checkAttributeForGroup(groupName, "groupType")
 
     private fun userInGroup(userDN: String, groupDN: String, groupName: String): Boolean =
     // careful, AD will raise exception if group is empty, thus, no member attribute issue
@@ -280,12 +267,6 @@ class LDAPGroup(private val config: FasitProperties) :
             else -> comparedMatchedMemberIn(groupDN, userDN)
         }
 
-    private fun comparedMatchedMemberIn(groupName: String?, userDN: String): Boolean {
-        return ldapConnection
-            .compare(CompareRequest(groupName, config.ldapGrpMemberAttrName, userDN))
-            .compareMatched()
-    }
-
     // BruteForce them nested groups
     private fun groupInGroupSearch(groupName: String, userDN: String) =
         findAllMemberGroups(
@@ -293,6 +274,12 @@ class LDAPGroup(private val config: FasitProperties) :
             findMembersAsGroup(groupName).size,
             mutableSetOf()
         ).map { group -> comparedMatchedMemberIn(group, userDN) }
+
+    private fun comparedMatchedMemberIn(groupName: String?, userDN: String): Boolean {
+        return ldapConnection
+            .compare(CompareRequest(groupName, config.ldapGrpMemberAttrName, userDN))
+            .compareMatched()
+    }
 
     private tailrec fun findAllMemberGroups(
         groupName: String,
