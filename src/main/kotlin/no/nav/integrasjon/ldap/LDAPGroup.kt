@@ -288,7 +288,7 @@ class LDAPGroup(private val config: FasitProperties) :
         numberOfMembersAsGroup: Int,
         members: MutableSet<String>
     ): List<String> {
-        val group = findMembersAsGroup(getCNFromDN(groupName))
+        val groups = findMembersAsGroup(getCNFromDN(groupName))
             .map { it }
         when {
             numberOfMembersAsGroup < 1 -> return members.toList()
@@ -298,14 +298,14 @@ class LDAPGroup(private val config: FasitProperties) :
                     groupName,
                     members,
                     numberOfMembersAsGroup - 1,
-                    group.map { it }[numberOfMembersAsGroup - 1]
+                    groups.map { it }[numberOfMembersAsGroup - 1]
                 )
             }
             else -> {
                 return when {
-                    group.isEmpty() -> recurOne(groupName, members, 0)
+                    groups.isEmpty() -> recurOne(groupName, members, 0)
                     else -> {
-                        val hasMoreGroups = group[numberOfMembersAsGroup - 1]
+                        val hasMoreGroups = groups[numberOfMembersAsGroup - 1]
                         recurOne(hasMoreGroups, members, findMembersAsGroup(getCNFromDN(hasMoreGroups)).size)
                     }
                 }
