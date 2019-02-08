@@ -228,30 +228,38 @@ class LDAPGroup(private val config: FasitProperties) :
             val result = accessControl.validate(userDN, topicName)
             when {
                 !result.grant -> result
-                else -> config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
-                    val req = ModifyRequest(
-                        groupDN,
-                        Modification(
-                            when (updateEntry.operation) {
-                                GroupMemberOperation.ADD -> ModificationType.ADD
-                                GroupMemberOperation.REMOVE -> ModificationType.DELETE
-                            },
-                            config.ldapGrpMemberAttrName,
-                            userDN
-                        )
-                    )
-
-                    log.info { "Update group membership request: $req for $userDN" }
-
-                    return when {
-                        updateEntry.isRedundant(userDN, groupDN, toGroupName(updateEntry.role.prefix, topicName)) ->
-                            Access(true, AccessCode.OK, LDAPResult(0, ResultCode.SUCCESS).simplify())
-                        else ->
-                            Access(true, AccessCode.OK, ldapConnection.modify(req).simplify())
-                    }
-                }
+                else -> update(topicName, updateEntry, userDN)
             }
         }
+
+    private fun update(
+        topicName: String,
+        updateEntry: UpdateKafkaGroupMember,
+        userDN: String
+    ): Access {
+        config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
+            val req = ModifyRequest(
+                groupDN,
+                Modification(
+                    when (updateEntry.operation) {
+                        GroupMemberOperation.ADD -> ModificationType.ADD
+                        GroupMemberOperation.REMOVE -> ModificationType.DELETE
+                    },
+                    config.ldapGrpMemberAttrName,
+                    userDN
+                )
+            )
+
+            log.info { "Update group membership request: $req for $userDN" }
+
+            return when {
+                updateEntry.isRedundant(userDN, groupDN, toGroupName(updateEntry.role.prefix, topicName)) ->
+                    Access(true, AccessCode.OK, LDAPResult(0, ResultCode.SUCCESS).simplify())
+                else ->
+                    Access(true, AccessCode.OK, ldapConnection.modify(req).simplify())
+            }
+        }
+    }
 
     private fun UpdateKafkaGroupMember.isRedundant(userDN: String, groupDN: String, groupName: String): Boolean =
         when (this.operation) {
@@ -334,17 +342,20 @@ class LDAPGroup(private val config: FasitProperties) :
                 add(group)
             })
 
-    fun findMembersAsGroup(groupName: String) = when {
-        members(groupName).isNotEmpty() ->
-            members(groupName).filter { group -> ldapGetAttribute(group, "groupType") != null }
-        else -> listOf()
+    fun findMembersAsGroup(groupName: String): List<String> {
+        val members = members(groupName, "member")
+        return when {
+            members.isNotEmpty() -> members.filter { group -> ldapGetAttribute(group, "groupType") != null }
+            else -> listOf()
+        }
     }
 
-    private fun members(groupName: String) = when {
-        ldapGetAttribute(getGroupDN(groupName), "member") != null ->
-            ldapGetAttribute(getGroupDN(groupName), "member").values
-                .map { it }
-        else -> listOf()
+    private fun members(groupName: String, member: String): List<String> {
+        val members = ldapGetAttribute(getGroupDN(groupName), member)
+        return when {
+            members != null -> members.values.map { it }
+            else -> listOf()
+        }
     }
 
     private fun ldapGetAttribute(groupNameDN: String, attr: String) =

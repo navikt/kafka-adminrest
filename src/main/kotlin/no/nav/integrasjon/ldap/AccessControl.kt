@@ -13,12 +13,14 @@ class AccessControl(
     private val instance: LDAPGroup
 ) {
 
-    fun resolveUserDN() =
-        when {
-            instance.isManagerGroup(updateEntry.member) -> instance.getGroupDN(updateEntry.member)
-            instance.isNAVIdent(updateEntry.member) -> instance.getUserDN(updateEntry.member)
+    fun resolveUserDN(): String {
+        val member = updateEntry.member
+        return when {
+            instance.isManagerGroup(member) -> instance.getGroupDN(member)
+            instance.isNAVIdent(member) -> instance.getUserDN(member)
             else -> instance.getServiceUserDN(updateEntry.member)
         }
+    }
 
     fun validate(userDn: String, topicName: String) =
         when {
