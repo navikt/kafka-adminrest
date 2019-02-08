@@ -219,16 +219,16 @@ class LDAPGroup(private val config: FasitProperties) :
     // REGEX approved Trong?
     private fun getCNFromDN(dNGroupName: String) = """([^,]*)""".toRegex().find(dNGroupName)!!.value.replace("cn=", "")
 
-    fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember) =
-
-        resolveUserDN(updateEntry.member).let { userDN ->
-
-            val grantedAccess =
-                AccessControl(userDN, topicName, updateEntry, this).validateAccess()
-            if (!grantedAccess.first) {
-                grantedAccess
-            } else {
-                config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
+    fun updateKafkaGroupMembership(
+        topicName: String,
+        updateEntry: UpdateKafkaGroupMember,
+        accessControl: AccessControl
+    ): Access =
+        accessControl.resolveUserDN().let { userDN ->
+            val result = accessControl.validate(userDN, topicName)
+            when {
+                !result.grant -> result
+                else -> config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
                     val req = ModifyRequest(
                         groupDN,
                         Modification(
@@ -243,10 +243,12 @@ class LDAPGroup(private val config: FasitProperties) :
 
                     log.info { "Update group membership request: $req for $userDN" }
 
-                    if (updateEntry.isRedundant(userDN, groupDN, toGroupName(updateEntry.role.prefix, topicName)))
-                        Triple(true, AccessCode.OK, LDAPResult(0, ResultCode.SUCCESS).simplify())
-                    else
-                        Triple(true, AccessCode.OK, ldapConnection.modify(req).simplify())
+                    return when {
+                        updateEntry.isRedundant(userDN, groupDN, toGroupName(updateEntry.role.prefix, topicName)) ->
+                            Access(true, AccessCode.OK, LDAPResult(0, ResultCode.SUCCESS).simplify())
+                        else ->
+                            Access(true, AccessCode.OK, ldapConnection.modify(req).simplify())
+                    }
                 }
             }
         }
@@ -414,7 +416,7 @@ class LDAPGroup(private val config: FasitProperties) :
         searchGetNamesKN(Filter.createEqualityFilter("objectClass", "group"))
             .searchEntries.map { it.getAttribute(config.ldapGroupAttrName).value }
 
-    private fun getServiceUserDN(userName: String): String =
+    fun getServiceUserDN(userName: String): String =
         searchGetDNSAN(Filter.createEqualityFilter(config.ldapUserAttrName, userName))
             .let { searchRes ->
                 when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
@@ -423,7 +425,7 @@ class LDAPGroup(private val config: FasitProperties) :
                 }
             }
 
-    private fun getUserDN(userName: String): String =
+    fun getUserDN(userName: String): String =
         searchGetDNUAN(Filter.createEqualityFilter(config.ldapUserAttrName, userName))
             .let { searchRes ->
                 when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
@@ -432,7 +434,7 @@ class LDAPGroup(private val config: FasitProperties) :
                 }
             }
 
-    private fun getGroupDN(userName: String): String =
+    fun getGroupDN(userName: String): String =
         searchGetDNGROUP(Filter.createEqualityFilter(config.ldapGroupAttrName, userName))
             .let { searchRes ->
                 when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {

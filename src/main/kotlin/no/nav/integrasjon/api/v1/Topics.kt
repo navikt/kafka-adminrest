@@ -29,6 +29,7 @@ import no.nav.integrasjon.api.nielsfalk.ktor.swagger.securityAndReponds
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.serviceUnavailable
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.unAuthorized
 import no.nav.integrasjon.ldap.AccessCode
+import no.nav.integrasjon.ldap.AccessControl
 import no.nav.integrasjon.ldap.KafkaGroup
 import no.nav.integrasjon.ldap.KafkaGroupType
 import no.nav.integrasjon.ldap.LDAPGroup
@@ -678,37 +679,37 @@ fun Routing.updateTopicGroup(fasitConfig: FasitProperties) =
             }
         }
 
-        val (updateRequestOk, access, result) =
+        val accessObject =
             LDAPGroup(fasitConfig).use { lc ->
                 lc.updateKafkaGroupMembership(
-                    topicName, body
+                    topicName, body, AccessControl(body, lc)
                 )
             }
 
-        if (!updateRequestOk) {
-            access.let { code ->
-                when (code) {
+        if (!accessObject.grant) {
+            accessObject.let { code ->
+                when (code.accessCode) {
                     AccessCode.USER_NOT_FOUND -> {
                         val msg = "User: ${body.member} not found in ldap"
-                        application.environment.log.error("$msg  ${code.name}")
+                        application.environment.log.error("$msg  ${code.accessCode.name}")
                         call.respond(HttpStatusCode.ServiceUnavailable, AnError(msg))
                         return@put
                     }
                     AccessCode.NAV_USER_NOT_ALLOWED -> {
                         val msg = "User: ${body.member} not allowed in KC or KP - group"
-                        application.environment.log.error("$msg  ${code.name}")
+                        application.environment.log.error("$msg  ${code.accessCode.name}")
                         call.respond(HttpStatusCode.ServiceUnavailable, AnError(msg))
                         return@put
                     }
                     AccessCode.TOO_MANY_GROUPS -> {
                         val msg = "Two Groups: ${body.member} not allowed in KM group"
-                        application.environment.log.error("$msg  ${code.name}")
+                        application.environment.log.error("$msg  ${code.accessCode.name}")
                         call.respond(HttpStatusCode.ServiceUnavailable, AnError(msg))
                         return@put
                     }
                     else -> {
                         val msg = "User: ${body.member} not allowed in KC or KP - group"
-                        application.environment.log.error("$msg  ${code.name}")
+                        application.environment.log.error("$msg  ${code.accessCode.name}")
                         call.respond(HttpStatusCode.ServiceUnavailable, AnError(msg))
                         return@put
                     }
@@ -717,5 +718,5 @@ fun Routing.updateTopicGroup(fasitConfig: FasitProperties) =
         }
 
         application.environment.log.info("$topicName's group has been updated")
-        call.respond(PutTopicGMemberModel(topicName, body, result))
+        call.respond(PutTopicGMemberModel(topicName, body, accessObject.result))
     }
