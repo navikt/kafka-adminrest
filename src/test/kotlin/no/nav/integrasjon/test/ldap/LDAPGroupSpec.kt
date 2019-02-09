@@ -356,7 +356,10 @@ object LDAPGroupSpec : Spek({
                     Pair("tpc-02", "n141414") to false,
                     Pair("tpc-03", "n145821") to true,
                     Pair("tpc-01", "n000003") to true,
-                    Pair("tpc-02", "n000011") to true
+                    Pair("tpc-01", "n000002") to true,
+                    Pair("tpc-02", "n000011") to true,
+                    Pair("tpc-02", "n000010") to true,
+                    Pair("tpc-02", "n000003") to false
             )
 
             topics.forEach { pair, result ->
