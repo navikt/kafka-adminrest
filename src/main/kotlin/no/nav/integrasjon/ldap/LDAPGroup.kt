@@ -224,7 +224,7 @@ class LDAPGroup(private val config: FasitProperties) :
         updateEntry: UpdateKafkaGroupMember,
         accessControl: AccessControl
     ): Access =
-        accessControl.resolveUserDN().let { userDN ->
+        resolveUserDN(updateEntry.member).let { userDN ->
             val result = accessControl.validate(userDN, topicName)
             when {
                 !result.grant -> result
