@@ -184,6 +184,24 @@ object LDAPGroupSpec : Spek({
                             "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
                     }
 
+                it("should NOT add n145821 as PRODUCER") {
+                    body = UpdateKafkaGroupMember(
+                        KafkaGroupType.PRODUCER,
+                        GroupMemberOperation.ADD,
+                        "n145821"
+                    )
+                    LDAPGroup(fp).use { lc ->
+                        lc.updateKafkaGroupMembership(
+                            topic,
+                            body,
+                            AccessControl(body, lc)
+                        ).accessCode shouldEqual AccessCode.NAV_USER_NOT_ALLOWED
+                        lc.getKafkaGroupMembers("KM-$topic")
+                    } shouldContainAll listOf(
+                        "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local",
+                        "cn=Group_00020ec3-6592-4415-a563-1ed6768d6086,OU=O365Groups,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local")
+                }
+
                 it("should return the added srvp02 producer when getting group members") {
                     body = UpdateKafkaGroupMember(
                         KafkaGroupType.PRODUCER,
