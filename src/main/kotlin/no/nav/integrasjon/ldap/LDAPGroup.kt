@@ -277,7 +277,7 @@ class LDAPGroup(private val config: FasitProperties) :
             else -> comparedMatchedMemberIn(groupDN, userDN)
         }
 
-    // BruteForce them nested groups
+    // BruteForce them fround nested groups
     private fun groupInGroupSearch(groupName: String, userDN: String) =
         findAllMemberGroups(
             groupName,
@@ -296,43 +296,32 @@ class LDAPGroup(private val config: FasitProperties) :
         numberOfMembersAsGroup: Int,
         members: MutableSet<String>
     ): List<String> {
-        val groups = findMembersAsGroup(getCNFromDN(groupName))
-            .map { it }
+        val groups = findMembersAsGroup(getCNFromDN(groupName)).map { it }
         when {
             numberOfMembersAsGroup < 1 -> return members.toList()
             numberOfMembersAsGroup > 1 -> {
                 // Recur the nested groups
-                return recurSeveral(
-                    groupName,
-                    members,
-                    numberOfMembersAsGroup - 1,
-                    groups.map { it }[numberOfMembersAsGroup - 1]
-                )
+                return groups
+                    .flatMap { group -> recurOne(group, findMembersAsGroup(getCNFromDN(group)).size, members) }
+                    .toList()
             }
             else -> {
                 return when {
-                    groups.isEmpty() -> recurOne(groupName, members, 0)
+                    groups.isEmpty() -> recurOne(groupName, 0, members)
                     else -> {
                         val hasMoreGroups = groups[numberOfMembersAsGroup - 1]
-                        recurOne(hasMoreGroups, members, findMembersAsGroup(getCNFromDN(hasMoreGroups)).size)
+                        recurOne(
+                            hasMoreGroups,
+                            findMembersAsGroup(getCNFromDN(hasMoreGroups)).size,
+                            members
+                        ).also { res -> log.info { "Recursive group search result: $res" } }
                     }
                 }
             }
         }
     }
 
-    private fun recurSeveral(groupName: String, members: MutableSet<String>, remainingMembers: Int, group: String) =
-        findAllMemberGroups(
-            groupName,
-            remainingMembers,
-            members
-                // accumulate group found and groups already found
-                .toMutableSet().apply {
-                    addAll(members)
-                    add(group)
-                })
-
-    private fun recurOne(group: String, members: MutableSet<String>, remainingMembers: Int) = findAllMemberGroups(
+    private fun recurOne(group: String, remainingMembers: Int, members: MutableSet<String>) = findAllMemberGroups(
         group,
         remainingMembers,
         members
