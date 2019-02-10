@@ -174,9 +174,9 @@ class LDAPGroup(private val config: FasitProperties) :
             .searchEntries
             .flatMap {
                 (it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: listOf<String>())
-                    .map {
-                        DN(it).rdn.attributes.first {
-                            it.name.equals(config.ldapUserAttrName, ignoreCase = true)
+                    .map { member ->
+                        DN(member).rdn.attributes.first { attribute ->
+                            attribute.name.equals(config.ldapUserAttrName, ignoreCase = true)
                         }.value
                     }
             }
@@ -313,9 +313,10 @@ class LDAPGroup(private val config: FasitProperties) :
                             groupName, 0, members
                         )
                     else -> {
-                        val hasMoreGroups = groups[numberOfMembersAsGroup - 1]
                         recur(
-                            hasMoreGroups, findMembersAsGroup(getCNFromDN(hasMoreGroups)).size, members
+                            groups[numberOfMembersAsGroup - 1],
+                            findMembersAsGroup(getCNFromDN(groups[numberOfMembersAsGroup - 1])).size,
+                            members
                         ).also { res -> log.info { "Recursive group search result: $res" } }
                     }
                 }
@@ -418,7 +419,7 @@ class LDAPGroup(private val config: FasitProperties) :
         searchGetNamesKN(Filter.createEqualityFilter("objectClass", "group"))
             .searchEntries.map { it.getAttribute(config.ldapGroupAttrName).value }
 
-    fun getServiceUserDN(userName: String): String =
+    private fun getServiceUserDN(userName: String): String =
         searchGetDNSAN(Filter.createEqualityFilter(config.ldapUserAttrName, userName))
             .let { searchRes ->
                 when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
@@ -427,7 +428,7 @@ class LDAPGroup(private val config: FasitProperties) :
                 }
             }
 
-    fun getUserDN(userName: String): String =
+    private fun getUserDN(userName: String): String =
         searchGetDNUAN(Filter.createEqualityFilter(config.ldapUserAttrName, userName))
             .let { searchRes ->
                 when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
@@ -436,7 +437,7 @@ class LDAPGroup(private val config: FasitProperties) :
                 }
             }
 
-    fun getGroupDN(userName: String): String =
+    private fun getGroupDN(userName: String): String =
         searchGetDNGROUP(Filter.createEqualityFilter(config.ldapGroupAttrName, userName))
             .let { searchRes ->
                 when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
