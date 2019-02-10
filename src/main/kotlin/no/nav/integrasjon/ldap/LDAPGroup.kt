@@ -300,20 +300,22 @@ class LDAPGroup(private val config: FasitProperties) :
         when {
             numberOfMembersAsGroup < 1 -> return members.toList()
             numberOfMembersAsGroup > 1 -> {
-                // Recur the nested groups
+                // Recur the nested groups > 1
                 return groups
-                    .flatMap { group -> recurOne(group, findMembersAsGroup(getCNFromDN(group)).size, members) }
+                    .flatMap { group -> recur(group, findMembersAsGroup(getCNFromDN(group)).size, members) }
                     .toList()
             }
             else -> {
                 return when {
-                    groups.isEmpty() -> recurOne(groupName, 0, members)
+                    // Special, if group has no more groups - or cyclic groups - end the recursion.
+                    groups.isEmpty() || members.map { it }.contains(groups[numberOfMembersAsGroup - 1]) ->
+                        recur(
+                            groupName, 0, members
+                        )
                     else -> {
                         val hasMoreGroups = groups[numberOfMembersAsGroup - 1]
-                        recurOne(
-                            hasMoreGroups,
-                            findMembersAsGroup(getCNFromDN(hasMoreGroups)).size,
-                            members
+                        recur(
+                            hasMoreGroups, findMembersAsGroup(getCNFromDN(hasMoreGroups)).size, members
                         ).also { res -> log.info { "Recursive group search result: $res" } }
                     }
                 }
@@ -321,7 +323,7 @@ class LDAPGroup(private val config: FasitProperties) :
         }
     }
 
-    private fun recurOne(group: String, remainingMembers: Int, members: MutableSet<String>) = findAllMemberGroups(
+    private fun recur(group: String, remainingMembers: Int, members: MutableSet<String>) = findAllMemberGroups(
         group,
         remainingMembers,
         members
