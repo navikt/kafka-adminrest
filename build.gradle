@@ -14,6 +14,7 @@ buildscript {
     ext.swagger_version = '3.1.7'
     ext.spek_version = '2.0.0-rc.1'
     ext.kluent_version = '1.39'
+    ext.konfigVersion = "1.6.10.0"
 }
 
 plugins{
@@ -79,6 +80,8 @@ dependencies {
     implementation "io.prometheus:simpleclient_common:$prometheus_version"
 
     implementation "org.webjars:swagger-ui:$swagger_version"
+
+    implementation  "com.natpryce:konfig:$konfigVersion"
     
     testImplementation "org.amshove.kluent:kluent:$kluent_version"
     testImplementation "no.nav:kafka-embedded-env:$embeddedkafka_version"
