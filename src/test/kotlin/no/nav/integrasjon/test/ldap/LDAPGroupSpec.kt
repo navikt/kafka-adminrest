@@ -33,7 +33,8 @@ object LDAPGroupSpec : Spek({
             ldapGrpMemberAttrName = "member",
             ldapUser = "igroup",
             ldapPassword = "itest",
-            ldapGroupInGroupBase = "OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local"
+            ldapGroupInGroupBase = "OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
+            ldapGroupAttrType = "groupType"
     )
 
     describe("LDAPGroup class test specification") {

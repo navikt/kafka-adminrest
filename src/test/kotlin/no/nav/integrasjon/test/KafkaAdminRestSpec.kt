@@ -95,7 +95,8 @@ object KafkaAdminRestSpec : Spek({
         ldapUser = "igroup",
         ldapPassword = "itest",
         kafkaTimeout = 1000L,
-        ldapGroupInGroupBase = "OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local"
+        ldapGroupInGroupBase = "OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
+        ldapGroupAttrType = "groupType"
     )
 
     fun FasitProperties.injectValues(

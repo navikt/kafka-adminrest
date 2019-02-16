@@ -54,7 +54,8 @@ data class FasitProperties(
     val ldapUser: String = System.getenv("LDAP_USER")?.toString() ?: "",
     val ldapPassword: String = System.getenv("LDAP_PASSWORD")?.toString() ?: "",
 
-    val ldapGroupInGroupBase: String = System.getenv("LDAP_GROUPINGROUPBASE")?.toString() ?: ""
+    val ldapGroupInGroupBase: String = System.getenv("LDAP_GROUPINGROUPBASE")?.toString() ?: "",
+    val ldapGroupAttrType: String = System.getenv("LDAP_GROUPATTRTYPE")?.toString() ?: ""
 )
 
 // Checking that enough information is provided

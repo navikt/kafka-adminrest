@@ -217,7 +217,7 @@ class LDAPGroup(private val config: FasitProperties) :
     fun getGroupInGroupMembers(groupName: String) = getMembersInGroupInGroup(getCNFromDN(groupName))
 
     // REGEX approved Trong?
-    private fun getCNFromDN(dNGroupName: String) = """([^,]*)""".toRegex().find(dNGroupName)!!.value.replace("cn=", "")
+    private fun getCNFromDN(dNGroupName: String) = """([^,]*)""".toRegex().find(dNGroupName)!!.value.replace("${config.ldapGroupAttrName}=", "")
 
     fun updateKafkaGroupMembership(
         topicName: String,
@@ -267,7 +267,7 @@ class LDAPGroup(private val config: FasitProperties) :
             GroupMemberOperation.REMOVE -> !userInGroup(userDN, groupDN, groupName)
         }
 
-    fun isManagerGroup(groupName: String): Boolean = checkAttributeForGroup(groupName, "groupType")
+    fun isManagerGroup(groupName: String): Boolean = checkAttributeForGroup(groupName, config.ldapGroupAttrType)
 
     private fun userInGroup(userDN: String, groupDN: String, groupName: String): Boolean =
     // careful, AD will raise exception if group is empty, thus, no member attribute issue
@@ -335,9 +335,9 @@ class LDAPGroup(private val config: FasitProperties) :
             })
 
     fun findMembersAsGroup(groupName: String): List<String> {
-        val members = members(groupName, "member")
+        val members = members(groupName, config.ldapGrpMemberAttrName)
         return when {
-            members.isNotEmpty() -> members.filter { group -> ldapGetAttribute(group, "groupType") != null }
+            members.isNotEmpty() -> members.filter { group -> ldapGetAttribute(group, config.ldapGroupAttrType) != null }
             else -> listOf()
         }
     }
