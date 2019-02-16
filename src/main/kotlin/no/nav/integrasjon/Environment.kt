@@ -73,7 +73,9 @@ data class Environment(
         val ldapSrvUserBase: String = config[Key("ldap.srvuserbase", stringType)],
         val ldapGroupBase: String = config[Key("ldap.groupbase", stringType)],
         val ldapGroupAttrName: String = config[Key("ldap.groupattrname", stringType)],
-        val ldapGrpMemberAttrName: String = config[Key("ldap.grpmemberattrname", stringType)]
+        val ldapGrpMemberAttrName: String = config[Key("ldap.grpmemberattrname", stringType)],
+        val ldapGroupInGroupBase: String = config[Key("ldap_groupingroupbase", stringType)],
+        val ldapGroupAttrType: String = config[Key("ldap_groupattrtype", stringType)]
     ) {
         fun ldapGroupInfoComplete(): Boolean =
             ldapHost.isNotEmpty()
@@ -82,6 +84,8 @@ data class Environment(
                 && ldapGroupBase.isNotEmpty()
                 && ldapGroupAttrName.isNotEmpty()
                 && ldapGrpMemberAttrName.isNotEmpty()
+                && ldapGroupInGroupBase.isNotEmpty()
+                && ldapGroupAttrType.isNotEmpty()
                 && Environment.LdapUser().ldapUser.isNotEmpty()
                 && Environment.LdapUser().ldapPassword.isNotEmpty()
     }
