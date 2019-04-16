@@ -93,7 +93,6 @@ data class Environment(
     data class LdapUser(
         val ldapUser: String = config[Key("ldap.user", stringType)],
         val ldapPassword: String = config[Key("ldap.password", stringType)]
-
     )
 
     // Return diverse distinguished name types
