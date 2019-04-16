@@ -3,7 +3,7 @@ import com.github.jengelman.gradle.plugins.shadow.transformers.ServiceFileTransf
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 group = "no.nav.integrasjon"
-version = "0.75-SNAPSHOT"
+version = "0.74"
 
 val kotlinVersion = "1.3.21"
 val kotlinLogginVersion = "1.6.25"
@@ -60,6 +60,7 @@ configurations.compileClasspath {
 // configurations.compileClasspath.exclude(group = "org.slf4j", module = "slf4j-log4j12")
 
 dependencies {
+    compile(kotlin("stdlib"))
     compile("org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlinVersion")
     compile("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
 
