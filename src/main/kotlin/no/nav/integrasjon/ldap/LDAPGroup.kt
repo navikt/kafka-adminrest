@@ -19,6 +19,7 @@ import com.unboundid.ldap.sdk.SearchResult
 import mu.KotlinLogging
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.Environment
+import no.nav.integrasjon.getAuthenticationConnectionInfo
 import no.nav.integrasjon.ldap.LDAPGroup.Companion.simplify
 import org.apache.kafka.common.acl.AccessControlEntry
 import org.apache.kafka.common.acl.AclBinding
@@ -47,18 +48,22 @@ import org.apache.kafka.common.resource.ResourceType
 fun toGroupName(prefix: String, topicName: String) = "$prefix$topicName"
 
 class LDAPGroup(private val env: Environment) :
-        LDAPBase(env.getConnectionInfo(Environment.LdapConnectionType.GROUP,
+    LDAPBase(
+        getAuthenticationConnectionInfo(
             env.ldapGroup.ldapHost,
             env.ldapGroup.ldapPort,
-            env.ldapCommon.ldapConnTimeout)) {
+            env.ldapCommon.ldapConnTimeout
+        )
+    ) {
 
     init {
         // initialize bind of user with enough authorization for group operations
 
-        val connInfo = env.getConnectionInfo(Environment.LdapConnectionType.GROUP,
+        val connInfo = getAuthenticationConnectionInfo(
             env.ldapGroup.ldapHost,
             env.ldapGroup.ldapPort,
-            env.ldapCommon.ldapConnTimeout)
+            env.ldapCommon.ldapConnTimeout
+        )
         val srvUserDN = env.srvUserDN()
         try {
             ldapConnection.bind(srvUserDN, env.ldapUser.ldapPassword)

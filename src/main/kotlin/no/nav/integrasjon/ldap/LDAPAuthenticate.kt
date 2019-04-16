@@ -5,6 +5,7 @@ import com.unboundid.ldap.sdk.LDAPException
 import com.unboundid.ldap.sdk.ResultCode
 import mu.KotlinLogging
 import no.nav.integrasjon.Environment
+import no.nav.integrasjon.getAuthenticationConnectionInfo
 
 /**
  * LDAPAuthenticate provides only canUserAuthenticate by simple LDAP bind verification
@@ -13,11 +14,13 @@ import no.nav.integrasjon.Environment
  */
 
 class LDAPAuthenticate(private val env: Environment) :
-    LDAPBase(env.getConnectionInfo(
-        Environment.LdapConnectionType.AUTHENTICATION,
-        env.ldapAuthenticate.ldapAuthHost,
-        env.ldapAuthenticate.ldapAuthPort,
-        env.ldapCommon.ldapConnTimeout)) {
+    LDAPBase(
+        getAuthenticationConnectionInfo(
+            env.ldapAuthenticate.ldapAuthHost,
+            env.ldapAuthenticate.ldapAuthPort,
+            env.ldapCommon.ldapConnTimeout
+        )
+    ) {
 
     fun canUserAuthenticate(user: String, pwd: String): Boolean =
         if (!ldapConnection.isConnected) {
@@ -27,10 +30,11 @@ class LDAPAuthenticate(private val env: Environment) :
             // fold over resolved DNs, NAV ident or service accounts (normal + Basta)
             resolveDNs(user).fold(false) { acc, dn -> acc || authenticated(dn, pwd, acc) }.also {
 
-                val connInfo = env.getConnectionInfo(Environment.LdapConnectionType.AUTHENTICATION,
+                val connInfo = getAuthenticationConnectionInfo(
                     env.ldapAuthenticate.ldapAuthHost,
                     env.ldapAuthenticate.ldapAuthPort,
-                    env.ldapCommon.ldapConnTimeout)
+                    env.ldapCommon.ldapConnTimeout
+                )
 
                 when (it) {
                     true -> log.info { "Successful bind of $user to $connInfo" }

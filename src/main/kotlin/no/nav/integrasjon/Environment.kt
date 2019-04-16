@@ -7,7 +7,6 @@ import com.natpryce.konfig.intType
 import com.natpryce.konfig.longType
 import com.natpryce.konfig.overriding
 import com.natpryce.konfig.stringType
-import no.nav.integrasjon.ldap.LDAPBase
 import java.io.File
 
 private const val vaultApplicationPropertiesPath = "/var/run/secrets/nais.io/vault/application.properties"
@@ -96,22 +95,6 @@ data class Environment(
         val ldapPassword: String = config[Key("ldap.password", stringType)]
 
     )
-
-    // Connection factory for which ldap in matter
-    enum class LdapConnectionType { AUTHENTICATION, GROUP }
-
-    fun getConnectionInfo(connType: LdapConnectionType, host: String, port: Int, timeout: Int) = when (connType) {
-        LdapConnectionType.AUTHENTICATION -> LDAPBase.Companion.ConnectionInfo(
-            host,
-            port,
-            timeout
-        )
-        LdapConnectionType.GROUP -> LDAPBase.Companion.ConnectionInfo(
-            host,
-            port,
-            timeout
-        )
-    }
 
     // Return diverse distinguished name types
     fun userDN(user: String) =
