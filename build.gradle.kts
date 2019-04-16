@@ -12,22 +12,22 @@ val ktorVersion = "1.1.3"
 // Could not find usage for this? but leave it in
 // val coroutinesVersion = "0.22.5"
 
-val jacksonDatatypeVersion = "2.9.7"
+val jacksonDatatypeVersion = "2.9.8"
 
 val kafkaVersion = "2.0.0"
-val embeddedkafkaVersion = "2.0.1"
+val embeddedkafkaVersion = "2.1.1"
 
 val prometheusVersion = "0.6.0"
 val logstashEncoderVersion = "5.3"
 val logbackVersion = "1.2.3"
 val log4jVersion = "1.7.25"
 
-val unboundidVersion = "4.0.8"
+val unboundidVersion = "4.0.10"
 
-val swaggerVersion = "3.1.7"
+val swaggerVersion = "3.22.0"
 
 val spekVersion = "2.0.2"
-val kluentVersion = "1.39"
+val kluentVersion = "1.49"
 
 val konfigVersion = "1.6.10.0"
 
@@ -40,7 +40,7 @@ plugins {
     id("org.jmailen.kotlinter") version "1.22.0"
     id("maven-publish")
     id("com.github.ben-manes.versions") version "0.21.0"
-    id("com.github.johnrengelman.shadow") version "4.0.3"
+    id("com.github.johnrengelman.shadow") version "5.0.0"
 }
 
 application {
@@ -54,7 +54,7 @@ repositories {
     jcenter()
 }
 
-configurations.compileClasspath.exclude(group = "org.slf4j", module = "slf4j-log4j12")
+// configurations.compileClasspath.exclude(group = "org.slf4j", module = "slf4j-log4j12")
 
 dependencies {
     compile("org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlinVersion")

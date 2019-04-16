@@ -75,7 +75,7 @@ object KafkaAdminRestSpec : Spek({
     val preTopics = setOf("tpc-01", "tpc-02", "tpc-03")
 
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
-    val kCluster = KafkaEnvironment(1, topics = preTopics.toList(), withSecurity = true, autoStart = true)
+    val kCluster = KafkaEnvironment(1, topicNames = preTopics.toList(), withSecurity = true, autoStart = true)
 
     val environment = Environment(
         kafka = Environment.Kafka(kafkaBrokers = kCluster.brokersURL, kafkaTimeout = 1000L),
