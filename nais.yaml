@@ -31,19 +31,6 @@ resources:
     cpu: 100m
     memory: 128Mi
 fasitResources:
-  used:
-  - alias: srvkafka-adminrest
-    resourceType: credential
-    propertyMap:
-      username: KAFKA_USER
-      password: KAFKA_PASSWORD
-  - alias: srvkafkaadadm_credential
-    resourceType: credential
-    propertyMap:
-      username: LDAP_USER
-      password: LDAP_PASSWORD
-  - alias: kafka-adminrest-aprops
-    resourceType: ApplicationProperties
   exposed:
   - alias: kafka-adminrest-api
     resourceType: restservice
