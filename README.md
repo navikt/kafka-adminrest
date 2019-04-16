@@ -23,8 +23,8 @@ Kafka security using LDAP groups for authorization.
 ## Components
 
 1. Ktor using Netty provides the REST interfaces
-2. Kafka AdminClient API v.1.0.1 for kafka interaction
-3. Unboundid LDAP API v.4.0.6 for LDAPS interaction
+2. Kafka AdminClient API v.2.0.0 for kafka interaction
+3. Unboundid LDAP API v.4.0.10 for LDAPS interaction
 4. Swagger documentation automatically generated for each endpoint
 
 ## Testing
