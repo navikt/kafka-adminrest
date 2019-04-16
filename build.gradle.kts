@@ -1,5 +1,6 @@
 import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
 import com.github.jengelman.gradle.plugins.shadow.transformers.ServiceFileTransformer
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 group = "no.nav.integrasjon"
 version = "0.75-SNAPSHOT"
@@ -114,6 +115,12 @@ tasks {
     withType<Wrapper> {
         gradleVersion = "5.3"
         distributionType = Wrapper.DistributionType.BIN
+    }
+    withType<KotlinCompile> {
+        kotlinOptions.freeCompilerArgs = listOf(
+            "-Xuse-experimental=io.ktor.locations.KtorExperimentalLocationsAPI",
+            "-Xuse-experimental=io.ktor.util.KtorExperimentalAPI"
+        )
     }
 }
 
