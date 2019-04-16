@@ -6,13 +6,13 @@ import com.unboundid.ldap.sdk.ResultCode
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
+import io.ktor.locations.KtorExperimentalLocationsAPI
 import io.ktor.server.testing.TestApplicationEngine
 import io.ktor.server.testing.createTestEnvironment
 import io.ktor.server.testing.handleRequest
 import io.ktor.server.testing.setBody
 import no.nav.common.KafkaEnvironment
-import no.nav.integrasjon.FasitPropFactory
-import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_A
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_G
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_GAK
@@ -68,6 +68,7 @@ import org.spekframework.spek2.style.specification.describe
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 
+@KtorExperimentalLocationsAPI
 object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
@@ -76,58 +77,22 @@ object KafkaAdminRestSpec : Spek({
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
     val kCluster = KafkaEnvironment(1, topics = preTopics.toList(), withSecurity = true, autoStart = true)
 
-    val correctFP = FasitProperties(
-        kCluster.brokersURL, "kafka-adminrest", "TRUE",
-        "SASL_PLAINTEXT", "PLAIN",
-        "srvkafkaclient", "kafkaclient", // see predfined users in embedded kafka
-        ldapConnTimeout = 1000,
-        ldapUserAttrName = "uid",
-        ldapAuthHost = "localhost",
-        ldapAuthPort = InMemoryLDAPServer.LPORT,
-        ldapAuthUserBase = "OU=Users,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
-        ldapHost = "localhost",
-        ldapPort = InMemoryLDAPServer.LPORT,
-        ldapSrvUserBase = "OU=ServiceAccounts,DC=test,DC=local",
-        ldapGroupBase = "OU=kafka,OU=AccountGroupNotInRemedy,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
-        ldapGroupAttrName = "cn",
-        ldapGrpMemberAttrName = "member",
-        ldapUser = "igroup",
-        ldapPassword = "itest",
-        kafkaTimeout = 1000L
+    val environment = Environment(
+        kafka = Environment.Kafka(kafkaBrokers = kCluster.brokersURL, kafkaTimeout = 1000L),
+        ldapCommon = Environment.LdapCommon(ldapConnTimeout = 1000),
+        ldapAuthenticate = Environment.LdapAuthenticate(ldapAuthPort = InMemoryLDAPServer.LPORT),
+        ldapGroup = Environment.LdapGroup(ldapPort = InMemoryLDAPServer.LPORT)
     )
 
-    fun FasitProperties.injectValues(
+    fun injectValues(
         portLDAPGroup: Int = InMemoryLDAPServer.LPORT,
         portLDAPAuth: Int = InMemoryLDAPServer.LPORT,
         kafkaURL: String = kCluster.brokersURL
-    ) =
-        FasitProperties(
-            kafkaURL,
-            kafkaClientID,
-            kafkaSecurity,
-            kafkaSecProt,
-            kafkaSaslMec,
-            kafkaUser,
-            kafkaPassword,
-            kafkaTimeout,
-
-            ldapConnTimeout,
-            ldapUserAttrName,
-
-            ldapAuthHost,
-            portLDAPAuth,
-            ldapAuthUserBase,
-
-            ldapHost,
-            portLDAPGroup,
-
-            ldapSrvUserBase,
-            ldapGroupBase,
-            ldapGroupAttrName,
-            ldapGrpMemberAttrName,
-
-            ldapUser,
-            ldapPassword
+    ) = Environment(
+            kafka = Environment.Kafka(kafkaBrokers = kafkaURL, kafkaTimeout = 1000L),
+            ldapAuthenticate = Environment.LdapAuthenticate(ldapAuthPort = portLDAPAuth),
+            ldapGroup = Environment.LdapGroup(ldapPort = portLDAPGroup),
+            ldapCommon = Environment.LdapCommon(ldapConnTimeout = 1000)
         )
 
     describe("Test of different services down, and all services up (ldap auth and group, and kafka)") {
@@ -146,7 +111,7 @@ object KafkaAdminRestSpec : Spek({
 
             data class ServiceDown(
                 val error: String,
-                val fasitProps: FasitProperties,
+                val environment: Environment,
                 val scenarios: List<Scenario>,
                 val details: String = ""
             )
@@ -228,28 +193,28 @@ object KafkaAdminRestSpec : Spek({
             val srvsDown = listOf(
                 ServiceDown(
                     SERVICES_ERR_GAK,
-                    correctFP.injectValues(0, 0, "Wrong_Broker_URL"),
+                    injectValues(0, 0, "Wrong_Broker_URL"),
                     allDownServices
                 ),
                 ServiceDown(
                     SERVICES_ERR_A,
-                    correctFP.injectValues(portLDAPAuth = 0),
+                    injectValues(portLDAPAuth = 0),
                     ldapAuthDown
                 ),
                 ServiceDown(
                     SERVICES_ERR_G,
-                    correctFP.injectValues(portLDAPGroup = 0),
+                    injectValues(portLDAPGroup = 0),
                     ldapGroupDown
                 ),
                 ServiceDown(
                     SERVICES_ERR_K,
-                    correctFP.injectValues(kafkaURL = "Wrong_Broker_URL"),
+                    injectValues(kafkaURL = "Wrong_Broker_URL"),
                     kafkaDownScenarios,
                     "invalid broker url"
                 ),
                 ServiceDown(
                     SERVICES_ERR_K,
-                    correctFP.injectValues(kafkaURL = "SASL_PLAINTEXT://localhost:01"),
+                    injectValues(kafkaURL = "SASL_PLAINTEXT://localhost:01"),
                     kafkaDownScenarios,
                     "wrong broker port"
                 )
@@ -262,9 +227,8 @@ object KafkaAdminRestSpec : Spek({
                     val engine = TestApplicationEngine(createTestEnvironment())
 
                     beforeGroup {
-                        FasitPropFactory.setFasitProperties(srvDown.fasitProps)
                         engine.start(wait = false)
-                        engine.application.kafkaAdminREST()
+                        engine.application.kafkaAdminREST(srvDown.environment).also { println("WHYY: ${srvDown.environment} AND URL ${kCluster.brokersURL}") }
                     }
 
                     with(engine) {
@@ -343,9 +307,8 @@ object KafkaAdminRestSpec : Spek({
 
             beforeGroup {
                 InMemoryLDAPServer.start()
-                FasitPropFactory.setFasitProperties(correctFP)
                 engine2.start(wait = false)
-                engine2.application.kafkaAdminREST()
+                engine2.application.kafkaAdminREST(environment)
             }
 
             with(engine2) {

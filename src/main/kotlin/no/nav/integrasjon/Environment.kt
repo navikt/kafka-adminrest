@@ -40,14 +40,14 @@ data class Environment(
         val kafkaPassword: String = config[Key("kafka.password", stringType)],
         val kafkaTimeout: Long = config[Key("kafka.conntimeout", longType)]
     ) {
-        fun kafkaSecurityEnabled(): Boolean =
+        fun securityEnabled(): Boolean =
             kafkaSecurity == "TRUE"
 
-        fun kafkaSecurityComplete(): Boolean =
-            kafkaSecProt.isNotEmpty()
-                && kafkaSaslMec.isNotEmpty()
-                && kafkaUser.isNotEmpty()
-                && kafkaPassword.isNotEmpty()
+        fun securityComplete(): Boolean =
+            kafkaSecProt.isNotEmpty() &&
+                kafkaSaslMec.isNotEmpty() &&
+                kafkaUser.isNotEmpty() &&
+                kafkaPassword.isNotEmpty()
     }
 
     data class LdapCommon(
@@ -60,11 +60,12 @@ data class Environment(
         val ldapAuthPort: Int = config[Key("ldap.auth.port", intType)],
         val ldapAuthUserBase: String = config[Key("ldap.auth.userbase", stringType)]
     ) {
-        fun ldapAuthenticationInfoComplete(): Boolean =
-            Environment.LdapCommon().ldapUserAttrName.isNotEmpty()
-                && ldapAuthHost.isNotEmpty()
-                && ldapAuthPort != 0
-                && ldapAuthUserBase.isNotEmpty()
+
+        fun infoComplete(): Boolean =
+            LdapCommon().ldapUserAttrName.isNotEmpty() &&
+                ldapAuthHost.isNotEmpty() &&
+                ldapAuthPort != 0 &&
+                ldapAuthUserBase.isNotEmpty()
     }
 
     data class LdapGroup(
@@ -77,17 +78,17 @@ data class Environment(
         val ldapGroupInGroupBase: String = config[Key("ldap_groupingroupbase", stringType)],
         val ldapGroupAttrType: String = config[Key("ldap_groupattrtype", stringType)]
     ) {
-        fun ldapGroupInfoComplete(): Boolean =
-            ldapHost.isNotEmpty()
-                && ldapPort != 0
-                && ldapSrvUserBase.isNotEmpty()
-                && ldapGroupBase.isNotEmpty()
-                && ldapGroupAttrName.isNotEmpty()
-                && ldapGrpMemberAttrName.isNotEmpty()
-                && ldapGroupInGroupBase.isNotEmpty()
-                && ldapGroupAttrType.isNotEmpty()
-                && Environment.LdapUser().ldapUser.isNotEmpty()
-                && Environment.LdapUser().ldapPassword.isNotEmpty()
+        fun infoComplete(): Boolean =
+            ldapHost.isNotEmpty() &&
+                ldapPort != 0 &&
+                ldapSrvUserBase.isNotEmpty() &&
+                ldapGroupBase.isNotEmpty() &&
+                ldapGroupAttrName.isNotEmpty() &&
+                ldapGrpMemberAttrName.isNotEmpty() &&
+                ldapGroupInGroupBase.isNotEmpty() &&
+                ldapGroupAttrType.isNotEmpty() &&
+                LdapUser().ldapUser.isNotEmpty() &&
+                LdapUser().ldapPassword.isNotEmpty()
     }
 
     data class LdapUser(
@@ -95,30 +96,30 @@ data class Environment(
         val ldapPassword: String = config[Key("ldap.password", stringType)]
 
     )
+
+    // Connection factory for which ldap in matter
+    enum class LdapConnectionType { AUTHENTICATION, GROUP }
+
+    fun getConnectionInfo(connType: LdapConnectionType, host: String, port: Int, timeout: Int) = when (connType) {
+        LdapConnectionType.AUTHENTICATION -> LDAPBase.Companion.ConnectionInfo(
+            host,
+            port,
+            timeout
+        )
+        LdapConnectionType.GROUP -> LDAPBase.Companion.ConnectionInfo(
+            host,
+            port,
+            timeout
+        )
+    }
+
+    // Return diverse distinguished name types
+    fun userDN(user: String) =
+        "${LdapCommon().ldapUserAttrName}=$user,${LdapAuthenticate().ldapAuthUserBase}"
+
+    fun srvUserDN() =
+        "${LdapCommon().ldapUserAttrName}=${LdapUser().ldapUser},${LdapGroup().ldapSrvUserBase}"
+
+    fun groupDN(groupName: String) =
+        "${LdapGroup().ldapGroupAttrName}=$groupName,${LdapGroup().ldapGroupBase}"
 }
-
-// Connection factory for which ldap in matter
-// enum class LdapConnectionType { AUTHENTICATION, GROUP }
-fun Environment.getConnectionInfo(connType: LdapConnectionType) = when (connType) {
-    LdapConnectionType.AUTHENTICATION -> LDAPBase.Companion.ConnectionInfo(
-        Environment.LdapAuthenticate().ldapAuthHost,
-        Environment.LdapAuthenticate().ldapAuthPort,
-        Environment.LdapCommon().ldapConnTimeout
-    )
-    LdapConnectionType.GROUP -> LDAPBase.Companion.ConnectionInfo(
-        Environment.LdapGroup().ldapHost,
-        Environment.LdapGroup().ldapPort,
-        Environment.LdapCommon().ldapConnTimeout
-    )
-}
-
-// Return diverse distinguished name types
-
-fun Environment.userDN(user: String) =
-    "${Environment.LdapCommon().ldapUserAttrName}=$user,${Environment.LdapAuthenticate().ldapAuthUserBase}"
-
-fun Environment.srvUserDN() =
-    "${Environment.LdapCommon().ldapUserAttrName}=$ldapUser,${Environment.LdapGroup().ldapSrvUserBase}"
-
-fun Environment.groupDN(groupName: String) =
-    "${Environment.LdapCommon().ldapUserAttrName}=$groupName,${Environment.LdapGroup().ldapGroupBase}"

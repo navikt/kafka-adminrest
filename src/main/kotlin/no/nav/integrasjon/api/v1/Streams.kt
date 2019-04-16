@@ -5,7 +5,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
-import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.BasicAuthSecurity
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.badRequest
@@ -38,7 +38,7 @@ data class PostStreamBody(val applicationName: String, val user: String)
 
 data class PostStreamResponse(val status: PostStreamStatus, val message: String)
 
-fun Routing.streamsAPI(adminClient: AdminClient?, fasitConfig: FasitProperties) {
+fun Routing.streamsAPI(adminClient: AdminClient?, environment: Environment) {
     post<PostStream, PostStreamBody>(
             "new streams app. The stream app will get permissions to create new internal topics."
                     .securityAndReponds(
@@ -49,7 +49,7 @@ fun Routing.streamsAPI(adminClient: AdminClient?, fasitConfig: FasitProperties) 
                             unAuthorized<Unit>()
                     )
     ) { _, body ->
-        adminClient?.listTopics()?.names()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.filter {
+        adminClient?.listTopics()?.names()?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)?.filter {
             it.startsWith(body.applicationName)
         }?.firstOrNull()?.let {
             log.error("Trying to register a stream app which is a prefix of $it")
@@ -70,7 +70,7 @@ fun Routing.streamsAPI(adminClient: AdminClient?, fasitConfig: FasitProperties) 
             )
 
             try {
-                adminClient?.createAcls(streamsAcl)?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                adminClient?.createAcls(streamsAcl)?.all()?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
                 log.info("Successfully updated acl for stream app ${body.applicationName}")
                 call.respond(PostStreamResponse(
                         status = PostStreamStatus.OK,

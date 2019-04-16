@@ -10,7 +10,7 @@ import io.ktor.response.respond
 import io.ktor.routing.Routing
 import net.logstash.logback.argument.StructuredArguments.keyValue
 import no.nav.integrasjon.EXCEPTION
-import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.BasicAuthSecurity
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.badRequest
@@ -65,7 +65,7 @@ data class OneshotResult(val creationId: String)
 @Location(ONESHOT)
 class Oneshot
 
-fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProperties) {
+fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environment) {
     put<Oneshot, OneshotCreationRequest>(
         "Provides a one-shot kafka topic creation and ACL creation, it returns an ID and an endpoint where you can await a result from this request"
             .securityAndReponds(BasicAuthSecurity(),
@@ -86,7 +86,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
 
         log.info("Oneshot topic creation request initiated, request: $request $logFormat", *logKeys)
 
-        LDAPGroup(fasitConfig).use { ldap ->
+        LDAPGroup(environment).use { ldap ->
             if (!ldap.userExists(currentUser)) {
                 val err = OneshotResponse(
                     status = OneshotStatus.ERROR,
@@ -110,7 +110,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
             }
 
             val existingTopics = try {
-                adminClient?.listTopics()?.listings()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.map { it.name() }
+                adminClient?.listTopics()?.listings()?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)?.map { it.name() }
                     ?: emptyList()
             } catch (e: Exception) {
                 log.error("Exception caught while getting existing topic(s) $logFormat", logKeys, e)
@@ -240,9 +240,9 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                 adminClient?.createTopics(request.topics
                     .filterNot { existingTopics.contains(it.topicName) }
                     .map {
-                        NewTopic(it.topicName, it.numPartitions, getDefaultReplicationFactor(adminClient, fasitConfig))
+                        NewTopic(it.topicName, it.numPartitions, getDefaultReplicationFactor(adminClient, environment))
                             .configs(it.configEntries)
-                    })?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                    })?.all()?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
             } catch (e: Exception) {
                 log.error("Exception caught while creating topic(s), request: {} $logFormat", logKeys, e)
                 call.respond(
@@ -259,7 +259,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                 .flatMap { (topic, groupType) -> groupType.intoAcls(topic) }
 
             try {
-                adminClient?.createAcls(acl)?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                adminClient?.createAcls(acl)?.all()?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
                 log.info("Successfully updated acl for topic(s) - {} $logFormat", acl, logKeys)
                 call.respond(OneshotResponse(
                     status = OneshotStatus.OK,

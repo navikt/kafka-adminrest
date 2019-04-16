@@ -9,7 +9,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
-import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.BasicAuthSecurity
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.badRequest
@@ -23,10 +23,10 @@ import no.nav.integrasjon.api.nielsfalk.ktor.swagger.unAuthorized
 import no.nav.integrasjon.ldap.GroupMemberOperation
 import no.nav.integrasjon.ldap.LDAPGroup
 
-fun Routing.apigwAPI(fasitConfig: FasitProperties) {
+fun Routing.apigwAPI(environment: Environment) {
 
-    getAllowedUsersInApiGwGroup(fasitConfig)
-    updateApiGwGroup(fasitConfig)
+    getAllowedUsersInApiGwGroup(environment)
+    updateApiGwGroup(environment)
 }
 
 private const val swGroup = "Api-gateway"
@@ -38,12 +38,12 @@ class GetApiGatewayGroup
 
 data class GetApiGwGroupMembersModel(val name: String, val members: List<String>)
 
-fun Routing.getAllowedUsersInApiGwGroup(fasitConfig: FasitProperties) =
+fun Routing.getAllowedUsersInApiGwGroup(environment: Environment) =
     get<GetApiGatewayGroup>("all members in $apiGw group".responds(
         ok<GetApiGwGroupMembersModel>(),
         serviceUnavailable<AnError>())
     ) {
-        respondOrServiceUnavailable(fasitConfig) { lc ->
+        respondOrServiceUnavailable(environment) { lc ->
             GetApiGwGroupMembersModel(apiGw, lc.getGroupMembers(apiGw))
         }
     }
@@ -75,7 +75,7 @@ data class PutApiGwResultModel(
     val result: ApiGwRequest
 )
 
-fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
+fun Routing.updateApiGwGroup(environment: Environment) =
     put<PutApiGatewayMember, ApiGwRequest>(
         "add/remove members in apigw group. Request add/removal on Slack in #kafka".securityAndReponds(
             BasicAuthSecurity(),
@@ -98,7 +98,7 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             return@put
         }
 
-        LDAPGroup(fasitConfig).use { ldap ->
+        LDAPGroup(environment).use { ldap ->
             // Group do not exist, in environment
             val groups = ldap.getKafkaGroups()
             if (!groups.contains(apiGw)) {

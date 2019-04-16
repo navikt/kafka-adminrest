@@ -15,6 +15,7 @@ import io.ktor.features.DefaultHeaders
 import io.ktor.features.StatusPages
 import io.ktor.gson.gson
 import io.ktor.http.HttpStatusCode
+import io.ktor.locations.KtorExperimentalLocationsAPI
 import io.ktor.locations.Locations
 import io.ktor.request.path
 import io.ktor.response.respond
@@ -68,27 +69,27 @@ internal const val JAAS_PLAIN_LOGIN = "org.apache.kafka.common.security.plain.Pl
 internal const val JAAS_REQUIRED = "required"
 internal const val SWAGGER_URL_V1 = "$API_V1/apidocs/index.html?url=swagger.json"
 
-fun Application.kafkaAdminREST() {
+@KtorExperimentalLocationsAPI
+fun Application.kafkaAdminREST(environment: Environment) {
 
     val log = KotlinLogging.logger { }
 
     log.info { "Starting server" }
 
-    val fasitProps = FasitPropFactory.fasitProperties
     val adminClient: AdminClient? = try {
-        fasitProps.let { fp ->
+        environment.let { env ->
 
             log.info { "Creating kafka admin client" }
 
             AdminClient.create(Properties()
                     .apply {
-                        set(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, fp.kafkaBrokers)
-                        set(ConsumerConfig.CLIENT_ID_CONFIG, fp.kafkaClientID)
-                        if (fp.kafkaSecurityEnabled()) {
-                            set(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, fp.kafkaSecProt)
-                            set(SaslConfigs.SASL_MECHANISM, fp.kafkaSaslMec)
+                        set(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, env.kafka.kafkaBrokers)
+                        set(ConsumerConfig.CLIENT_ID_CONFIG, env.kafka.kafkaClientID)
+                        if (env.kafka.securityEnabled()) {
+                            set(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, env.kafka.kafkaSecProt)
+                            set(SaslConfigs.SASL_MECHANISM, env.kafka.kafkaSaslMec)
                             set(SaslConfigs.SASL_JAAS_CONFIG, "$JAAS_PLAIN_LOGIN $JAAS_REQUIRED " +
-                                    "username=\"${fp.kafkaUser}\" password=\"${fp.kafkaPassword}\";")
+                                    "username=\"${env.kafka.kafkaUser}\" password=\"${env.kafka.kafkaPassword}\";")
                         }
                     })
         }
@@ -108,7 +109,7 @@ fun Application.kafkaAdminREST() {
     // install(XForwardedHeadersSupport) - is this needed, and supported in reverse proxy in matter?
     install(StatusPages) {
         exception<Throwable> { cause ->
-            environment.log.error(cause)
+            log.error(cause)
             call.respond(HttpStatusCode.InternalServerError)
         }
     }
@@ -116,7 +117,7 @@ fun Application.kafkaAdminREST() {
         basic(name = AUTHENTICATION_BASIC) {
             realm = "kafka-adminrest"
             validate { credentials ->
-                LDAPAuthenticate(fasitProps).use { ldap ->
+                LDAPAuthenticate(environment).use { ldap ->
                     if (ldap.canUserAuthenticate(credentials.name, credentials.password))
                         UserIdPrincipal(credentials.name)
                     else
@@ -147,16 +148,16 @@ fun Application.kafkaAdminREST() {
         }
 
         // support classic nais requirements
-        naisAPI(adminClient, fasitProps, collectorRegistry)
+        naisAPI(adminClient, environment, collectorRegistry)
 
         // provide the essential, management of kafka environment, topic creation and authorization
 
-        streamsAPI(adminClient, fasitProps)
-        registerOneshotApi(adminClient, fasitProps)
-        topicsAPI(adminClient, fasitProps)
-        brokersAPI(adminClient, fasitProps)
-        aclAPI(adminClient, fasitProps)
-        groupsAPI(fasitProps)
-        apigwAPI(fasitProps)
+        streamsAPI(adminClient, environment)
+        registerOneshotApi(adminClient, environment)
+        topicsAPI(adminClient, environment)
+        brokersAPI(adminClient, environment)
+        aclAPI(adminClient, environment)
+        groupsAPI(environment)
+        apigwAPI(environment)
     }
 }

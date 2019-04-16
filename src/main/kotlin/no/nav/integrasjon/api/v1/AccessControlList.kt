@@ -4,7 +4,7 @@ import io.ktor.application.application
 import io.ktor.auth.authentication
 import io.ktor.locations.Location
 import io.ktor.routing.Routing
-import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.BasicAuthSecurity
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
@@ -25,9 +25,9 @@ import java.util.concurrent.TimeUnit
  */
 
 // a wrapper for this api to be installed as routes
-fun Routing.aclAPI(adminClient: AdminClient?, fasitConfig: FasitProperties) {
+fun Routing.aclAPI(adminClient: AdminClient?, environment: Environment) {
 
-    getACLS(adminClient, fasitConfig)
+    getACLS(adminClient, environment)
 }
 
 private const val swGroup = "Access Control Lists"
@@ -42,7 +42,7 @@ class XGetACL
 
 data class XGetACLModel(val acls: List<AclBinding>)
 
-fun Routing.getACLS(adminClient: AdminClient?, fasitConfig: FasitProperties) =
+fun Routing.getACLS(adminClient: AdminClient?, environment: Environment) =
         get<XGetACL>("all access control lists".securityAndReponds(
                 BasicAuthSecurity(),
                 ok<XGetACLModel>(),
@@ -55,7 +55,7 @@ fun Routing.getACLS(adminClient: AdminClient?, fasitConfig: FasitProperties) =
                 val acls = adminClient
                         ?.describeAcls(AclBindingFilter.ANY)
                         ?.values()
-                        ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                        ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
                         ?.toList()
                         ?: throw Exception(SERVICES_ERR_K)
 

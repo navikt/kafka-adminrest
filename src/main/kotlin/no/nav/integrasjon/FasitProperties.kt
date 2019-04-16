@@ -1,7 +1,5 @@
 package no.nav.integrasjon
 
-import no.nav.integrasjon.ldap.LDAPBase
-
 /**
  * FasitPropFactory is a factory for fasit properties in order to separate test versus normal execution
  */
@@ -72,17 +70,17 @@ fun FasitProperties.ldapGroupInfoComplete(): Boolean =
 
 // Connection factory for which ldap in matter
 
-enum class LdapConnectionType { AUTHENTICATION, GROUP }
+// enum class LdapConnectionType { AUTHENTICATION, GROUP }
 
-fun FasitProperties.getConnectionInfo(connType: LdapConnectionType) =
-        when (connType) {
-            LdapConnectionType.AUTHENTICATION -> LDAPBase.Companion.ConnectionInfo(
-                    ldapAuthHost, ldapAuthPort, ldapConnTimeout
-            )
-            LdapConnectionType.GROUP -> LDAPBase.Companion.ConnectionInfo(
-                    ldapHost, ldapPort, ldapConnTimeout
-            )
-        }
+// fun FasitProperties.getConnectionInfo(connType: LdapConnectionType) =
+//        when (connType) {
+//            LdapConnectionType.AUTHENTICATION -> LDAPBase.Companion.ConnectionInfo(//
+//                    ldapAuthHost, ldapAuthPort, ldapConnTimeout
+//            )
+//            LdapConnectionType.GROUP -> LDAPBase.Companion.ConnectionInfo(
+//                    ldapHost, ldapPort, ldapConnTimeout
+//            )
+//        }
 
 // Return diverse distinguished name types
 

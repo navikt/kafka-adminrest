@@ -8,7 +8,7 @@ import io.ktor.routing.Routing
 import io.ktor.routing.get
 import io.prometheus.client.CollectorRegistry
 import io.prometheus.client.exporter.common.TextFormat
-import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.v1.NAIS_ISALIVE
 import no.nav.integrasjon.api.v1.NAIS_ISREADY
 import no.nav.integrasjon.api.v1.backEndServicesAreOk
@@ -24,21 +24,21 @@ import org.apache.kafka.clients.admin.AdminClient
  * - getPrometheus
  */
 
-internal const val SERVICES_ERR_GAK = "All services unavailable (ldap group and authentication, and kafka)"
+const val SERVICES_ERR_GAK = "All services unavailable (ldap group and authentication, and kafka)"
 internal const val SERVICES_ERR_GA = "ldap group and authentication are not available "
 internal const val SERVICES_ERR_GK = "ldap group and kafka are not available"
-internal const val SERVICES_ERR_G = "ldap group is not available"
+const val SERVICES_ERR_G = "ldap group is not available"
 internal const val SERVICES_ERR_AK = "ldap authentication and kafka are not available"
-internal const val SERVICES_ERR_A = "ldap authentication is not available"
-internal const val SERVICES_ERR_K = "kafka is not available"
+const val SERVICES_ERR_A = "ldap authentication is not available"
+const val SERVICES_ERR_K = "kafka is not available"
 internal const val SERVICES_ERR_STRANGE = "something strange - see function 'getIsReady in naisAPI'"
 internal const val SERVICES_OK = "is ready"
 
 // a wrapper for this api to be installed as routes
-fun Routing.naisAPI(adminClient: AdminClient?, config: FasitProperties, collectorRegistry: CollectorRegistry) {
+fun Routing.naisAPI(adminClient: AdminClient?, environment: Environment, collectorRegistry: CollectorRegistry) {
 
     getIsAlive()
-    getIsReady(adminClient, config)
+    getIsReady(adminClient, environment)
     getPrometheus(collectorRegistry)
 }
 
@@ -48,11 +48,11 @@ fun Routing.getIsAlive() =
             call.respondText("is alive", ContentType.Text.Plain)
         }
 
-fun Routing.getIsReady(adminClient: AdminClient?, config: FasitProperties) =
+fun Routing.getIsReady(adminClient: AdminClient?, environment: Environment) =
         get(NAIS_ISREADY) {
             respondOrServiceUnavailable {
 
-                val (ldapGroupIsOK, ldapAuthenIsOk, kafkaIsOk) = backEndServicesAreOk(adminClient, config)
+                val (ldapGroupIsOK, ldapAuthenIsOk, kafkaIsOk) = backEndServicesAreOk(adminClient, environment)
 
                 val msg = when {
                     !(ldapGroupIsOK || ldapAuthenIsOk || kafkaIsOk) -> SERVICES_ERR_GAK
