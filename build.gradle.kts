@@ -5,7 +5,6 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 group = "no.nav.integrasjon"
 version = "0.75-SNAPSHOT"
 
-
 val kotlinVersion = "1.3.21"
 val kotlinLogginVersion = "1.6.25"
 val ktorVersion = "1.1.3"
