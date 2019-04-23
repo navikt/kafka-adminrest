@@ -57,7 +57,6 @@ repositories {
 configurations.compileClasspath {
     exclude(group = "org.slf4j", module = "slf4j-log4j12")
 }
-// configurations.compileClasspath.exclude(group = "org.slf4j", module = "slf4j-log4j12")
 
 dependencies {
     compile(kotlin("stdlib"))
