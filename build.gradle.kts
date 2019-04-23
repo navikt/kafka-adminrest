@@ -31,20 +31,13 @@ val kluentVersion = "1.49"
 
 val konfigVersion = "1.6.10.0"
 
-val mainClass = "no.nav.integrasjon.MainKt"
-
 plugins {
-    application
     java
     kotlin("jvm") version "1.3.21"
     id("org.jmailen.kotlinter") version "1.22.0"
     id("maven-publish")
     id("com.github.ben-manes.versions") version "0.21.0"
     id("com.github.johnrengelman.shadow") version "5.0.0"
-}
-
-application {
-    mainClassName = mainClass
 }
 
 repositories {
@@ -100,6 +93,9 @@ val generatedSourcesDir = "$buildDir/generated-sources"
 tasks {
     create("printVersion") {
         println(project.version)
+    }
+    withType <Jar>{
+        manifest.attributes["Main-Class"] = "no.nav.integrasjon.MainKt"
     }
     withType<ShadowJar> {
         transform(ServiceFileTransformer::class.java) {
