@@ -102,7 +102,6 @@ tasks {
         println(project.version)
     }
     withType<ShadowJar> {
-        classifier = ""
         transform(ServiceFileTransformer::class.java) {
             setPath("META-INF/cxf")
             include("bus-extensions.txt")
@@ -112,7 +111,7 @@ tasks {
         useJUnitPlatform {
             includeEngines("spek2")
         }
-        testLogging.events("passed", "skipped", "failed")
+        testLogging.showStandardStreams = true
     }
     withType<Wrapper> {
         gradleVersion = "5.3"
