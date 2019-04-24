@@ -110,7 +110,7 @@ tasks {
         testLogging.showStandardStreams = true
     }
     withType<Wrapper> {
-        gradleVersion = "5.3"
+        gradleVersion = "5.4"
         distributionType = Wrapper.DistributionType.BIN
     }
     withType<KotlinCompile> {
