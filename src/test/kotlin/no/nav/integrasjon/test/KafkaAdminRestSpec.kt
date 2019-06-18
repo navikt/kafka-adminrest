@@ -807,21 +807,24 @@ object KafkaAdminRestSpec : Spek({
                         val call = handleRequest(HttpMethod.Put, ONESHOT) {
                             addHeader(HttpHeaders.Accept, "application/json")
                             addHeader(HttpHeaders.ContentType, "application/json")
-                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("igroup:itest".toByteArray())}")
+                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000001:itest1".toByteArray())}")
                             setBody(Gson().toJson(OneshotCreationRequest(
-                                topics = listOf(
-                                    TopicCreation(
-                                        topicName = "integrationTestNoUpdate",
-                                        members = listOf(
-                                            RoleMember("srvp02", KafkaGroupType.CONSUMER),
-                                            RoleMember("igroup", KafkaGroupType.MANAGER),
-                                            RoleMember("igroup", KafkaGroupType.PRODUCER),
-                                            RoleMember("igroup", KafkaGroupType.PRODUCER),
-                                            RoleMember("igroup", KafkaGroupType.CONSUMER),
-                                            RoleMember("igroup", KafkaGroupType.CONSUMER)),
-                                        configEntries = mapOf(),
-                                        numPartitions = 3
-                                    )))))
+                                    topics = listOf(
+                                            TopicCreation(
+                                                    topicName = "integrationTestNoUpdate",
+                                                    members = listOf(
+                                                            RoleMember("srvp02", KafkaGroupType.CONSUMER),
+                                                            RoleMember("N000001", KafkaGroupType.MANAGER),
+                                                            RoleMember("n000001", KafkaGroupType.MANAGER),
+                                                            RoleMember("igroup", KafkaGroupType.MANAGER),
+                                                            RoleMember("igroup", KafkaGroupType.MANAGER),
+                                                            RoleMember("igroup", KafkaGroupType.PRODUCER),
+                                                            RoleMember("igroup", KafkaGroupType.PRODUCER),
+                                                            RoleMember("igroup", KafkaGroupType.CONSUMER),
+                                                            RoleMember("igroup", KafkaGroupType.CONSUMER)),
+                                                    configEntries = mapOf(),
+                                                    numPartitions = 3
+                                            )))))
                         }
                         call.response.status() shouldBe HttpStatusCode.OK
                     }
@@ -838,7 +841,7 @@ object KafkaAdminRestSpec : Spek({
 
                         call.response.status() shouldBe HttpStatusCode.OK
                         result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
-                        result.groups.flatMap { it.members }.size shouldEqualTo 4
+                        result.groups.flatMap { it.members }.size shouldEqualTo 5
                     }
                 }
 

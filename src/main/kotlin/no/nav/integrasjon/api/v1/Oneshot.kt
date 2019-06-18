@@ -74,7 +74,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                 serviceUnavailable<OneshotResponse>(),
                 unAuthorized<OneshotResponse>())) { _, request ->
 
-        val currentUser = call.principal<UserIdPrincipal>()!!.name
+        val currentUser = call.principal<UserIdPrincipal>()!!.name.toLowerCase()
 
         val uuid = UUID.randomUUID().toString()
 
@@ -181,6 +181,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
             val requestedGroupMembers = request.topics.flatMap { topic ->
                 topic.members
                     .map { GroupMember(toGroupName(it.role.prefix, topic.topicName), it.member) }
+                    .filterNot { requestGroupMember -> requestGroupMember.group.contains(KafkaGroupType.MANAGER.prefix) && currentUser.equals(requestGroupMember.user, ignoreCase = true) }
                     .toMutableSet().apply {
                         val groupName = toGroupName(KafkaGroupType.MANAGER.prefix, topic.topicName)
                         add(GroupMember(groupName, currentUser))
