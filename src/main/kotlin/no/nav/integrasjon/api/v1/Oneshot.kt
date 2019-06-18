@@ -187,8 +187,6 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                     }
             }
 
-            log.info("EEEEEEEEEEEEEE: $requestedGroupMembers")
-
             // Add those who are missing from the group
             log.debug("Creating diff for creating + adding to group$logFormat", *logKeys)
             val groupAddDiff = requestedGroupMembers
