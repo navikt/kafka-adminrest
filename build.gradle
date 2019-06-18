@@ -12,7 +12,7 @@ buildscript {
     ext.logback_version = '1.2.3'
     ext.log4j_version = '1.7.25'
     ext.swagger_version = '3.1.7'
-    ext.spek_version = '2.0.0-rc.1'
+    ext.spek_version = '2.0.0'
     ext.kluent_version = '1.39'
 }
 
