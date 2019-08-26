@@ -5,6 +5,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
+import java.util.concurrent.TimeUnit
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.BasicAuthSecurity
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
@@ -22,7 +23,6 @@ import org.apache.kafka.common.acl.AclPermissionType
 import org.apache.kafka.common.resource.PatternType
 import org.apache.kafka.common.resource.ResourcePattern
 import org.apache.kafka.common.resource.ResourceType
-import java.util.concurrent.TimeUnit
 
 private const val swGroup = "Streams"
 

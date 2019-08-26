@@ -1,7 +1,5 @@
 package no.nav.integrasjon.api.v1
 
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import com.unboundid.ldap.sdk.ResultCode
 import io.ktor.application.ApplicationCall
 import io.ktor.application.application
@@ -14,6 +12,8 @@ import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
 import io.ktor.util.pipeline.PipelineContext
+import java.util.concurrent.TimeUnit
+import java.util.regex.Pattern
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_G
@@ -47,8 +47,6 @@ import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.PatternType
 import org.apache.kafka.common.resource.ResourcePatternFilter
 import org.apache.kafka.common.resource.ResourceType
-import java.util.concurrent.TimeUnit
-import java.util.regex.Pattern
 
 /**
  * Topic API
@@ -522,7 +520,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, fasitConfig: FasitPrope
         }
 
         val configEntry = try {
-            body.entries.map{ it
+            body.entries.map { it
                 ConfigEntry(it.configentry.entryName, it.value)
             }
         } catch (e: Exception) {

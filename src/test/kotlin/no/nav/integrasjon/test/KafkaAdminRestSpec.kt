@@ -12,6 +12,8 @@ import io.ktor.server.testing.handleRequest
 import io.ktor.server.testing.setBody
 import io.ktor.util.InternalAPI
 import io.ktor.util.encodeBase64
+import java.util.Base64
+import java.util.concurrent.TimeUnit
 import no.nav.common.KafkaEnvironment
 import no.nav.integrasjon.FasitPropFactory
 import no.nav.integrasjon.FasitProperties
@@ -65,11 +67,8 @@ import org.amshove.kluent.shouldContain
 import org.amshove.kluent.shouldContainAll
 import org.amshove.kluent.shouldEqual
 import org.amshove.kluent.shouldEqualTo
-import org.apache.kafka.clients.admin.ConfigEntry
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
-import java.util.Base64
-import java.util.concurrent.TimeUnit
 
 @InternalAPI
 object KafkaAdminRestSpec : Spek({
