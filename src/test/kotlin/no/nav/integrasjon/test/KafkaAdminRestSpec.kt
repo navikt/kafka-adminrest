@@ -10,6 +10,8 @@ import io.ktor.server.testing.TestApplicationEngine
 import io.ktor.server.testing.createTestEnvironment
 import io.ktor.server.testing.handleRequest
 import io.ktor.server.testing.setBody
+import io.ktor.util.InternalAPI
+import io.ktor.util.encodeBase64
 import no.nav.common.KafkaEnvironment
 import no.nav.integrasjon.FasitPropFactory
 import no.nav.integrasjon.FasitProperties
@@ -24,6 +26,7 @@ import no.nav.integrasjon.api.v1.AnError
 import no.nav.integrasjon.api.v1.ApiGwGroupMember
 import no.nav.integrasjon.api.v1.ApiGwRequest
 import no.nav.integrasjon.api.v1.BROKERS
+import no.nav.integrasjon.api.v1.ConfigEntries
 import no.nav.integrasjon.api.v1.DeleteTopicModel
 import no.nav.integrasjon.api.v1.GROUPS
 import no.nav.integrasjon.api.v1.GetApiGwGroupMembersModel
@@ -68,6 +71,7 @@ import org.spekframework.spek2.style.specification.describe
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 
+@InternalAPI
 object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
@@ -532,7 +536,7 @@ object KafkaAdminRestSpec : Spek({
                             call.response.status() shouldBe HttpStatusCode.BadRequest
                         }
 
-                        it("should update 'retention.ms' configuration for tpc-03") {
+                        it("should update 'retention.ms' and 'cleanup.policy' configuration for tpc-03") {
 
                             val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
                                 addHeader(HttpHeaders.Accept, "application/json")
@@ -543,14 +547,18 @@ object KafkaAdminRestSpec : Spek({
                                     "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
 
                                 val jsonPayload = Gson().toJson(
-                                    PutTopicConfigEntryBody(AllowedConfigEntries.RETENTION_BYTES, "6600666"))
+                                    ConfigEntries(listOf(
+                                        PutTopicConfigEntryBody(AllowedConfigEntries.RETENTION_MS, "6600666"),
+                                        PutTopicConfigEntryBody(AllowedConfigEntries.CLEANUP_POLICY, "delete")
+                                    ))
+                                )
                                 setBody(jsonPayload)
                             }
 
                             call.response.status() shouldBe HttpStatusCode.OK
                         }
 
-                        it("should return updated 'retention.ms' configuration for tpc-03") {
+                        it("should return updated 'retention.ms' and 'cleanup.policy' configuration for tpc-03") {
 
                             val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03") {
                                 addHeader(HttpHeaders.Accept, "application/json")
@@ -562,6 +570,7 @@ object KafkaAdminRestSpec : Spek({
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.config.find { it.name() == "retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
+                            result.config.find { it.name() == "cleanup.policy" }?.value() ?: "" shouldBeEqualTo "delete"
                         }
 
                         it("should update 'delete.retention.ms' configuration for tpc-03") {
@@ -575,7 +584,7 @@ object KafkaAdminRestSpec : Spek({
                                     "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
 
                                 val jsonPayload = Gson().toJson(
-                                    PutTopicConfigEntryBody(AllowedConfigEntries.DELETE_RETENTION_MS, "6600666"))
+                                    ConfigEntries(listOf(PutTopicConfigEntryBody(AllowedConfigEntries.DELETE_RETENTION_MS, "6600666"))))
                                 setBody(jsonPayload)
                             }
 
@@ -594,25 +603,6 @@ object KafkaAdminRestSpec : Spek({
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.config.find { it.name() == "delete.retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
-                        }
-
-                        it("should report bad request when trying to update config outside white list for tpc-03 ") {
-
-                            val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
-                                addHeader(HttpHeaders.Accept, "application/json")
-                                addHeader(HttpHeaders.ContentType, "application/json")
-                                // relevant user is in the right place in UserAndGroups.ldif
-                                addHeader(
-                                    HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("N145821:itest3".toByteArray())}")
-
-                                val jsonPayload = Gson().toJson(
-                                    ConfigEntry("max.message.bytes", "51000012")
-                                )
-                                setBody(jsonPayload)
-                            }
-
-                            call.response.status() shouldBe HttpStatusCode.BadRequest
                         }
                     }
 

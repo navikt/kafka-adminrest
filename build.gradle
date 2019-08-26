@@ -4,7 +4,7 @@ buildscript {
     ext.embeddedkafka_version = '2.0.1'
     ext.coroutines_version = '0.22.5'
     ext.kotlin_loggin_version = '1.6.10'
-    ext.ktor_version = '1.0.0'
+    ext.ktor_version = '1.2.3'
     ext.prometheus_version = '0.5.0'
     ext.logstash_encoder_version = '5.2'
     ext.jackson_datatype_version = '2.9.7'
@@ -17,7 +17,7 @@ buildscript {
 }
 
 plugins{
-    id "org.jetbrains.kotlin.jvm" version "1.3.10"
+    id "org.jetbrains.kotlin.jvm" version "1.3.50"
     id 'org.jmailen.kotlinter' version '1.15.0'
     id 'maven-publish'
     id 'com.github.ben-manes.versions' version '0.20.0'
