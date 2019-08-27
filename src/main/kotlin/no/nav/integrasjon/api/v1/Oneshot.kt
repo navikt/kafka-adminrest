@@ -8,6 +8,8 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 import net.logstash.logback.argument.StructuredArguments.keyValue
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
@@ -30,8 +32,6 @@ import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.common.config.ConfigResource
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 val log: Logger = LoggerFactory.getLogger("kafka-adminrest.oneshot.v1")
 

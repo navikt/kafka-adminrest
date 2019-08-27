@@ -15,12 +15,12 @@ import io.ktor.locations.delete
 import io.ktor.locations.get
 import io.ktor.locations.post
 import io.ktor.locations.put
-import io.ktor.util.pipeline.PipelineContext
 import io.ktor.request.receive
 import io.ktor.routing.Route
+import io.ktor.util.pipeline.PipelineContext
+import kotlin.reflect.KClass
 import no.nav.integrasjon.AUTHENTICATION_BASIC
 import no.nav.integrasjon.swagger
-import kotlin.reflect.KClass
 
 /**
  * @author Niels Falk, changed by Torstein Nesby

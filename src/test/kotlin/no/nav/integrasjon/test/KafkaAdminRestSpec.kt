@@ -10,6 +10,8 @@ import io.ktor.server.testing.TestApplicationEngine
 import io.ktor.server.testing.createTestEnvironment
 import io.ktor.server.testing.handleRequest
 import io.ktor.server.testing.setBody
+import java.util.Base64
+import java.util.concurrent.TimeUnit
 import no.nav.common.KafkaEnvironment
 import no.nav.integrasjon.FasitPropFactory
 import no.nav.integrasjon.FasitProperties
@@ -24,6 +26,7 @@ import no.nav.integrasjon.api.v1.AnError
 import no.nav.integrasjon.api.v1.ApiGwGroupMember
 import no.nav.integrasjon.api.v1.ApiGwRequest
 import no.nav.integrasjon.api.v1.BROKERS
+import no.nav.integrasjon.api.v1.ConfigEntries
 import no.nav.integrasjon.api.v1.DeleteTopicModel
 import no.nav.integrasjon.api.v1.GROUPS
 import no.nav.integrasjon.api.v1.GetApiGwGroupMembersModel
@@ -62,11 +65,8 @@ import org.amshove.kluent.shouldContain
 import org.amshove.kluent.shouldContainAll
 import org.amshove.kluent.shouldEqual
 import org.amshove.kluent.shouldEqualTo
-import org.apache.kafka.clients.admin.ConfigEntry
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
-import java.util.Base64
-import java.util.concurrent.TimeUnit
 
 object KafkaAdminRestSpec : Spek({
 
@@ -74,7 +74,7 @@ object KafkaAdminRestSpec : Spek({
     val preTopics = setOf("tpc-01", "tpc-02", "tpc-03")
 
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
-    val kCluster = KafkaEnvironment(1, topics = preTopics.toList(), withSecurity = true, autoStart = true)
+    val kCluster = KafkaEnvironment(1, topicNames = preTopics.toList(), withSecurity = true, autoStart = true)
 
     val correctFP = FasitProperties(
         kCluster.brokersURL, "kafka-adminrest", "TRUE",
@@ -165,7 +165,8 @@ object KafkaAdminRestSpec : Spek({
                     TOPICS,
                     body = Gson().toJson(PostTopicBody("tpc-alldown")),
                     security = true,
-                    response = HttpStatusCode.Unauthorized),
+                    response = HttpStatusCode.Unauthorized
+                ),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.ServiceUnavailable),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.ServiceUnavailable)
@@ -183,7 +184,8 @@ object KafkaAdminRestSpec : Spek({
                     TOPICS,
                     body = Gson().toJson(PostTopicBody("tpc-alldown")),
                     security = true,
-                    response = HttpStatusCode.ServiceUnavailable),
+                    response = HttpStatusCode.ServiceUnavailable
+                ),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.ServiceUnavailable),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.ServiceUnavailable),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.OK)
@@ -201,7 +203,8 @@ object KafkaAdminRestSpec : Spek({
                     TOPICS,
                     body = Gson().toJson(PostTopicBody("tpc-alldown")),
                     security = true,
-                    response = HttpStatusCode.ServiceUnavailable),
+                    response = HttpStatusCode.ServiceUnavailable
+                ),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.OK),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.OK),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.ServiceUnavailable)
@@ -219,7 +222,8 @@ object KafkaAdminRestSpec : Spek({
                     TOPICS,
                     body = Gson().toJson(PostTopicBody("tpc-alldown")),
                     security = true,
-                    response = HttpStatusCode.Unauthorized),
+                    response = HttpStatusCode.Unauthorized
+                ),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02", response = HttpStatusCode.OK),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02/acls", response = HttpStatusCode.OK),
                 Scenario(HttpMethod.Get, "$TOPICS/tpc-02/groups", response = HttpStatusCode.OK)
@@ -285,7 +289,8 @@ object KafkaAdminRestSpec : Spek({
 
                                 val result: AnError = Gson().fromJson(
                                     call.response.content ?: "",
-                                    object : TypeToken<AnError>() {}.type)
+                                    object : TypeToken<AnError>() {}.type
+                                )
 
                                 call.response.status() shouldBe HttpStatusCode.ServiceUnavailable
                                 result.error shouldBeEqualTo srvDown.error
@@ -360,15 +365,17 @@ object KafkaAdminRestSpec : Spek({
                             val call = handleRequest(HttpMethod.Post, "$STREAMS/") {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n000002:itest2".toByteArray())}"
+                                )
                                 setBody(Gson().toJson(PostStreamBody("team1-streams-app1", "team1")))
                             }
 
-                            println(call.response.content)
-
                             val result: PostStreamResponse = Gson().fromJson(
-                                    call.response.content ?: "",
-                                    object : TypeToken<PostStreamResponse>() {}.type)
+                                call.response.content ?: "",
+                                object : TypeToken<PostStreamResponse>() {}.type
+                            )
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.status shouldBe PostStreamStatus.OK
@@ -386,7 +393,8 @@ object KafkaAdminRestSpec : Spek({
 
                         val result: GetBrokersModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<GetBrokersModel>() {}.type)
+                            object : TypeToken<GetBrokersModel>() {}.type
+                        )
 
                         call.response.status() shouldBe HttpStatusCode.OK
                         result.brokers.size shouldEqualTo kCluster.brokers.size
@@ -400,7 +408,8 @@ object KafkaAdminRestSpec : Spek({
 
                         val result: GetBrokerConfigModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<GetBrokerConfigModel>() {}.type)
+                            object : TypeToken<GetBrokerConfigModel>() {}.type
+                        )
 
                         call.response.status() shouldBe HttpStatusCode.OK
                         result.id shouldBeEqualTo "0"
@@ -417,10 +426,18 @@ object KafkaAdminRestSpec : Spek({
 
                         val result: GetGroupsModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<GetGroupsModel>() {}.type)
+                            object : TypeToken<GetGroupsModel>() {}.type
+                        )
 
                         call.response.status() shouldBe HttpStatusCode.OK
-                        result.groups shouldContainAll listOf("KC-tpc-01", "KC-tpc-02", "KC-tpc-03", "KP-tpc-01", "KP-tpc-02", "KP-tpc-03")
+                        result.groups shouldContainAll listOf(
+                            "KC-tpc-01",
+                            "KC-tpc-02",
+                            "KC-tpc-03",
+                            "KP-tpc-01",
+                            "KP-tpc-02",
+                            "KP-tpc-03"
+                        )
                     }
 
                     val groups = mapOf(
@@ -429,7 +446,7 @@ object KafkaAdminRestSpec : Spek({
                         "KP-tpc-03" to listOf("uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local")
                     )
 
-                    groups.forEach { group, members ->
+                    groups.forEach { (group, members) ->
                         it("should return $members for group $group") {
 
                             val call = handleRequest(HttpMethod.Get, "$GROUPS/$group") {
@@ -438,7 +455,8 @@ object KafkaAdminRestSpec : Spek({
 
                             val result: GetGroupMembersModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<GetGroupMembersModel>() {}.type)
+                                object : TypeToken<GetGroupMembersModel>() {}.type
+                            )
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.members shouldContainAll members
@@ -457,23 +475,31 @@ object KafkaAdminRestSpec : Spek({
                                 val call = handleRequest(HttpMethod.Post, TOPICS) {
                                     addHeader(HttpHeaders.Accept, "application/json")
                                     addHeader(HttpHeaders.ContentType, "application/json")
-                                    addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                    addHeader(
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}"
+                                    )
                                     setBody(Gson().toJson(PostTopicBody(topicToCreate)))
                                 }
 
                                 val result: PostTopicModel = Gson().fromJson(
                                     call.response.content ?: "",
-                                    object : TypeToken<PostTopicModel>() {}.type)
+                                    object : TypeToken<PostTopicModel>() {}.type
+                                )
 
                                 call.response.status() shouldBe HttpStatusCode.OK
 
                                 result.topicStatus shouldContain "created topic"
-                                result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
+                                result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf(
+                                    "success",
+                                    "success",
+                                    "success"
+                                )
                                 result.aclStatus shouldContain "created"
                             }
                         }
 
-                        invalidTopics.forEach { topicName, numPartitions ->
+                        invalidTopics.forEach { (topicName, numPartitions) ->
                             it("should report bad request when creating topic $topicName") {
 
                                 val call = handleRequest(HttpMethod.Post, TOPICS) {
@@ -482,7 +508,8 @@ object KafkaAdminRestSpec : Spek({
                                     // relevant user is in the right place in UserAndGroups.ldif
                                     addHeader(
                                         HttpHeaders.Authorization,
-                                        "Basic ${encodeBase64("srvp01:dummy".toByteArray())}")
+                                        "Basic ${encodeBase64("srvp01:dummy".toByteArray())}"
+                                    )
 
                                     val jsonPayload = Gson().toJson(PostTopicBody(topicName, numPartitions))
                                     setBody(jsonPayload)
@@ -503,7 +530,8 @@ object KafkaAdminRestSpec : Spek({
 
                             val result: GetTopicsModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<GetTopicsModel>() {}.type)
+                                object : TypeToken<GetTopicsModel>() {}.type
+                            )
 
                             call.response.status() shouldBe HttpStatusCode.OK
                             result.topics shouldContainAll preTopics
@@ -532,7 +560,7 @@ object KafkaAdminRestSpec : Spek({
                             call.response.status() shouldBe HttpStatusCode.BadRequest
                         }
 
-                        it("should update 'retention.ms' configuration for tpc-03") {
+                        it("should update 'retention.ms' and 'cleanup.policy' configuration for tpc-03") {
 
                             val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
                                 addHeader(HttpHeaders.Accept, "application/json")
@@ -540,17 +568,24 @@ object KafkaAdminRestSpec : Spek({
                                 // relevant user is in the right place in UserAndGroups.ldif
                                 addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
+                                    "Basic ${encodeBase64("n145821:itest3".toByteArray())}"
+                                )
 
                                 val jsonPayload = Gson().toJson(
-                                    PutTopicConfigEntryBody(AllowedConfigEntries.RETENTION_BYTES, "6600666"))
+                                    ConfigEntries(
+                                        listOf(
+                                            PutTopicConfigEntryBody(AllowedConfigEntries.RETENTION_MS, "6600666"),
+                                            PutTopicConfigEntryBody(AllowedConfigEntries.CLEANUP_POLICY, "delete")
+                                        )
+                                    )
+                                )
                                 setBody(jsonPayload)
                             }
 
                             call.response.status() shouldBe HttpStatusCode.OK
                         }
 
-                        it("should return updated 'retention.ms' configuration for tpc-03") {
+                        it("should return updated 'retention.ms' and 'cleanup.policy' configuration for tpc-03") {
 
                             val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03") {
                                 addHeader(HttpHeaders.Accept, "application/json")
@@ -558,42 +593,82 @@ object KafkaAdminRestSpec : Spek({
 
                             val result: GetTopicConfigModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<GetTopicConfigModel>() {}.type)
+                                object : TypeToken<GetTopicConfigModel>() {}.type
+                            )
 
                             call.response.status() shouldBe HttpStatusCode.OK
-                            result.config.find { it.name() == "retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
+                            val retentionMsValue = result.config.find { it.name() == "retention.ms" }?.value() ?: ""
+                            retentionMsValue shouldBeEqualTo "6600666"
+                            val cleanupPolicyValue = result.config.find { it.name() == "cleanup.policy" }?.value() ?: ""
+                            cleanupPolicyValue shouldBeEqualTo "delete"
                         }
 
-                        it("should update 'delete.retention.ms' configuration for tpc-03") {
+                        context("updating another configuration after updating a configuration") {
+                            val updatedRetentionMsConfig = PutTopicConfigEntryBody(
+                                AllowedConfigEntries.RETENTION_MS,
+                                "12345678"
+                            )
+                            val updatedDeleteRetentionMsConfig = PutTopicConfigEntryBody(
+                                AllowedConfigEntries.DELETE_RETENTION_MS,
+                                "6600666"
+                            )
 
-                            val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
-                                addHeader(HttpHeaders.Accept, "application/json")
-                                addHeader(HttpHeaders.ContentType, "application/json")
-                                // relevant user is in the right place in UserAndGroups.ldif
-                                addHeader(
-                                    HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
+                            it("should update 'retention.ms' configuration for tpc-03") {
+                                val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                    addHeader(HttpHeaders.ContentType, "application/json")
+                                    // relevant user is in the right place in UserAndGroups.ldif
+                                    addHeader(
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("n145821:itest3".toByteArray())}"
+                                    )
 
-                                val jsonPayload = Gson().toJson(
-                                    PutTopicConfigEntryBody(AllowedConfigEntries.DELETE_RETENTION_MS, "6600666"))
-                                setBody(jsonPayload)
+                                    val jsonPayload = Gson().toJson(ConfigEntries(listOf(updatedRetentionMsConfig)))
+                                    setBody(jsonPayload)
+                                }
+                                call.response.status() shouldBe HttpStatusCode.OK
                             }
 
-                            call.response.status() shouldBe HttpStatusCode.OK
-                        }
+                            it("should update 'delete.retention.ms' configuration for tpc-03") {
+                                val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                    addHeader(HttpHeaders.ContentType, "application/json")
+                                    // relevant user is in the right place in UserAndGroups.ldif
+                                    addHeader(
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("n145821:itest3".toByteArray())}"
+                                    )
 
-                        it("should return updated 'delete.retention.ms' configuration for tpc-03") {
-
-                            val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03") {
-                                addHeader(HttpHeaders.Accept, "application/json")
+                                    val jsonPayload = Gson().toJson(
+                                        ConfigEntries(listOf(updatedDeleteRetentionMsConfig))
+                                    )
+                                    setBody(jsonPayload)
+                                }
+                                call.response.status() shouldBe HttpStatusCode.OK
                             }
 
-                            val result: GetTopicConfigModel = Gson().fromJson(
-                                call.response.content ?: "",
-                                object : TypeToken<GetTopicConfigModel>() {}.type)
+                            it("should return updated 'delete.retention.ms' configuration for tpc-03 and should not have reset configurations for 'retention.ms'") {
+                                val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                }
 
-                            call.response.status() shouldBe HttpStatusCode.OK
-                            result.config.find { it.name() == "delete.retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
+                                val result: GetTopicConfigModel = Gson().fromJson(
+                                    call.response.content ?: "",
+                                    object : TypeToken<GetTopicConfigModel>() {}.type
+                                )
+                                call.response.status() shouldBe HttpStatusCode.OK
+                                val deleteRetentionMsValue = result.config
+                                    .find { it.name() == updatedDeleteRetentionMsConfig.configentry.entryName }
+                                    ?.value()
+                                    ?: ""
+                                deleteRetentionMsValue shouldBeEqualTo updatedDeleteRetentionMsConfig.value
+
+                                val retentionMsValue = result.config
+                                    .find { it.name() == updatedRetentionMsConfig.configentry.entryName }
+                                    ?.value()
+                                    ?: ""
+                                retentionMsValue shouldBeEqualTo updatedRetentionMsConfig.value
+                            }
                         }
 
                         it("should report bad request when trying to update config outside white list for tpc-03 ") {
@@ -604,11 +679,19 @@ object KafkaAdminRestSpec : Spek({
                                 // relevant user is in the right place in UserAndGroups.ldif
                                 addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("N145821:itest3".toByteArray())}")
-
-                                val jsonPayload = Gson().toJson(
-                                    ConfigEntry("max.message.bytes", "51000012")
+                                    "Basic ${encodeBase64("N145821:itest3".toByteArray())}"
                                 )
+
+                                val jsonPayload =
+                                    """{
+                                        "entries": [
+                                            {
+                                                "configentry": "max.message.bytes",
+                                                "value": 51000012
+                                            }
+                                        ]
+                                    }
+                                    """.trimIndent()
                                 setBody(jsonPayload)
                             }
 
@@ -622,7 +705,10 @@ object KafkaAdminRestSpec : Spek({
                             val call = handleRequest(HttpMethod.Delete, "$TOPICS/${topics2CreateDelete.first()}") {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("igroup:itest".toByteArray())}")
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("igroup:itest".toByteArray())}"
+                                )
                             }
 
                             call.response.status() shouldBe HttpStatusCode.BadRequest
@@ -635,17 +721,25 @@ object KafkaAdminRestSpec : Spek({
                                 val call = handleRequest(HttpMethod.Delete, "$TOPICS/$topicToDelete") {
                                     addHeader(HttpHeaders.Accept, "application/json")
                                     addHeader(HttpHeaders.ContentType, "application/json")
-                                    addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                    addHeader(
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}"
+                                    )
                                 }
 
                                 val result: DeleteTopicModel = Gson().fromJson(
                                     call.response.content ?: "",
-                                    object : TypeToken<DeleteTopicModel>() {}.type)
+                                    object : TypeToken<DeleteTopicModel>() {}.type
+                                )
 
                                 call.response.status() shouldBe HttpStatusCode.OK
 
                                 result.topicStatus shouldContain "deleted topic"
-                                result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf("success", "success", "success")
+                                result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf(
+                                    "success",
+                                    "success",
+                                    "success"
+                                )
                                 result.aclStatus shouldContain "deleted"
                             }
                         }
@@ -658,12 +752,16 @@ object KafkaAdminRestSpec : Spek({
                                 val call = handleRequest(HttpMethod.Get, "$TOPICS/$tpcACL/acls") {
                                     addHeader(HttpHeaders.Accept, "application/json")
                                     addHeader(HttpHeaders.ContentType, "application/json")
-                                    addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                    addHeader(
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}"
+                                    )
                                 }
 
                                 val result: GetTopicACLModel = Gson().fromJson(
                                     call.response.content ?: "",
-                                    object : TypeToken<GetTopicACLModel>() {}.type)
+                                    object : TypeToken<GetTopicACLModel>() {}.type
+                                )
 
                                 val expectedResult = KafkaGroupType.values()
                                     .filter { it != KafkaGroupType.MANAGER }
@@ -686,13 +784,18 @@ object KafkaAdminRestSpec : Spek({
 
                             val result: GetTopicGroupsModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<GetTopicGroupsModel>() {}.type)
+                                object : TypeToken<GetTopicGroupsModel>() {}.type
+                            )
 
                             call.response.status() shouldBe HttpStatusCode.OK
-                            result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
+                            result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(
+                                true,
+                                true,
+                                true
+                            )
                         }
 
-                        usersToManage.forEach { srvUser, role ->
+                        usersToManage.forEach { (srvUser, role) ->
                             it("should add a new ${role.name} $srvUser to topic tpc-01") {
 
                                 val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01/groups") {
@@ -701,7 +804,8 @@ object KafkaAdminRestSpec : Spek({
                                     // relevant user is in the right place in UserAndGroups.ldif
                                     addHeader(
                                         HttpHeaders.Authorization,
-                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}"
+                                    )
 
                                     val jsonPayload = Gson().toJson(
                                         UpdateKafkaGroupMember(
@@ -725,10 +829,15 @@ object KafkaAdminRestSpec : Spek({
 
                             val result: GetTopicGroupsModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<GetTopicGroupsModel>() {}.type)
+                                object : TypeToken<GetTopicGroupsModel>() {}.type
+                            )
 
                             call.response.status() shouldBe HttpStatusCode.OK
-                            result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
+                            result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(
+                                true,
+                                true,
+                                true
+                            )
                             result.groups.flatMap { it.members } shouldContainAll listOf(
                                 "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
                                 "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local",
@@ -745,7 +854,8 @@ object KafkaAdminRestSpec : Spek({
                                 // relevant user is in the right place in UserAndGroups.ldif
                                 addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                    "Basic ${encodeBase64("n000002:itest2".toByteArray())}"
+                                )
 
                                 val jsonPayload = Gson().toJson(
                                     UpdateKafkaGroupMember(
@@ -760,7 +870,7 @@ object KafkaAdminRestSpec : Spek({
                             call.response.status() shouldBe HttpStatusCode.ServiceUnavailable
                         }
 
-                        usersToManage.forEach { srvUser, role ->
+                        usersToManage.forEach { (srvUser, role) ->
                             it("should remove ${role.name} member $srvUser from topic tpc-01") {
 
                                 val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-01/groups") {
@@ -769,7 +879,8 @@ object KafkaAdminRestSpec : Spek({
                                     // relevant user is in the right place in UserAndGroups.ldif
                                     addHeader(
                                         HttpHeaders.Authorization,
-                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}")
+                                        "Basic ${encodeBase64("n000002:itest2".toByteArray())}"
+                                    )
 
                                     val jsonPayload = Gson().toJson(
                                         UpdateKafkaGroupMember(
@@ -793,10 +904,15 @@ object KafkaAdminRestSpec : Spek({
 
                             val result: GetTopicGroupsModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<GetTopicGroupsModel>() {}.type)
+                                object : TypeToken<GetTopicGroupsModel>() {}.type
+                            )
 
                             call.response.status() shouldBe HttpStatusCode.OK
-                            result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
+                            result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(
+                                true,
+                                true,
+                                true
+                            )
                             result.groups.flatMap { it.members }.size shouldEqualTo 1
                         }
                     }
@@ -807,24 +923,34 @@ object KafkaAdminRestSpec : Spek({
                         val call = handleRequest(HttpMethod.Put, ONESHOT) {
                             addHeader(HttpHeaders.Accept, "application/json")
                             addHeader(HttpHeaders.ContentType, "application/json")
-                            addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("n000001:itest1".toByteArray())}")
-                            setBody(Gson().toJson(OneshotCreationRequest(
-                                    topics = listOf(
+                            addHeader(
+                                HttpHeaders.Authorization,
+                                "Basic ${encodeBase64("n000001:itest1".toByteArray())}"
+                            )
+                            setBody(
+                                Gson().toJson(
+                                    OneshotCreationRequest(
+                                        topics = listOf(
                                             TopicCreation(
-                                                    topicName = "integrationTestNoUpdate",
-                                                    members = listOf(
-                                                            RoleMember("srvp02", KafkaGroupType.CONSUMER),
-                                                            RoleMember("N000001", KafkaGroupType.MANAGER),
-                                                            RoleMember("n000001", KafkaGroupType.MANAGER),
-                                                            RoleMember("igroup", KafkaGroupType.MANAGER),
-                                                            RoleMember("igroup", KafkaGroupType.MANAGER),
-                                                            RoleMember("igroup", KafkaGroupType.PRODUCER),
-                                                            RoleMember("igroup", KafkaGroupType.PRODUCER),
-                                                            RoleMember("igroup", KafkaGroupType.CONSUMER),
-                                                            RoleMember("igroup", KafkaGroupType.CONSUMER)),
-                                                    configEntries = mapOf(),
-                                                    numPartitions = 3
-                                            )))))
+                                                topicName = "integrationTestNoUpdate",
+                                                members = listOf(
+                                                    RoleMember("srvp02", KafkaGroupType.CONSUMER),
+                                                    RoleMember("N000001", KafkaGroupType.MANAGER),
+                                                    RoleMember("n000001", KafkaGroupType.MANAGER),
+                                                    RoleMember("igroup", KafkaGroupType.MANAGER),
+                                                    RoleMember("igroup", KafkaGroupType.MANAGER),
+                                                    RoleMember("igroup", KafkaGroupType.PRODUCER),
+                                                    RoleMember("igroup", KafkaGroupType.PRODUCER),
+                                                    RoleMember("igroup", KafkaGroupType.CONSUMER),
+                                                    RoleMember("igroup", KafkaGroupType.CONSUMER)
+                                                ),
+                                                configEntries = mapOf(),
+                                                numPartitions = 3
+                                            )
+                                        )
+                                    )
+                                )
+                            )
                         }
                         call.response.status() shouldBe HttpStatusCode.OK
                     }
@@ -837,10 +963,15 @@ object KafkaAdminRestSpec : Spek({
 
                         val result: GetTopicGroupsModel = Gson().fromJson(
                             call.response.content ?: "",
-                            object : TypeToken<GetTopicGroupsModel>() {}.type)
+                            object : TypeToken<GetTopicGroupsModel>() {}.type
+                        )
 
                         call.response.status() shouldBe HttpStatusCode.OK
-                        result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(true, true, true)
+                        result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(
+                            true,
+                            true,
+                            true
+                        )
                         result.groups.flatMap { it.members }.size shouldEqualTo 5
                     }
                 }
@@ -860,7 +991,8 @@ object KafkaAdminRestSpec : Spek({
                             val status = call.response.status()
                             val result: GetApiGwGroupMembersModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<GetApiGwGroupMembersModel>() {}.type)
+                                object : TypeToken<GetApiGwGroupMembersModel>() {}.type
+                            )
 
                             status shouldBe HttpStatusCode.OK
                             result.members.toList() shouldBe emptyList()
@@ -886,13 +1018,17 @@ object KafkaAdminRestSpec : Spek({
                             val call = handleRequest(HttpMethod.Put, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$nonAdminUser:$nonAdminPwd".toByteArray())}")
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("$nonAdminUser:$nonAdminPwd".toByteArray())}"
+                                )
                                 setBody(Gson().toJson(ApiGwRequest(listOf(apiGwgroupMemberToAdd))))
                             }
 
                             val status = call.response.status()
                             val result = call.response.content!!
-                            val expectedResult = Gson().toJson(AnError("Authenticated user: $nonAdminUser is not allowed to update $apigwGroup automatically"))
+                            val expectedResult =
+                                Gson().toJson(AnError("Authenticated user: $nonAdminUser is not allowed to update $apigwGroup automatically"))
 
                             status shouldBe HttpStatusCode.Unauthorized
                             result shouldBeEqualTo expectedResult
@@ -903,16 +1039,36 @@ object KafkaAdminRestSpec : Spek({
                             val call = handleRequest(HttpMethod.Put, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
-                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(newUser01, GroupMemberOperation.ADD)))))
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}"
+                                )
+                                setBody(
+                                    Gson().toJson(
+                                        ApiGwRequest(
+                                            listOf(
+                                                ApiGwGroupMember(
+                                                    newUser01,
+                                                    GroupMemberOperation.ADD
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
                             }
 
                             val status = call.response.status()
                             val result: PutApiGwResultModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<PutApiGwResultModel>() {}.type)
+                                object : TypeToken<PutApiGwResultModel>() {}.type
+                            )
 
-                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd))))
+                            val expectedResult = Gson().toJson(
+                                PutApiGwResultModel(
+                                    apigwGroup,
+                                    ApiGwRequest(listOf(apiGwgroupMemberToAdd))
+                                )
+                            )
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -923,16 +1079,36 @@ object KafkaAdminRestSpec : Spek({
                             val call = handleRequest(HttpMethod.Put, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
-                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(newUser01, GroupMemberOperation.ADD)))))
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}"
+                                )
+                                setBody(
+                                    Gson().toJson(
+                                        ApiGwRequest(
+                                            listOf(
+                                                ApiGwGroupMember(
+                                                    newUser01,
+                                                    GroupMemberOperation.ADD
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
                             }
 
                             val status = call.response.status()
                             val result: PutApiGwResultModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<PutApiGwResultModel>() {}.type)
+                                object : TypeToken<PutApiGwResultModel>() {}.type
+                            )
 
-                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd))))
+                            val expectedResult = Gson().toJson(
+                                PutApiGwResultModel(
+                                    apigwGroup,
+                                    ApiGwRequest(listOf(apiGwgroupMemberToAdd))
+                                )
+                            )
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -943,16 +1119,32 @@ object KafkaAdminRestSpec : Spek({
                             val call = handleRequest(HttpMethod.Put, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
-                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(userDoNotExistInLdap, GroupMemberOperation.ADD)))))
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}"
+                                )
+                                setBody(
+                                    Gson().toJson(
+                                        ApiGwRequest(
+                                            listOf(
+                                                ApiGwGroupMember(
+                                                    userDoNotExistInLdap,
+                                                    GroupMemberOperation.ADD
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
                             }
 
                             val status = call.response.status()
                             val result: AnError = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<AnError>() {}.type)
+                                object : TypeToken<AnError>() {}.type
+                            )
 
-                            val expectedResult = Gson().toJson(AnError("Tried to add the user: $userDoNotExistInLdap. Who does not exist in current AD environment"))
+                            val expectedResult =
+                                Gson().toJson(AnError("Tried to add the user: $userDoNotExistInLdap. Who does not exist in current AD environment"))
 
                             status shouldBe HttpStatusCode.BadRequest
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -963,15 +1155,42 @@ object KafkaAdminRestSpec : Spek({
                             val call = handleRequest(HttpMethod.Put, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
-                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(userDoNotExistInLdap, GroupMemberOperation.REMOVE)))))
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}"
+                                )
+                                setBody(
+                                    Gson().toJson(
+                                        ApiGwRequest(
+                                            listOf(
+                                                ApiGwGroupMember(
+                                                    userDoNotExistInLdap,
+                                                    GroupMemberOperation.REMOVE
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
                             }
 
                             val status = call.response.status()
-                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(ApiGwGroupMember(userDoNotExistInLdap, GroupMemberOperation.REMOVE)))))
+                            val expectedResult = Gson().toJson(
+                                PutApiGwResultModel(
+                                    apigwGroup,
+                                    ApiGwRequest(
+                                        listOf(
+                                            ApiGwGroupMember(
+                                                userDoNotExistInLdap,
+                                                GroupMemberOperation.REMOVE
+                                            )
+                                        )
+                                    )
+                                )
+                            )
                             val result: PutApiGwResultModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<PutApiGwResultModel>() {}.type)
+                                object : TypeToken<PutApiGwResultModel>() {}.type
+                            )
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -982,16 +1201,32 @@ object KafkaAdminRestSpec : Spek({
                             val call = handleRequest(HttpMethod.Put, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
-                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(notAsystemUser, GroupMemberOperation.ADD)))))
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}"
+                                )
+                                setBody(
+                                    Gson().toJson(
+                                        ApiGwRequest(
+                                            listOf(
+                                                ApiGwGroupMember(
+                                                    notAsystemUser,
+                                                    GroupMemberOperation.ADD
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
                             }
 
                             val status = call.response.status()
                             val result: AnError = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<AnError>() {}.type)
+                                object : TypeToken<AnError>() {}.type
+                            )
 
-                            val expectedResult = Gson().toJson(AnError("Tried to add the user: $notAsystemUser. Who is not an system user"))
+                            val expectedResult =
+                                Gson().toJson(AnError("Tried to add the user: $notAsystemUser. Who is not an system user"))
 
                             status shouldBe HttpStatusCode.BadRequest
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -1002,16 +1237,36 @@ object KafkaAdminRestSpec : Spek({
                             val call = handleRequest(HttpMethod.Put, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
-                                setBody(Gson().toJson(ApiGwRequest(listOf(ApiGwGroupMember(newUser01, GroupMemberOperation.REMOVE)))))
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}"
+                                )
+                                setBody(
+                                    Gson().toJson(
+                                        ApiGwRequest(
+                                            listOf(
+                                                ApiGwGroupMember(
+                                                    newUser01,
+                                                    GroupMemberOperation.REMOVE
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
                             }
 
                             val status = call.response.status()
                             val result: PutApiGwResultModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<PutApiGwResultModel>() {}.type)
+                                object : TypeToken<PutApiGwResultModel>() {}.type
+                            )
 
-                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToRemove))))
+                            val expectedResult = Gson().toJson(
+                                PutApiGwResultModel(
+                                    apigwGroup,
+                                    ApiGwRequest(listOf(apiGwgroupMemberToRemove))
+                                )
+                            )
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -1022,16 +1277,34 @@ object KafkaAdminRestSpec : Spek({
                             val call = handleRequest(HttpMethod.Put, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
-                                setBody(Gson().toJson(ApiGwRequest(listOf(apiGwgroupMemberToAdd, apiGwgroupMemberToAdd02))))
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}"
+                                )
+                                setBody(
+                                    Gson().toJson(
+                                        ApiGwRequest(
+                                            listOf(
+                                                apiGwgroupMemberToAdd,
+                                                apiGwgroupMemberToAdd02
+                                            )
+                                        )
+                                    )
+                                )
                             }
 
                             val status = call.response.status()
                             val result: PutApiGwResultModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<PutApiGwResultModel>() {}.type)
+                                object : TypeToken<PutApiGwResultModel>() {}.type
+                            )
 
-                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToAdd, apiGwgroupMemberToAdd02))))
+                            val expectedResult = Gson().toJson(
+                                PutApiGwResultModel(
+                                    apigwGroup,
+                                    ApiGwRequest(listOf(apiGwgroupMemberToAdd, apiGwgroupMemberToAdd02))
+                                )
+                            )
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -1046,9 +1319,11 @@ object KafkaAdminRestSpec : Spek({
                             val status = call.response.status()
                             val result: GetApiGwGroupMembersModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<GetApiGwGroupMembersModel>() {}.type)
+                                object : TypeToken<GetApiGwGroupMembersModel>() {}.type
+                            )
 
-                            val expectedResult = Gson().toJson(GetApiGwGroupMembersModel(apigwGroup, listOf(newUser01, newUser02)))
+                            val expectedResult =
+                                Gson().toJson(GetApiGwGroupMembersModel(apigwGroup, listOf(newUser01, newUser02)))
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
@@ -1059,16 +1334,34 @@ object KafkaAdminRestSpec : Spek({
                             val call = handleRequest(HttpMethod.Put, APIGW) {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
-                                addHeader(HttpHeaders.Authorization, "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}")
-                                setBody(Gson().toJson(ApiGwRequest(listOf(apiGwgroupMemberToRemove, apiGwgroupMemberToAdd02))))
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("$admin:$adminPwd".toByteArray())}"
+                                )
+                                setBody(
+                                    Gson().toJson(
+                                        ApiGwRequest(
+                                            listOf(
+                                                apiGwgroupMemberToRemove,
+                                                apiGwgroupMemberToAdd02
+                                            )
+                                        )
+                                    )
+                                )
                             }
 
                             val status = call.response.status()
                             val result: PutApiGwResultModel = Gson().fromJson(
                                 call.response.content ?: "",
-                                object : TypeToken<PutApiGwResultModel>() {}.type)
+                                object : TypeToken<PutApiGwResultModel>() {}.type
+                            )
 
-                            val expectedResult = Gson().toJson(PutApiGwResultModel(apigwGroup, ApiGwRequest(listOf(apiGwgroupMemberToRemove, apiGwgroupMemberToAdd02))))
+                            val expectedResult = Gson().toJson(
+                                PutApiGwResultModel(
+                                    apigwGroup,
+                                    ApiGwRequest(listOf(apiGwgroupMemberToRemove, apiGwgroupMemberToAdd02))
+                                )
+                            )
 
                             status shouldBe HttpStatusCode.OK
                             Gson().toJson(result) shouldBeEqualTo expectedResult
