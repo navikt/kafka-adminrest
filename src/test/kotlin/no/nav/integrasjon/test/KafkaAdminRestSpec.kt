@@ -10,8 +10,6 @@ import io.ktor.server.testing.TestApplicationEngine
 import io.ktor.server.testing.createTestEnvironment
 import io.ktor.server.testing.handleRequest
 import io.ktor.server.testing.setBody
-import io.ktor.util.InternalAPI
-import io.ktor.util.encodeBase64
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 import no.nav.common.KafkaEnvironment
@@ -70,14 +68,13 @@ import org.amshove.kluent.shouldEqualTo
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
 
-@InternalAPI
 object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
     val preTopics = setOf("tpc-01", "tpc-02", "tpc-03")
 
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
-    val kCluster = KafkaEnvironment(1, topics = preTopics.toList(), withSecurity = true, autoStart = true)
+    val kCluster = KafkaEnvironment(1, topicNames = preTopics.toList(), withSecurity = true, autoStart = true)
 
     val correctFP = FasitProperties(
         kCluster.brokersURL, "kafka-adminrest", "TRUE",
@@ -568,11 +565,82 @@ object KafkaAdminRestSpec : Spek({
                                 object : TypeToken<GetTopicConfigModel>() {}.type)
 
                             call.response.status() shouldBe HttpStatusCode.OK
-                            result.config.find { it.name() == "retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
-                            result.config.find { it.name() == "cleanup.policy" }?.value() ?: "" shouldBeEqualTo "delete"
+                            val retentionMsValue = result.config.find { it.name() == "retention.ms" }?.value() ?: ""
+                            retentionMsValue shouldBeEqualTo "6600666"
+                            val cleanupPolicyValue = result.config.find { it.name() == "cleanup.policy" }?.value() ?: ""
+                            cleanupPolicyValue shouldBeEqualTo "delete"
                         }
 
-                        it("should update 'delete.retention.ms' configuration for tpc-03") {
+
+                        context("updating another configuration after updating a configuration") {
+                            val updatedRetentionMsConfig = PutTopicConfigEntryBody(
+                                AllowedConfigEntries.RETENTION_MS,
+                                "12345678"
+                            )
+                            val updatedDeleteRetentionMsConfig = PutTopicConfigEntryBody(
+                                AllowedConfigEntries.DELETE_RETENTION_MS,
+                                "6600666"
+                            )
+
+                            it("should update 'retention.ms' configuration for tpc-03") {
+                                val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                    addHeader(HttpHeaders.ContentType, "application/json")
+                                    // relevant user is in the right place in UserAndGroups.ldif
+                                    addHeader(
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("n145821:itest3".toByteArray())}"
+                                    )
+
+                                    val jsonPayload = Gson().toJson(ConfigEntries(listOf(updatedRetentionMsConfig)))
+                                    setBody(jsonPayload)
+                                }
+                                call.response.status() shouldBe HttpStatusCode.OK
+                            }
+
+                            it("should update 'delete.retention.ms' configuration for tpc-03") {
+                                val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                    addHeader(HttpHeaders.ContentType, "application/json")
+                                    // relevant user is in the right place in UserAndGroups.ldif
+                                    addHeader(
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("n145821:itest3".toByteArray())}"
+                                    )
+
+                                    val jsonPayload = Gson().toJson(
+                                        ConfigEntries(listOf(updatedDeleteRetentionMsConfig))
+                                    )
+                                    setBody(jsonPayload)
+                                }
+                                call.response.status() shouldBe HttpStatusCode.OK
+                            }
+
+                            it("should return updated 'delete.retention.ms' configuration for tpc-03 and should not have reset configurations for 'retention.ms'") {
+                                val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                }
+
+                                val result: GetTopicConfigModel = Gson().fromJson(
+                                    call.response.content ?: "",
+                                    object : TypeToken<GetTopicConfigModel>() {}.type
+                                )
+                                call.response.status() shouldBe HttpStatusCode.OK
+                                val deleteRetentionMsValue = result.config
+                                    .find { it.name() == updatedDeleteRetentionMsConfig.configentry.entryName }
+                                    ?.value()
+                                    ?: ""
+                                deleteRetentionMsValue shouldBeEqualTo updatedDeleteRetentionMsConfig.value
+
+                                val retentionMsValue = result.config
+                                    .find { it.name() == updatedRetentionMsConfig.configentry.entryName }
+                                    ?.value()
+                                    ?: ""
+                                retentionMsValue shouldBeEqualTo updatedRetentionMsConfig.value
+                            }
+                        }
+
+                        it("should report bad request when trying to update config outside white list for tpc-03 ") {
 
                             val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
                                 addHeader(HttpHeaders.Accept, "application/json")
@@ -580,28 +648,23 @@ object KafkaAdminRestSpec : Spek({
                                 // relevant user is in the right place in UserAndGroups.ldif
                                 addHeader(
                                     HttpHeaders.Authorization,
-                                    "Basic ${encodeBase64("n145821:itest3".toByteArray())}")
+                                    "Basic ${encodeBase64("N145821:itest3".toByteArray())}"
+                                )
 
-                                val jsonPayload = Gson().toJson(
-                                    ConfigEntries(listOf(PutTopicConfigEntryBody(AllowedConfigEntries.DELETE_RETENTION_MS, "6600666"))))
+                                val jsonPayload =
+                                    """{
+                                        "entries": [
+                                            {
+                                                "configentry": "max.message.bytes",
+                                                "value": 51000012
+                                            }
+                                        ]
+                                    }
+                                    """.trimIndent()
                                 setBody(jsonPayload)
                             }
 
-                            call.response.status() shouldBe HttpStatusCode.OK
-                        }
-
-                        it("should return updated 'delete.retention.ms' configuration for tpc-03") {
-
-                            val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03") {
-                                addHeader(HttpHeaders.Accept, "application/json")
-                            }
-
-                            val result: GetTopicConfigModel = Gson().fromJson(
-                                call.response.content ?: "",
-                                object : TypeToken<GetTopicConfigModel>() {}.type)
-
-                            call.response.status() shouldBe HttpStatusCode.OK
-                            result.config.find { it.name() == "delete.retention.ms" }?.value() ?: "" shouldBeEqualTo "6600666"
+                            call.response.status() shouldBe HttpStatusCode.BadRequest
                         }
                     }
 
