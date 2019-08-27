@@ -417,18 +417,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient?, fasitConfig: FasitProperti
         val topicName = param.topicName
 
         // NB! AdminClient is listing a default config independent of topic exists or not, verify existence!
-        val (topicsRequestOk, existingTopics) = try {
-            Pair(true, adminClient?.let { ac ->
-                ac.listTopics()
-                    .listings()
-                    .get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
-                    .map { it.name() }
-            } ?: throw Exception(SERVICES_ERR_K)
-            )
-        } catch (e: Exception) {
-            application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
-            Pair(false, emptyList<String>())
-        }
+        val (topicsRequestOk, existingTopics) = fetchTopics(adminClient, fasitConfig, topicName)
 
         if (!topicsRequestOk) {
             call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
@@ -440,21 +429,7 @@ fun Routing.getTopicConfig(adminClient: AdminClient?, fasitConfig: FasitProperti
             return@get
         }
 
-        val (topicConfigRequestOk, topicConfig) = try {
-            Pair(true, adminClient?.let { ac ->
-                ac.describeConfigs(mutableListOf(ConfigResource(ConfigResource.Type.TOPIC, topicName)))
-                    .all()
-                    .get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
-                    .values
-                    .first()
-                    .entries()
-                    .toList()
-            } ?: throw Exception(SERVICES_ERR_K)
-            )
-        } catch (e: Exception) {
-            application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
-            Pair(false, emptyList<ConfigEntry>())
-        }
+        val (topicConfigRequestOk, topicConfig) = fetchTopicConfig(adminClient, topicName, fasitConfig)
 
         if (!topicConfigRequestOk) {
             call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
@@ -519,33 +494,62 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, fasitConfig: FasitPrope
             }
         }
 
-        val configEntry = try {
-            body.entries.map { it
+        val newConfigEntries = try {
+            body.entries.map {
                 ConfigEntry(it.configentry.entryName, it.value)
             }
         } catch (e: Exception) {
-            log.info(e.message)
+            log.warn("Could not parse input body", e)
             null
         }
 
-        if (configEntry == null) {
+        if (newConfigEntries == null) {
             val msg = "Not supported configEntry, please see swagger documentation and model"
             application.environment.log.error(msg)
             call.respond(HttpStatusCode.BadRequest, AnError(msg))
             return@put
         }
 
-        configEntry.map { config ->
-            if (!AllowedConfigEntries.values().map { it.entryName }.contains(config.name())) {
-                val msg = "configEntry ${config.name()} is not allowed to update automatically"
+        newConfigEntries.map { entry ->
+            if (!AllowedConfigEntries.values().map { it.entryName }.contains(entry.name())) {
+                val msg = "configEntry ${entry.name()} is not allowed to update automatically"
                 application.environment.log.error(msg)
                 call.respond(HttpStatusCode.BadRequest, AnError(msg))
                 return@put
             }
         }
 
+        val (topicsRequestOk, existingTopics) = fetchTopics(adminClient, fasitConfig, topicName)
+
+        if (!topicsRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@put
+        }
+
+        if (existingTopics.isNotEmpty() && !existingTopics.contains(topicName)) {
+            call.respond(HttpStatusCode.BadRequest, AnError("Cannot find topic $topicName"))
+            return@put
+        }
+
+        val (topicConfigRequestOk, existingTopicConfig) = fetchTopicConfig(adminClient, topicName, fasitConfig)
+
+        if (!topicConfigRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@put
+        }
+
+        // Use existing topic configuration and only update entries provided in request
+        val newConfigEntriesMap = newConfigEntries.map { it.name() to it.value() }.toMap()
+        val updatedTopicConfig: List<ConfigEntry> = existingTopicConfig.map { existingEntry ->
+            if (newConfigEntriesMap.containsKey(existingEntry.name())) {
+                ConfigEntry(existingEntry.name(), newConfigEntriesMap[existingEntry.name()])
+            } else {
+                existingEntry
+            }
+        }
+
         val configResource = ConfigResource(ConfigResource.Type.TOPIC, topicName)
-        val configReq = mapOf(configResource to Config(configEntry))
+        val configReq = mapOf(configResource to Config(updatedTopicConfig))
 
         application.environment.log.info("Update topic config request: $configReq")
 
@@ -692,3 +696,44 @@ fun Routing.updateTopicGroup(fasitConfig: FasitProperties) =
         application.environment.log.info("$topicName's group has been updated")
         call.respond(PutTopicGMemberModel(topicName, body, result))
     }
+
+private fun PipelineContext<Unit, ApplicationCall>.fetchTopics(
+    adminClient: AdminClient?,
+    fasitConfig: FasitProperties,
+    topicName: String
+): Pair<Boolean, List<String>> {
+    return try {
+        Pair(true, adminClient?.let { ac ->
+            ac.listTopics()
+                .listings()
+                .get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                .map { it.name() }
+        } ?: throw Exception(SERVICES_ERR_K)
+        )
+    } catch (e: Exception) {
+        application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
+        Pair(false, emptyList<String>())
+    }
+}
+
+private fun PipelineContext<Unit, ApplicationCall>.fetchTopicConfig(
+    adminClient: AdminClient?,
+    topicName: String,
+    fasitConfig: FasitProperties
+): Pair<Boolean, List<ConfigEntry>> {
+    return try {
+        Pair(true, adminClient?.let { ac ->
+            ac.describeConfigs(mutableListOf(ConfigResource(ConfigResource.Type.TOPIC, topicName)))
+                .all()
+                .get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                .values
+                .first()
+                .entries()
+                .toList()
+        } ?: throw Exception(SERVICES_ERR_K)
+        )
+    } catch (e: Exception) {
+        application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
+        Pair(false, emptyList<ConfigEntry>())
+    }
+}
