@@ -539,7 +539,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, fasitConfig: FasitPrope
         }
 
         // Use existing topic configuration and only update entries provided in request
-        val newConfigEntriesMap = newConfigEntries.map { it.name() to it.value() }.toMap()
+        val newConfigEntriesMap: Map<String, String> = newConfigEntries.associate { it.name() to it.value() }
         val updatedTopicConfig: List<ConfigEntry> = existingTopicConfig.map { existingEntry ->
             if (newConfigEntriesMap.containsKey(existingEntry.name())) {
                 ConfigEntry(existingEntry.name(), newConfigEntriesMap[existingEntry.name()])

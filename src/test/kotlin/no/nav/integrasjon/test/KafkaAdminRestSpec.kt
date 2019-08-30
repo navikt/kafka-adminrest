@@ -919,60 +919,109 @@ object KafkaAdminRestSpec : Spek({
                 }
 
                 context("Route $ONESHOT") {
-                    it("should successfully create a topic for duplicate combinations of roles and members (including both implicit and explicit MANAGER)") {
-                        val call = handleRequest(HttpMethod.Put, ONESHOT) {
-                            addHeader(HttpHeaders.Accept, "application/json")
-                            addHeader(HttpHeaders.ContentType, "application/json")
-                            addHeader(
-                                HttpHeaders.Authorization,
-                                "Basic ${encodeBase64("n000001:itest1".toByteArray())}"
+                    val retentionMsConfigEntry = AllowedConfigEntries.RETENTION_MS.entryName to "1234"
+                    val retentionBytesConfigEntry = AllowedConfigEntries.RETENTION_BYTES.entryName to "98765"
+
+                    val oneshotCreationRequest = OneshotCreationRequest(
+                        topics = listOf(
+                            TopicCreation(
+                                topicName = "integrationTestNoUpdate",
+                                members = listOf(
+                                    RoleMember("srvp02", KafkaGroupType.CONSUMER),
+                                    RoleMember("N000001", KafkaGroupType.MANAGER),
+                                    RoleMember("n000001", KafkaGroupType.MANAGER),
+                                    RoleMember("igroup", KafkaGroupType.MANAGER),
+                                    RoleMember("igroup", KafkaGroupType.MANAGER),
+                                    RoleMember("igroup", KafkaGroupType.PRODUCER),
+                                    RoleMember("igroup", KafkaGroupType.PRODUCER),
+                                    RoleMember("igroup", KafkaGroupType.CONSUMER),
+                                    RoleMember("igroup", KafkaGroupType.CONSUMER)
+                                ),
+                                configEntries = mapOf(retentionMsConfigEntry),
+                                numPartitions = 3
                             )
-                            setBody(
-                                Gson().toJson(
-                                    OneshotCreationRequest(
-                                        topics = listOf(
-                                            TopicCreation(
-                                                topicName = "integrationTestNoUpdate",
-                                                members = listOf(
-                                                    RoleMember("srvp02", KafkaGroupType.CONSUMER),
-                                                    RoleMember("N000001", KafkaGroupType.MANAGER),
-                                                    RoleMember("n000001", KafkaGroupType.MANAGER),
-                                                    RoleMember("igroup", KafkaGroupType.MANAGER),
-                                                    RoleMember("igroup", KafkaGroupType.MANAGER),
-                                                    RoleMember("igroup", KafkaGroupType.PRODUCER),
-                                                    RoleMember("igroup", KafkaGroupType.PRODUCER),
-                                                    RoleMember("igroup", KafkaGroupType.CONSUMER),
-                                                    RoleMember("igroup", KafkaGroupType.CONSUMER)
-                                                ),
-                                                configEntries = mapOf(),
-                                                numPartitions = 3
+                        )
+                    )
+
+                    context("Put new oneshot request") {
+                        it("should successfully create a topic for duplicate combinations of roles and members (including both implicit and explicit MANAGER)") {
+                            val call = handleRequest(HttpMethod.Put, ONESHOT) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n000001:itest1".toByteArray())}"
+                                )
+                                setBody(Gson().toJson(oneshotCreationRequest))
+                            }
+                            call.response.status() shouldBe HttpStatusCode.OK
+                        }
+
+                        it("should report groups and 2 members for topic integrationTestNoUpdate, KM:igroup and KC:srvp02") {
+
+                            val call = handleRequest(HttpMethod.Get, "$TOPICS/integrationTestNoUpdate/groups") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                            }
+
+                            val result: GetTopicGroupsModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicGroupsModel>() {}.type
+                            )
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(
+                                true,
+                                true,
+                                true
+                            )
+                            result.groups.flatMap { it.members }.size shouldEqualTo 5
+                        }
+                    }
+
+                    context("Put oneshot request for existing topic with new added config entry and previous config entry removed") {
+                        it("should successfully perform the request") {
+                            val call = handleRequest(HttpMethod.Put, ONESHOT) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n000001:itest1".toByteArray())}"
+                                )
+                                setBody(
+                                    Gson().toJson(
+                                        oneshotCreationRequest.copy(
+                                            topics = listOf(
+                                                oneshotCreationRequest.topics.first()
+                                                    .copy(configEntries = mapOf(retentionBytesConfigEntry))
                                             )
                                         )
                                     )
                                 )
+                            }
+                            call.response.status() shouldBe HttpStatusCode.OK
+                        }
+                        it("should have preserved the missing previous config entry value") {
+                            val call = handleRequest(HttpMethod.Get, "$TOPICS/integrationTestNoUpdate") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                            }
+                            val result: GetTopicConfigModel = Gson().fromJson(
+                                call.response.content ?: "",
+                                object : TypeToken<GetTopicConfigModel>() {}.type
                             )
+                            call.response.status() shouldBe HttpStatusCode.OK
+
+                            val retentionBytesValue = result.config
+                                .find { it.name() == retentionBytesConfigEntry.first }
+                                ?.value()
+                                ?: ""
+                            retentionBytesValue shouldBeEqualTo retentionBytesConfigEntry.second
+
+                            val retentionMsValue = result.config
+                                .find { it.name() == retentionMsConfigEntry.first }
+                                ?.value()
+                                ?: ""
+                            retentionMsValue shouldBeEqualTo retentionMsConfigEntry.second
                         }
-                        call.response.status() shouldBe HttpStatusCode.OK
-                    }
-
-                    it("should report groups and 2 members for topic integrationTestNoUpdate, KM:igroup and KC:srvp02") {
-
-                        val call = handleRequest(HttpMethod.Get, "$TOPICS/integrationTestNoUpdate/groups") {
-                            addHeader(HttpHeaders.Accept, "application/json")
-                        }
-
-                        val result: GetTopicGroupsModel = Gson().fromJson(
-                            call.response.content ?: "",
-                            object : TypeToken<GetTopicGroupsModel>() {}.type
-                        )
-
-                        call.response.status() shouldBe HttpStatusCode.OK
-                        result.groups.map { it.ldapResult.resultCode == ResultCode.SUCCESS } shouldEqual listOf(
-                            true,
-                            true,
-                            true
-                        )
-                        result.groups.flatMap { it.members }.size shouldEqualTo 5
                     }
                 }
 

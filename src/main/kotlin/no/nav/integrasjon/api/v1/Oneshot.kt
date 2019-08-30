@@ -109,6 +109,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                 return@put
             }
 
+            // Fetch existing topics
             val existingTopics = try {
                 adminClient?.listTopics()?.listings()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.map { it.name() }
                     ?: emptyList()
@@ -229,14 +230,56 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                     ldap.removeGroupMembers(group, members)
                 }
 
+            val existingTopicsInRequest: Map<ConfigResource, Map<String, String>> = request.topics
+                .filter { existingTopics.contains(it.topicName) }
+                .associate { topicCreation ->
+                    ConfigResource(ConfigResource.Type.TOPIC, topicCreation.topicName) to (topicCreation.configEntries
+                        ?: emptyMap())
+                }
+
+            // Fetch configurations for existing topics (until we're able to use AdminClient incrementalAlterConfigs)
+            log.debug("Fetching configurations for existing topics$logFormat", *logKeys)
+            val existingConfigurationsForTopicsInRequest: Map<ConfigResource, Config> = try {
+                adminClient
+                    ?.describeConfigs(existingTopicsInRequest.map { it.key })
+                    ?.all()
+                    ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                    ?.toMap()
+                    ?: emptyMap()
+            } catch (e: Exception) {
+                log.error(
+                    "Exception caught while fetching existing configurations for topic(s), request: {} $logFormat",
+                    logKeys, e
+                )
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    OneshotResponse(
+                        status = OneshotStatus.ERROR,
+                        message = "Failed to fetch existing configuration(s) for topic(s)"
+                    )
+                )
+                return@put
+            }
+
+            // Only set new values for topic configurations if provided in request, otherwise use existing values
+            val incrementallyUpdatedConfigurationsForTopics: Map<ConfigResource, Config> =
+                existingConfigurationsForTopicsInRequest.mapValues { (topicResource, config) ->
+                    Config(config.entries().map { entry ->
+                        existingTopicsInRequest[topicResource]
+                            ?.get(entry.name())
+                            ?.let { value ->
+                                ConfigEntry(entry.name(), value)
+                            }
+                            ?: entry
+                    })
+                }
+
+            // Alter configurations for existing topics
+            log.debug("Altering configurations for existing topics$logFormat", *logKeys)
+            adminClient?.alterConfigs(incrementallyUpdatedConfigurationsForTopics)
+
             // Create topics that are missing
             log.debug("Creating topics$logFormat", *logKeys)
-            adminClient?.alterConfigs(request.topics.filter { existingTopics.contains(it.topicName) }
-                .map {
-                    ConfigResource(ConfigResource.Type.TOPIC, it.topicName) to Config(it.configEntries
-                        ?.map { ConfigEntry(it.key, it.value) } ?: listOf())
-                }.toMap())
-
             try {
                 adminClient?.createTopics(request.topics
                     .filterNot { existingTopics.contains(it.topicName) }
