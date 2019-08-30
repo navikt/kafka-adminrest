@@ -68,11 +68,14 @@ class Oneshot
 fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProperties) {
     put<Oneshot, OneshotCreationRequest>(
         "Provides a one-shot kafka topic creation and ACL creation, it returns an ID and an endpoint where you can await a result from this request"
-            .securityAndReponds(BasicAuthSecurity(),
+            .securityAndReponds(
+                BasicAuthSecurity(),
                 ok<OneshotResponse>(),
                 badRequest<OneshotResponse>(),
                 serviceUnavailable<OneshotResponse>(),
-                unAuthorized<OneshotResponse>())) { _, request ->
+                unAuthorized<OneshotResponse>()
+            )
+    ) { _, request ->
 
         val currentUser = call.principal<UserIdPrincipal>()!!.name.toLowerCase()
 
@@ -104,14 +107,18 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
             }.any {
                 val err = OneshotResponse(
                     status = OneshotStatus.ERROR,
-                    message = "configEntry ${it.key} is not allowed to update automatically")
+                    message = "configEntry ${it.key} is not allowed to update automatically"
+                )
                 call.respond(HttpStatusCode.BadRequest, err)
                 return@put
             }
 
             // Fetch existing topics
             val existingTopics = try {
-                adminClient?.listTopics()?.listings()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.map { it.name() }
+                adminClient?.listTopics()?.listings()?.get(
+                    fasitConfig.kafkaTimeout,
+                    TimeUnit.MILLISECONDS
+                )?.map { it.name() }
                     ?: emptyList()
             } catch (e: Exception) {
                 log.error("Exception caught while getting existing topic(s) $logFormat", logKeys, e)
@@ -119,7 +126,9 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                     HttpStatusCode.ServiceUnavailable,
                     OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "Failed to get topic from kafka"))
+                        message = "Failed to get topic from kafka"
+                    )
+                )
                 return@put
             }
 
@@ -157,7 +166,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                     log.info("Tried to add the user ${it.member} who doesn't exist in AD$logFormat", *logKeys)
                     val err = OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "The user ${it.member} does not exist")
+                        message = "The user ${it.member} does not exist"
+                    )
                     call.respond(HttpStatusCode.BadRequest, err)
                     return@put
                 }
@@ -166,9 +176,9 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
             log.debug("Getting members of topic groups$logFormat", *logKeys)
             val membersInGroup = request.topics
                 .flatMap { topic ->
-                    KafkaGroupType.values().flatMap {
-                        val groupName = toGroupName(it.prefix, topic.topicName)
-                        ldap.getGroupMembers(groupName).map { GroupMember(groupName, it) }
+                    KafkaGroupType.values().flatMap { kafkaGroupType ->
+                        val groupName = toGroupName(kafkaGroupType.prefix, topic.topicName)
+                        ldap.getGroupMembers(groupName).map { member -> GroupMember(groupName, member) }
                     }
                 }
 
@@ -182,7 +192,12 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
             val requestedGroupMembers = request.topics.flatMap { topic ->
                 topic.members
                     .map { GroupMember(toGroupName(it.role.prefix, topic.topicName), it.member) }
-                    .filterNot { requestGroupMember -> requestGroupMember.group.contains(KafkaGroupType.MANAGER.prefix) && currentUser.equals(requestGroupMember.user, ignoreCase = true) }
+                    .filterNot { requestGroupMember ->
+                        requestGroupMember.group.contains(KafkaGroupType.MANAGER.prefix) && currentUser.equals(
+                            requestGroupMember.user,
+                            ignoreCase = true
+                        )
+                    }
                     .toMutableSet().apply {
                         val groupName = toGroupName(KafkaGroupType.MANAGER.prefix, topic.topicName)
                         add(GroupMember(groupName, currentUser))
@@ -192,8 +207,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
             // Add those who are missing from the group
             log.debug("Creating diff for creating + adding to group$logFormat", *logKeys)
             val groupAddDiff = requestedGroupMembers
-                .filter {
-                    val (group, member) = it
+                .filter { groupMember ->
+                    val (group, member) = groupMember
                     membersInGroup
                         .filter { it.group.equals(group, ignoreCase = true) }
                         .none { it.user.equals(member, ignoreCase = true) }
@@ -284,7 +299,11 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                 adminClient?.createTopics(request.topics
                     .filterNot { existingTopics.contains(it.topicName) }
                     .map {
-                        NewTopic(it.topicName, it.numPartitions, getDefaultReplicationFactor(adminClient, fasitConfig))
+                        NewTopic(
+                            it.topicName,
+                            it.numPartitions,
+                            getDefaultReplicationFactor(adminClient, fasitConfig)
+                        )
                             .configs(it.configEntries)
                     })?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
             } catch (e: Exception) {
@@ -293,7 +312,9 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
                     HttpStatusCode.ServiceUnavailable,
                     OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "Failed to create topic"))
+                        message = "Failed to create topic"
+                    )
+                )
             }
 
             log.debug("Creating ACLs$logFormat", *logKeys)
@@ -305,18 +326,25 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, fasitConfig: FasitProp
             try {
                 adminClient?.createAcls(acl)?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                 log.info("Successfully updated acl for topic(s) - {} $logFormat", acl, logKeys)
-                call.respond(OneshotResponse(
-                    status = OneshotStatus.OK,
-                    message = "Successfully created topic",
-                    data = OneshotResult(uuid)))
+                call.respond(
+                    OneshotResponse(
+                        status = OneshotStatus.OK,
+                        message = "Successfully created topic",
+                        data = OneshotResult(uuid)
+                    )
+                )
             } catch (e: Exception) {
-                log.error("Exception caught while creating ACL for topic(s), request: {} $logFormat", acl,
-                    logKeys, e)
+                log.error(
+                    "Exception caught while creating ACL for topic(s), request: {} $logFormat", acl,
+                    logKeys, e
+                )
                 call.respond(
                     HttpStatusCode.ServiceUnavailable,
                     OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "Failed to create ACL for topic(s)"))
+                        message = "Failed to create ACL for topic(s)"
+                    )
+                )
             }
         }
     }

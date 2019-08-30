@@ -5,7 +5,7 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 import mu.KotlinLogging
 
-fun main(args: Array<String>) {
+fun main() {
 
     val log = KotlinLogging.logger { }
 

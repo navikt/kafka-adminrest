@@ -27,6 +27,7 @@ import no.nav.integrasjon.swagger
  */
 
 sealed class Security
+
 data class NoSecurity(val secSetting: List<Map<String, List<String>>> = emptyList()) : Security()
 data class BasicAuthSecurity(
     val secSetting: List<Map<String, List<String>>> = listOf(mapOf("basicAuth" to emptyList()))
@@ -61,7 +62,7 @@ inline fun <reified LOCATION : Any, reified ENTITY_TYPE : Any> Metadata.apply(me
 }
 
 fun Metadata.applyResponseDefinitions() =
-        responses.values.forEach { addDefinition(it) }
+    responses.values.forEach { addDefinition(it) }
 
 fun <LOCATION : Any, BODY_TYPE : Any> Metadata.applyOperations(
     location: Location,
@@ -71,16 +72,18 @@ fun <LOCATION : Any, BODY_TYPE : Any> Metadata.applyOperations(
     entityType: KClass<BODY_TYPE>
 ) {
     swagger.paths
-            .getOrPut(location.path) { mutableMapOf() }
-            .put(method.value.toLowerCase(),
-                    Operation(this, location, group, locationType, entityType))
+        .getOrPut(location.path) { mutableMapOf() }
+        .put(
+            method.value.toLowerCase(),
+            Operation(this, location, group, locationType, entityType)
+        )
 }
 
 fun String.responds(vararg pairs: Pair<HttpStatusCode, KClass<*>>): Metadata =
-        Metadata(responses = mapOf(*pairs), summary = this)
+    Metadata(responses = mapOf(*pairs), summary = this)
 
 fun String.securityAndReponds(security: Security, vararg pairs: Pair<HttpStatusCode, KClass<*>>): Metadata =
-        Metadata(responses = mapOf(*pairs), summary = this, security = security)
+    Metadata(responses = mapOf(*pairs), summary = this, security = security)
 
 inline fun <reified T> ok(): Pair<HttpStatusCode, KClass<*>> = OK to T::class
 inline fun <reified T> failed(): Pair<HttpStatusCode, KClass<*>> = InternalServerError to T::class

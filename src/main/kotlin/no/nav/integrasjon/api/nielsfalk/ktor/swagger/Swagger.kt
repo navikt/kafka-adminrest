@@ -72,11 +72,11 @@ class Operation(
             add(entityType.bodyParameter())
         }
         addAll(locationType.memberProperties.map { it.toParameter(location.path) })
-        metadata.parameter?.let {
-            addAll(it.memberProperties.map { it.toParameter(location.path, ParameterInputType.query) })
+        metadata.parameter?.let { parameter ->
+            addAll(parameter.memberProperties.map { it.toParameter(location.path, ParameterInputType.query) })
         }
-        metadata.headers?.let {
-            addAll(it.memberProperties.map { it.toParameter(location.path, ParameterInputType.header) })
+        metadata.headers?.let { headers ->
+            addAll(headers.memberProperties.map { it.toParameter(location.path, ParameterInputType.header) })
         }
     }
 
@@ -99,24 +99,26 @@ private fun Group.toList(): List<Tag> {
 fun <T, R> KProperty1<T, R>.toParameter(
     path: String,
     inputType: ParameterInputType =
-            if (path.contains("{$name}"))
-                ParameterInputType.path
-            else
-                ParameterInputType.query
+        if (path.contains("{$name}"))
+            ParameterInputType.path
+        else
+            ParameterInputType.query
 ): Parameter {
     return Parameter(
-            toModelProperty(),
-            name,
-            inputType,
-            required = !returnType.isMarkedNullable)
+        toModelProperty(),
+        name,
+        inputType,
+        required = !returnType.isMarkedNullable
+    )
 }
 
 private fun KClass<*>.bodyParameter() =
-        Parameter(referenceProperty(),
-                name = "body",
-                description = modelName(),
-                `in` = ParameterInputType.body
-        )
+    Parameter(
+        referenceProperty(),
+        name = "body",
+        description = modelName(),
+        `in` = ParameterInputType.body
+    )
 
 class Response(httpStatusCode: HttpStatusCode, kClass: KClass<*>) {
     val description = if (kClass == Unit::class) httpStatusCode.description else kClass.responseDescription()
@@ -137,7 +139,7 @@ class Parameter(
     val format: String? = property.format,
     val enum: List<String>? = property.enum,
     val items: Property? = property.items,
-    val schema: ModelReference? = property.`$ref`.let { ModelReference(it) }
+    val schema: ModelReference? = ModelReference(property.`$ref`)
 )
 
 enum class ParameterInputType {
@@ -146,47 +148,49 @@ enum class ParameterInputType {
 
 class ModelData(kClass: KClass<*>) {
     val properties: Map<PropertyName, Property> =
-            kClass.memberProperties
-                    .map { it.name to it.toModelProperty() }
-                    .toMap()
+        kClass.memberProperties
+            .map { it.name to it.toModelProperty() }
+            .toMap()
 }
 
 val propertyTypes = mapOf(
-        Int::class to Property("integer", "int32"),
-        Long::class to Property("integer", "int64"),
-        String::class to Property("string"),
-        Double::class to Property("number", "double"),
-        Instant::class to Property("string", "date-time"),
-        Date::class to Property("string", "date-time"),
-        LocalDateTime::class to Property("string", "date-time"),
-        LocalDate::class to Property("string", "date")
+    Int::class to Property("integer", "int32"),
+    Long::class to Property("integer", "int64"),
+    String::class to Property("string"),
+    Double::class to Property("number", "double"),
+    Instant::class to Property("string", "date-time"),
+    Date::class to Property("string", "date-time"),
+    LocalDateTime::class to Property("string", "date-time"),
+    LocalDate::class to Property("string", "date")
 ).mapKeys { it.key.qualifiedName }
 
 fun <T, R> KProperty1<T, R>.toModelProperty(): Property =
-        (returnType.classifier as KClass<*>)
-                .toModelProperty(returnType)
+    (returnType.classifier as KClass<*>)
+        .toModelProperty(returnType)
 
 private fun KClass<*>.toModelProperty(returnType: KType? = null): Property =
-        propertyTypes[qualifiedName?.removeSuffix("?")]
-                ?: if (returnType != null && (isSubclassOf(Collection::class) || this.isSubclassOf(Set::class))) {
-                    val kClass: KClass<*> = returnType.arguments.first().type?.classifier as KClass<*>
-                    Property(items = kClass.toModelProperty(), type = "array")
-                } else if (returnType != null && this.isSubclassOf(Map::class)) {
-                    Property(type = "object")
-                } else if (returnType != null && this.isSubclassOf(String::class)) {
-                    Property(type = "string")
-                } else if (java.isEnum) {
-                    val enumConstants = (this).java.enumConstants
-                    Property(enum = enumConstants.map { (it as Enum<*>).name }, type = "string")
-                } else {
-                    addDefinition(this)
-                    referenceProperty()
-                }
+    propertyTypes[qualifiedName?.removeSuffix("?")]
+        ?: if (returnType != null && (isSubclassOf(Collection::class) || this.isSubclassOf(Set::class))) {
+            val kClass: KClass<*> = returnType.arguments.first().type?.classifier as KClass<*>
+            Property(items = kClass.toModelProperty(), type = "array")
+        } else if (returnType != null && this.isSubclassOf(Map::class)) {
+            Property(type = "object")
+        } else if (returnType != null && this.isSubclassOf(String::class)) {
+            Property(type = "string")
+        } else if (java.isEnum) {
+            val enumConstants = (this).java.enumConstants
+            Property(enum = enumConstants.map { (it as Enum<*>).name }, type = "string")
+        } else {
+            addDefinition(this)
+            referenceProperty()
+        }
 
 private fun KClass<*>.referenceProperty(): Property =
-        Property(`$ref` = "#/definitions/" + modelName(),
-                description = modelName(),
-                type = null)
+    Property(
+        `$ref` = "#/definitions/" + modelName(),
+        description = modelName(),
+        type = null
+    )
 
 open class Property(
     val type: String?,

@@ -18,20 +18,20 @@ import org.spekframework.spek2.style.specification.describe
 object LDAPGroupSpec : Spek({
 
     val fp = FasitProperties(
-            "", "", "", "", "", "", "",
-            ldapConnTimeout = 250,
-            ldapUserAttrName = "uid",
-            ldapAuthHost = "localhost",
-            ldapAuthPort = InMemoryLDAPServer.LPORT,
-            ldapAuthUserBase = "OU=Users,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
-            ldapHost = "localhost",
-            ldapPort = InMemoryLDAPServer.LPORT,
-            ldapSrvUserBase = "OU=ServiceAccounts,DC=test,DC=local",
-            ldapGroupBase = "OU=kafka,OU=AccountGroupNotInRemedy,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
-            ldapGroupAttrName = "cn",
-            ldapGrpMemberAttrName = "member",
-            ldapUser = "igroup",
-            ldapPassword = "itest"
+        "", "", "", "", "", "", "",
+        ldapConnTimeout = 250,
+        ldapUserAttrName = "uid",
+        ldapAuthHost = "localhost",
+        ldapAuthPort = InMemoryLDAPServer.LPORT,
+        ldapAuthUserBase = "OU=Users,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
+        ldapHost = "localhost",
+        ldapPort = InMemoryLDAPServer.LPORT,
+        ldapSrvUserBase = "OU=ServiceAccounts,DC=test,DC=local",
+        ldapGroupBase = "OU=kafka,OU=AccountGroupNotInRemedy,OU=Groups,OU=NAV,OU=BusinessUnits,DC=test,DC=local",
+        ldapGroupAttrName = "cn",
+        ldapGrpMemberAttrName = "member",
+        ldapUser = "igroup",
+        ldapPassword = "itest"
     )
 
     describe("LDAPGroup class test specification") {
@@ -50,19 +50,19 @@ object LDAPGroupSpec : Spek({
         context("For a given topic, get prod. and cons. groups with members - getKafkaGroupsAndMembers") {
 
             val topics = mapOf(
-                    "tpc-01" to listOf("uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"),
-                    "tpc-02" to listOf(
-                            "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
-                            "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local"
-                    ),
-                    "tpc-03" to listOf(
-                            "uid=srvc01,ou=ServiceAccounts,dc=test,dc=local",
-                            "uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
-                            "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
-                    )
+                "tpc-01" to listOf("uid=n000002,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"),
+                "tpc-02" to listOf(
+                    "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
+                    "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local"
+                ),
+                "tpc-03" to listOf(
+                    "uid=srvc01,ou=ServiceAccounts,dc=test,dc=local",
+                    "uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local",
+                    "uid=n145821,ou=Users,ou=NAV,ou=BusinessUnits,dc=test,dc=local"
+                )
             )
 
-            topics.forEach { topic, allMembers ->
+            topics.forEach { (topic, allMembers) ->
                 it("should return correct info for topic $topic") {
                     val kGroups = LDAPGroup(fp).use { lc -> lc.getKafkaGroupsAndMembers(topic) }
 
@@ -76,12 +76,12 @@ object LDAPGroupSpec : Spek({
         context("For a given group name, get a list of members") {
 
             val groups = mapOf(
-                    "KP-tpc-01" to emptyList(),
-                    "KC-tpc-02" to listOf("uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local"),
-                    "KP-tpc-03" to listOf("uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local")
+                "KP-tpc-01" to emptyList(),
+                "KC-tpc-02" to listOf("uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local"),
+                "KP-tpc-03" to listOf("uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local")
             )
 
-            groups.forEach { group, members ->
+            groups.forEach { (group, members) ->
                 it("should return $members for group $group") {
                     LDAPGroup(fp).use { lc -> lc.getKafkaGroupMembers(group) } shouldEqual members
                 }
@@ -112,71 +112,80 @@ object LDAPGroupSpec : Spek({
                 it("should return the added srvp01 producer when getting group members") {
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
-                                topic,
-                                UpdateKafkaGroupMember(
-                                        KafkaGroupType.PRODUCER,
-                                        GroupMemberOperation.ADD,
-                                        "srvp01"
-                                ))
+                            topic,
+                            UpdateKafkaGroupMember(
+                                KafkaGroupType.PRODUCER,
+                                GroupMemberOperation.ADD,
+                                "srvp01"
+                            )
+                        )
                         lc.getKafkaGroupMembers("KP-$topic")
                     } shouldContainAll listOf(
-                            "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local")
+                        "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local"
+                    )
                 }
 
                 it("should return the added srvp02 producer when getting group members") {
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
-                                topic,
-                                UpdateKafkaGroupMember(
-                                        KafkaGroupType.PRODUCER,
-                                        GroupMemberOperation.ADD,
-                                        "srvp02"
-                                ))
+                            topic,
+                            UpdateKafkaGroupMember(
+                                KafkaGroupType.PRODUCER,
+                                GroupMemberOperation.ADD,
+                                "srvp02"
+                            )
+                        )
                         lc.getKafkaGroupMembers("KP-$topic")
                     } shouldContainAll listOf(
-                            "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local",
-                            "uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local")
+                        "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local",
+                        "uid=srvp02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local"
+                    )
                 }
 
                 it("should return the added srvc01 producer when getting group members") {
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
-                                topic,
-                                UpdateKafkaGroupMember(
-                                        KafkaGroupType.CONSUMER,
-                                        GroupMemberOperation.ADD,
-                                        "srvc01"
-                                ))
+                            topic,
+                            UpdateKafkaGroupMember(
+                                KafkaGroupType.CONSUMER,
+                                GroupMemberOperation.ADD,
+                                "srvc01"
+                            )
+                        )
                         lc.getKafkaGroupMembers("KC-$topic")
                     } shouldContainAll listOf(
-                            "uid=srvc01,ou=ServiceAccounts,dc=test,dc=local")
+                        "uid=srvc01,ou=ServiceAccounts,dc=test,dc=local"
+                    )
                 }
 
                 it("should return the added srvc02 producer when getting group members") {
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
-                                topic,
-                                UpdateKafkaGroupMember(
-                                        KafkaGroupType.CONSUMER,
-                                        GroupMemberOperation.ADD,
-                                        "srvc02"
-                                ))
+                            topic,
+                            UpdateKafkaGroupMember(
+                                KafkaGroupType.CONSUMER,
+                                GroupMemberOperation.ADD,
+                                "srvc02"
+                            )
+                        )
                         lc.getKafkaGroupMembers("KC-$topic")
                     } shouldContainAll listOf(
-                            "uid=srvc01,ou=ServiceAccounts,dc=test,dc=local",
-                            "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local")
+                        "uid=srvc01,ou=ServiceAccounts,dc=test,dc=local",
+                        "uid=srvc02,ou=ApplAccounts,ou=ServiceAccounts,dc=test,dc=local"
+                    )
                 }
 
                 it("should give ok when trying to add existing member") {
 
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
-                                topic,
-                                UpdateKafkaGroupMember(
-                                        KafkaGroupType.CONSUMER,
-                                        GroupMemberOperation.ADD,
-                                        "srvc02"
-                                ))
+                            topic,
+                            UpdateKafkaGroupMember(
+                                KafkaGroupType.CONSUMER,
+                                GroupMemberOperation.ADD,
+                                "srvc02"
+                            )
+                        )
                     }.resultCode shouldBe ResultCode.SUCCESS
                 }
             }
@@ -188,41 +197,46 @@ object LDAPGroupSpec : Spek({
                 it("should return group members without removed srvp01") {
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
-                                topic,
-                                UpdateKafkaGroupMember(
-                                        KafkaGroupType.PRODUCER,
-                                        GroupMemberOperation.REMOVE,
-                                        "srvp01"
-                                ))
+                            topic,
+                            UpdateKafkaGroupMember(
+                                KafkaGroupType.PRODUCER,
+                                GroupMemberOperation.REMOVE,
+                                "srvp01"
+                            )
+                        )
                         lc.getKafkaGroupMembers("KP-$topic")
                     } shouldNotContainAny listOf(
-                            "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local")
+                        "uid=srvp01,ou=ServiceAccounts,dc=test,dc=local"
+                    )
                 }
 
                 it("should return group members without removed srvc01") {
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
-                                topic,
-                                UpdateKafkaGroupMember(
-                                        KafkaGroupType.CONSUMER,
-                                        GroupMemberOperation.REMOVE,
-                                        "srvc01"
-                                ))
+                            topic,
+                            UpdateKafkaGroupMember(
+                                KafkaGroupType.CONSUMER,
+                                GroupMemberOperation.REMOVE,
+                                "srvc01"
+                            )
+                        )
                         lc.getKafkaGroupMembers("KC-$topic")
                     } shouldNotContainAny listOf(
-                            "uid=srvc01,ou=ServiceAccounts,dc=test,dc=local")
+                        "uid=srvc01,ou=ServiceAccounts,dc=test,dc=local"
+                    )
                 }
 
                 it("should give ok when trying to remove non-existing member") {
 
                     LDAPGroup(fp).use { lc ->
                         lc.updateKafkaGroupMembership(
-                                topic,
-                                UpdateKafkaGroupMember(
-                                        KafkaGroupType.CONSUMER,
-                                        GroupMemberOperation.REMOVE,
-                                        "srvc01"
-                                ))
+                            topic,
+                            UpdateKafkaGroupMember(
+                                KafkaGroupType.CONSUMER,
+                                GroupMemberOperation.REMOVE,
+                                "srvc01"
+                            )
+                        )
                     }.resultCode shouldBe ResultCode.SUCCESS
                 }
             }
@@ -248,12 +262,12 @@ object LDAPGroupSpec : Spek({
 
         context("Verify management access for topics") {
             val topics = mapOf(
-                    Pair("tpc-01", "n000002") to true,
-                    Pair("tpc-02", "n141414") to false,
-                    Pair("tpc-03", "n145821") to true
+                Pair("tpc-01", "n000002") to true,
+                Pair("tpc-02", "n141414") to false,
+                Pair("tpc-03", "n145821") to true
             )
 
-            topics.forEach { pair, result ->
+            topics.forEach { (pair, result) ->
                 it("should return isManager is $result for topic $pair") {
                     val isMng = LDAPGroup(fp).use { lc -> lc.userIsManager(pair.first, pair.second) }
 

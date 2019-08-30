@@ -48,15 +48,16 @@ import org.slf4j.event.Level
 const val AUTHENTICATION_BASIC = "basicAuth"
 
 val swagger = Swagger(
-        info = Information(
-                version = System.getenv("APP_VERSION")?.toString() ?: "",
-                title = "Kafka self service API",
-                description = "[kafka-adminrest](https://github.com/navikt/kafka-adminrest)",
-                contact = Contact(
-                    name = "Torstein Nesby, Trong Huu Nguyen, Kevin Sillerud",
-                    url = "https://github.com/navikt/kafka-adminrest",
-                    email = "")
+    info = Information(
+        version = System.getenv("APP_VERSION")?.toString() ?: "",
+        title = "Kafka self service API",
+        description = "[kafka-adminrest](https://github.com/navikt/kafka-adminrest)",
+        contact = Contact(
+            name = "Torstein Nesby, Trong Huu Nguyen, Kevin Sillerud",
+            url = "https://github.com/navikt/kafka-adminrest",
+            email = ""
         )
+    )
 )
 
 /**
@@ -81,18 +82,22 @@ fun Application.kafkaAdminREST() {
             log.info { "Creating kafka admin client" }
 
             AdminClient.create(Properties()
-                    .apply {
-                        set(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, fp.kafkaBrokers)
-                        set(ConsumerConfig.CLIENT_ID_CONFIG, fp.kafkaClientID)
-                        if (fp.kafkaSecurityEnabled()) {
-                            set(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, fp.kafkaSecProt)
-                            set(SaslConfigs.SASL_MECHANISM, fp.kafkaSaslMec)
-                            set(SaslConfigs.SASL_JAAS_CONFIG, "$JAAS_PLAIN_LOGIN $JAAS_REQUIRED " +
-                                    "username=\"${fp.kafkaUser}\" password=\"${fp.kafkaPassword}\";")
-                        }
-                    })
+                .apply {
+                    set(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, fp.kafkaBrokers)
+                    set(ConsumerConfig.CLIENT_ID_CONFIG, fp.kafkaClientID)
+                    if (fp.kafkaSecurityEnabled()) {
+                        set(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, fp.kafkaSecProt)
+                        set(SaslConfigs.SASL_MECHANISM, fp.kafkaSaslMec)
+                        set(
+                            SaslConfigs.SASL_JAAS_CONFIG, "$JAAS_PLAIN_LOGIN $JAAS_REQUIRED " +
+                                "username=\"${fp.kafkaUser}\" password=\"${fp.kafkaPassword}\";"
+                        )
+                    }
+                })
         }
-    } catch (e: Exception) { null }
+    } catch (e: Exception) {
+        null
+    }
 
     val collectorRegistry = CollectorRegistry.defaultRegistry
 

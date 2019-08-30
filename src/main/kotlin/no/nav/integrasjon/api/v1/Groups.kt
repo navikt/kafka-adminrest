@@ -38,9 +38,9 @@ class GetGroups
 data class GetGroupsModel(val groups: List<String>)
 
 fun Routing.getGroups(fasitConfig: FasitProperties) =
-        get<GetGroups>("all groups".responds(ok<GetGroupsModel>(), serviceUnavailable<AnError>())) {
-            respondOrServiceUnavailable(fasitConfig) { lc -> GetGroupsModel(lc.getKafkaGroups().toList()) }
-        }
+    get<GetGroups>("all groups".responds(ok<GetGroupsModel>(), serviceUnavailable<AnError>())) {
+        respondOrServiceUnavailable(fasitConfig) { lc -> GetGroupsModel(lc.getKafkaGroups().toList()) }
+    }
 
 /**
  * See LDAP::getKafkaGroupMembers
@@ -53,11 +53,13 @@ data class GetGroupMembers(val groupName: String)
 data class GetGroupMembersModel(val name: String, val members: List<String>)
 
 fun Routing.getGroupMembers(fasitConfig: FasitProperties) =
-        get<GetGroupMembers>(
-                "members in a group".responds(ok<GetGroupMembersModel>(),
-                        serviceUnavailable<AnError>())
-        ) { group ->
-            respondOrServiceUnavailable(fasitConfig) { lc ->
-                GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
-            }
+    get<GetGroupMembers>(
+        "members in a group".responds(
+            ok<GetGroupMembersModel>(),
+            serviceUnavailable<AnError>()
+        )
+    ) { group ->
+        respondOrServiceUnavailable(fasitConfig) { lc ->
+            GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
         }
+    }

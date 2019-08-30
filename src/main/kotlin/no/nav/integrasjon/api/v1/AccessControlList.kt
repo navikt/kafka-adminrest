@@ -43,22 +43,25 @@ class XGetACL
 data class XGetACLModel(val acls: List<AclBinding>)
 
 fun Routing.getACLS(adminClient: AdminClient?, fasitConfig: FasitProperties) =
-        get<XGetACL>("all access control lists".securityAndReponds(
-                BasicAuthSecurity(),
-                ok<XGetACLModel>(),
-                serviceUnavailable<AnError>(),
-                unAuthorized<Unit>())) {
-            respondOrServiceUnavailable {
-                val logEntry = "All ACLS view request by ${this.context.authentication.principal}"
-                application.environment.log.info(logEntry)
+    get<XGetACL>(
+        "all access control lists".securityAndReponds(
+            BasicAuthSecurity(),
+            ok<XGetACLModel>(),
+            serviceUnavailable<AnError>(),
+            unAuthorized<Unit>()
+        )
+    ) {
+        respondOrServiceUnavailable {
+            val logEntry = "All ACLS view request by ${this.context.authentication.principal}"
+            application.environment.log.info(logEntry)
 
-                val acls = adminClient
-                        ?.describeAcls(AclBindingFilter.ANY)
-                        ?.values()
-                        ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
-                        ?.toList()
-                        ?: throw Exception(SERVICES_ERR_K)
+            val acls = adminClient
+                ?.describeAcls(AclBindingFilter.ANY)
+                ?.values()
+                ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                ?.toList()
+                ?: throw Exception(SERVICES_ERR_K)
 
-                XGetACLModel(acls)
-            }
+            XGetACLModel(acls)
         }
+    }

@@ -14,7 +14,9 @@ object FasitPropFactory {
             return fasitProperties_ ?: throw AssertionError("FasitPropFactory, null for fasitProperties_!")
         }
 
-    fun setFasitProperties(fp: FasitProperties) { fasitProperties_ = fp }
+    fun setFasitProperties(fp: FasitProperties) {
+        fasitProperties_ = fp
+    }
 }
 
 /**
@@ -60,29 +62,29 @@ data class FasitProperties(
 fun FasitProperties.kafkaSecurityEnabled(): Boolean = kafkaSecurity == "TRUE"
 
 fun FasitProperties.kafkaSecurityComplete(): Boolean =
-        kafkaSecProt.isNotEmpty() && kafkaSaslMec.isNotEmpty() && kafkaUser.isNotEmpty() && kafkaPassword.isNotEmpty()
+    kafkaSecProt.isNotEmpty() && kafkaSaslMec.isNotEmpty() && kafkaUser.isNotEmpty() && kafkaPassword.isNotEmpty()
 
 fun FasitProperties.ldapAuthenticationInfoComplete(): Boolean =
-        ldapUserAttrName.isNotEmpty() && ldapAuthHost.isNotEmpty() && ldapAuthPort != 0 && ldapAuthUserBase.isNotEmpty()
+    ldapUserAttrName.isNotEmpty() && ldapAuthHost.isNotEmpty() && ldapAuthPort != 0 && ldapAuthUserBase.isNotEmpty()
 
 fun FasitProperties.ldapGroupInfoComplete(): Boolean =
-        ldapHost.isNotEmpty() && ldapPort != 0 && ldapSrvUserBase.isNotEmpty() && ldapGroupBase.isNotEmpty() &&
-                ldapGroupAttrName.isNotEmpty() && ldapGrpMemberAttrName.isNotEmpty() && ldapUser.isNotEmpty() &&
-                ldapPassword.isNotEmpty()
+    ldapHost.isNotEmpty() && ldapPort != 0 && ldapSrvUserBase.isNotEmpty() && ldapGroupBase.isNotEmpty() &&
+        ldapGroupAttrName.isNotEmpty() && ldapGrpMemberAttrName.isNotEmpty() && ldapUser.isNotEmpty() &&
+        ldapPassword.isNotEmpty()
 
 // Connection factory for which ldap in matter
 
 enum class LdapConnectionType { AUTHENTICATION, GROUP }
 
 fun FasitProperties.getConnectionInfo(connType: LdapConnectionType) =
-        when (connType) {
-            LdapConnectionType.AUTHENTICATION -> LDAPBase.Companion.ConnectionInfo(
-                    ldapAuthHost, ldapAuthPort, ldapConnTimeout
-            )
-            LdapConnectionType.GROUP -> LDAPBase.Companion.ConnectionInfo(
-                    ldapHost, ldapPort, ldapConnTimeout
-            )
-        }
+    when (connType) {
+        LdapConnectionType.AUTHENTICATION -> LDAPBase.Companion.ConnectionInfo(
+            ldapAuthHost, ldapAuthPort, ldapConnTimeout
+        )
+        LdapConnectionType.GROUP -> LDAPBase.Companion.ConnectionInfo(
+            ldapHost, ldapPort, ldapConnTimeout
+        )
+    }
 
 // Return diverse distinguished name types
 

@@ -25,8 +25,9 @@ abstract class LDAPBase(private val connInfo: LDAPBase.Companion.ConnectionInfo)
 
     // NB! - TrustAllTrustManager is too trusty, but good enough when inside corporate inner zone
     protected val ldapConnection = LDAPConnection(
-            SSLUtil(TrustAllTrustManager()).createSSLSocketFactory(),
-            connectOptions)
+        SSLUtil(TrustAllTrustManager()).createSSLSocketFactory(),
+        connectOptions
+    )
 
     init {
         // initialize LDAP connection
@@ -36,8 +37,9 @@ abstract class LDAPBase(private val connInfo: LDAPBase.Companion.ConnectionInfo)
         } catch (e: LDAPException) {
             log.error { "$EXCEPTION LDAP operations against $connInfo will fail - $e" }
             ldapConnection.setDisconnectInfo(
-                    DisconnectType.IO_ERROR,
-                    "$EXCEPTION when connecting to LDAPS $connInfo", e)
+                DisconnectType.IO_ERROR,
+                "$EXCEPTION when connecting to LDAPS $connInfo", e
+            )
         }
     }
 

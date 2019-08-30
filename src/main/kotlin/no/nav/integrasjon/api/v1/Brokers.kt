@@ -42,19 +42,19 @@ class GetBrokers
 data class GetBrokersModel(val brokers: List<Node>)
 
 fun Routing.getBrokers(adminClient: AdminClient?, fasitConfig: FasitProperties) =
-        get<GetBrokers>("all brokers".responds(ok<GetBrokersModel>(), serviceUnavailable<AnError>())) {
-            respondOrServiceUnavailable {
+    get<GetBrokers>("all brokers".responds(ok<GetBrokersModel>(), serviceUnavailable<AnError>())) {
+        respondOrServiceUnavailable {
 
-                val nodes = adminClient
-                        ?.describeCluster()
-                        ?.nodes()
-                        ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
-                        ?.toList()
+            val nodes = adminClient
+                ?.describeCluster()
+                ?.nodes()
+                ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                ?.toList()
                 ?: throw Exception(SERVICES_ERR_K)
 
-                GetBrokersModel(nodes)
-            }
+            GetBrokersModel(nodes)
         }
+    }
 
 /**
  * See https://kafka.apache.org/10/javadoc/org/apache/kafka/clients/admin/AdminClient.html#describeConfigs-java.util.Collection-
@@ -67,22 +67,25 @@ data class GetBrokerConfig(val brokerID: String)
 data class GetBrokerConfigModel(val id: String, val config: List<ConfigEntry>)
 
 fun Routing.getBrokerConfig(adminClient: AdminClient?, fasitProps: FasitProperties) =
-        get<GetBrokerConfig>(
-                "a broker configuration".responds(ok<GetBrokerConfigModel>(),
-                        serviceUnavailable<AnError>())) { broker ->
-            respondOrServiceUnavailable {
+    get<GetBrokerConfig>(
+        "a broker configuration".responds(
+            ok<GetBrokerConfigModel>(),
+            serviceUnavailable<AnError>()
+        )
+    ) { broker ->
+        respondOrServiceUnavailable {
 
-                val brokerConfig = adminClient
-                        ?.describeConfigs(listOf(ConfigResource(ConfigResource.Type.BROKER, broker.brokerID)))
-                        ?.all()
-                        ?.get(fasitProps.kafkaTimeout, TimeUnit.MILLISECONDS)
-                        ?.entries
-                        ?.first()
-                        ?.value
-                        ?.entries()
-                        ?.toList()
-                        ?: throw Exception(SERVICES_ERR_K)
+            val brokerConfig = adminClient
+                ?.describeConfigs(listOf(ConfigResource(ConfigResource.Type.BROKER, broker.brokerID)))
+                ?.all()
+                ?.get(fasitProps.kafkaTimeout, TimeUnit.MILLISECONDS)
+                ?.entries
+                ?.first()
+                ?.value
+                ?.entries()
+                ?.toList()
+                ?: throw Exception(SERVICES_ERR_K)
 
-                GetBrokerConfigModel(broker.brokerID, brokerConfig)
-            }
+            GetBrokerConfigModel(broker.brokerID, brokerConfig)
         }
+    }

@@ -198,10 +198,12 @@ fun Routing.createNewTopic(adminClient: AdminClient?, fasitConfig: FasitProperti
          */
 
         if (!body.name.isValidTopicName()) {
-            call.respond(HttpStatusCode.BadRequest, AnError(
-                "Invalid topic name - $body.name. " +
-                    "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
-                    "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}")
+            call.respond(
+                HttpStatusCode.BadRequest, AnError(
+                    "Invalid topic name - $body.name. " +
+                        "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
+                        "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}"
+                )
             )
             return@post
         }
@@ -221,8 +223,10 @@ fun Routing.createNewTopic(adminClient: AdminClient?, fasitConfig: FasitProperti
         }
 
         if (defaultRepFactor == repFactorError) {
-            call.respond(HttpStatusCode.ServiceUnavailable, AnError(
-                "Could not get replicationFactor for topic from Kafka")
+            call.respond(
+                HttpStatusCode.ServiceUnavailable, AnError(
+                    "Could not get replicationFactor for topic from Kafka"
+                )
             )
             return@post
         }
@@ -293,7 +297,7 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.userTopicManagerStatu
     val (isMngRequestOk, authorized) = try {
         Pair(true, LDAPGroup(fasitConfig).use { ldap -> ldap.userIsManager(topicName, user) })
     } catch (e: Exception) {
-        Pair(false, false)
+        Pair(first = false, second = false)
     }
 
     if (!isMngRequestOk) {
@@ -335,7 +339,8 @@ fun Routing.deleteTopic(adminClient: AdminClient?, fasitConfig: FasitProperties)
             serviceUnavailable<AnError>(),
             badRequest<AnError>(),
             unAuthorized<Unit>()
-        )) { param ->
+        )
+    ) { param ->
 
         val currentUser = call.principal<UserIdPrincipal>()!!.name
         val topicName = param.topicName
@@ -409,10 +414,13 @@ data class GetTopicConfig(val topicName: String)
 data class GetTopicConfigModel(val name: String, val config: List<ConfigEntry>)
 
 fun Routing.getTopicConfig(adminClient: AdminClient?, fasitConfig: FasitProperties) =
-    get<GetTopicConfig>("a topic's configuration".responds(
-        ok<GetTopicConfigModel>(),
-        serviceUnavailable<AnError>(),
-        badRequest<AnError>())) { param ->
+    get<GetTopicConfig>(
+        "a topic's configuration".responds(
+            ok<GetTopicConfigModel>(),
+            serviceUnavailable<AnError>(),
+            badRequest<AnError>()
+        )
+    ) { param ->
 
         val topicName = param.topicName
 
@@ -479,7 +487,8 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, fasitConfig: FasitPrope
             serviceUnavailable<AnError>(),
             badRequest<AnError>(),
             unAuthorized<Unit>()
-        )) { param, body ->
+        )
+    ) { param, body ->
 
         val currentUser = call.principal<UserIdPrincipal>()!!.name
         val topicName = param.topicName
@@ -572,7 +581,13 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, fasitConfig: FasitPrope
             return@put
         }
 
-        call.respond(PutTopicConfigEntryModel(topicName, body.entries.map { it.configentry }, "updated with ${body.entries.map { it.value }}"))
+        call.respond(
+            PutTopicConfigEntryModel(
+                topicName,
+                body.entries.map { it.configentry },
+                "updated with ${body.entries.map { it.value }}"
+            )
+        )
     }
 
 /**
@@ -586,24 +601,28 @@ data class GetTopicACL(val topicName: String)
 data class GetTopicACLModel(val name: String, val acls: List<AclBinding>)
 
 fun Routing.getTopicAcls(adminClient: AdminClient?, fasitConfig: FasitProperties) =
-    get<GetTopicACL>("a topic's access control lists".responds(
-        ok<GetTopicACLModel>(),
-        serviceUnavailable<AnError>())
+    get<GetTopicACL>(
+        "a topic's access control lists".responds(
+            ok<GetTopicACLModel>(),
+            serviceUnavailable<AnError>()
+        )
     ) { param ->
 
         val topicName = param.topicName
 
         val aclFilter = AclBindingFilter(
             ResourcePatternFilter(ResourceType.TOPIC, topicName, PatternType.LITERAL),
-            AccessControlEntryFilter.ANY)
+            AccessControlEntryFilter.ANY
+        )
 
         val (aclRequestOk, acls) = try {
-            Pair(true, adminClient
-                ?.describeAcls(aclFilter)
-                ?.values()
-                ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
-                ?.toList()
-                ?: throw Exception(SERVICES_ERR_K)
+            Pair(
+                true, adminClient
+                    ?.describeAcls(aclFilter)
+                    ?.values()
+                    ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                    ?.toList()
+                    ?: throw Exception(SERVICES_ERR_K)
             )
         } catch (e: Exception) {
             Pair(false, emptyList<AclBinding>())
@@ -629,12 +648,13 @@ data class GetTopicGroups(val topicName: String)
 data class GetTopicGroupsModel(val name: String, val groups: List<KafkaGroup>)
 
 fun Routing.getTopicGroups(fasitConfig: FasitProperties) =
-    get<GetTopicGroups>("a topic's groups".responds(
-        ok<GetTopicGroupsModel>(),
-        serviceUnavailable<AnError>())
+    get<GetTopicGroups>(
+        "a topic's groups".responds(
+            ok<GetTopicGroupsModel>(),
+            serviceUnavailable<AnError>()
+        )
     ) { param ->
         respondOrServiceUnavailable(fasitConfig) { lc ->
-
             val topicName = param.topicName
             GetTopicGroupsModel(topicName, lc.getKafkaGroupsAndMembers(topicName))
         }
@@ -661,7 +681,8 @@ fun Routing.updateTopicGroup(fasitConfig: FasitProperties) =
             ok<PutTopicGMemberModel>(),
             serviceUnavailable<AnError>(),
             badRequest<AnError>(),
-            unAuthorized<Unit>())
+            unAuthorized<Unit>()
+        )
     ) { param, body ->
 
         val currentUser = call.principal<UserIdPrincipal>()!!.name
@@ -712,7 +733,7 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchTopics(
         )
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
-        Pair(false, emptyList<String>())
+        Pair(false, emptyList())
     }
 }
 
@@ -722,18 +743,20 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchTopicConfig(
     fasitConfig: FasitProperties
 ): Pair<Boolean, List<ConfigEntry>> {
     return try {
-        Pair(true, adminClient?.let { ac ->
-            ac.describeConfigs(mutableListOf(ConfigResource(ConfigResource.Type.TOPIC, topicName)))
-                .all()
-                .get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
-                .values
-                .first()
-                .entries()
-                .toList()
-        } ?: throw Exception(SERVICES_ERR_K)
+        Pair(
+            true,
+            adminClient
+                ?.describeConfigs(mutableListOf(ConfigResource(ConfigResource.Type.TOPIC, topicName)))
+                ?.all()
+                ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                ?.values
+                ?.first()
+                ?.entries()
+                ?.toList()
+                ?: throw Exception(SERVICES_ERR_K)
         )
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
-        Pair(false, emptyList<ConfigEntry>())
+        Pair(false, emptyList())
     }
 }

@@ -44,38 +44,39 @@ fun Routing.naisAPI(adminClient: AdminClient?, config: FasitProperties, collecto
 
 // isAlive don't need any tests, fasit properties are ok if this route is active
 fun Routing.getIsAlive() =
-        get(NAIS_ISALIVE) {
-            call.respondText("is alive", ContentType.Text.Plain)
-        }
+    get(NAIS_ISALIVE) {
+        call.respondText("is alive", ContentType.Text.Plain)
+    }
 
 fun Routing.getIsReady(adminClient: AdminClient?, config: FasitProperties) =
-        get(NAIS_ISREADY) {
-            respondOrServiceUnavailable {
+    get(NAIS_ISREADY) {
+        respondOrServiceUnavailable {
 
-                val (ldapGroupIsOK, ldapAuthenIsOk, kafkaIsOk) = backEndServicesAreOk(adminClient, config)
+            val (ldapGroupIsOK, ldapAuthenIsOk, kafkaIsOk) = backEndServicesAreOk(adminClient, config)
 
-                val msg = when {
-                    !(ldapGroupIsOK || ldapAuthenIsOk || kafkaIsOk) -> SERVICES_ERR_GAK
-                    !(ldapGroupIsOK || ldapAuthenIsOk) && kafkaIsOk -> SERVICES_ERR_GA
-                    !ldapGroupIsOK && ldapAuthenIsOk && !kafkaIsOk -> SERVICES_ERR_GK
-                    !ldapGroupIsOK && ldapAuthenIsOk && kafkaIsOk -> SERVICES_ERR_G
-                    ldapGroupIsOK && !(ldapAuthenIsOk || kafkaIsOk) -> SERVICES_ERR_AK
-                    ldapGroupIsOK && !ldapAuthenIsOk && kafkaIsOk -> SERVICES_ERR_A
-                    ldapGroupIsOK && ldapAuthenIsOk && !kafkaIsOk -> SERVICES_ERR_K
-                    ldapGroupIsOK && ldapAuthenIsOk && kafkaIsOk -> SERVICES_OK
-                    else -> SERVICES_ERR_STRANGE
-                    }
-
-                if (ldapGroupIsOK && ldapAuthenIsOk && kafkaIsOk) msg else throw Exception(msg)
+            val msg = when {
+                !(ldapGroupIsOK || ldapAuthenIsOk || kafkaIsOk) -> SERVICES_ERR_GAK
+                !(ldapGroupIsOK || ldapAuthenIsOk) && kafkaIsOk -> SERVICES_ERR_GA
+                !ldapGroupIsOK && ldapAuthenIsOk && !kafkaIsOk -> SERVICES_ERR_GK
+                !ldapGroupIsOK && ldapAuthenIsOk && kafkaIsOk -> SERVICES_ERR_G
+                ldapGroupIsOK && !(ldapAuthenIsOk || kafkaIsOk) -> SERVICES_ERR_AK
+                ldapGroupIsOK && !ldapAuthenIsOk && kafkaIsOk -> SERVICES_ERR_A
+                ldapGroupIsOK && ldapAuthenIsOk && !kafkaIsOk -> SERVICES_ERR_K
+                ldapGroupIsOK && ldapAuthenIsOk && kafkaIsOk -> SERVICES_OK
+                else -> SERVICES_ERR_STRANGE
             }
+
+            if (ldapGroupIsOK && ldapAuthenIsOk && kafkaIsOk) msg else throw Exception(msg)
         }
+    }
 
 fun Routing.getPrometheus(collectorRegistry: CollectorRegistry) =
-        get("/prometheus") {
-            val names = call.request.queryParameters.getAll("name[]")?.toSet() ?: setOf()
-            call.respondTextWriter(ContentType.parse(TextFormat.CONTENT_TYPE_004)) {
-                TextFormat.write004(
-                        this,
-                        collectorRegistry.filteredMetricFamilySamples(names))
-            }
+    get("/prometheus") {
+        val names = call.request.queryParameters.getAll("name[]")?.toSet() ?: setOf()
+        call.respondTextWriter(ContentType.parse(TextFormat.CONTENT_TYPE_004)) {
+            TextFormat.write004(
+                this,
+                collectorRegistry.filteredMetricFamilySamples(names)
+            )
         }
+    }

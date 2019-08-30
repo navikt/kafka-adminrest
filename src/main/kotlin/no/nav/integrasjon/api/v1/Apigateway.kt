@@ -39,9 +39,11 @@ class GetApiGatewayGroup
 data class GetApiGwGroupMembersModel(val name: String, val members: List<String>)
 
 fun Routing.getAllowedUsersInApiGwGroup(fasitConfig: FasitProperties) =
-    get<GetApiGatewayGroup>("all members in $apiGw group".responds(
-        ok<GetApiGwGroupMembersModel>(),
-        serviceUnavailable<AnError>())
+    get<GetApiGatewayGroup>(
+        "all members in $apiGw group".responds(
+            ok<GetApiGwGroupMembersModel>(),
+            serviceUnavailable<AnError>()
+        )
     ) {
         respondOrServiceUnavailable(fasitConfig) { lc ->
             GetApiGwGroupMembersModel(apiGw, lc.getGroupMembers(apiGw))
@@ -81,7 +83,8 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             BasicAuthSecurity(),
             ok<PutApiGwResultModel>(),
             badRequest<AnError>(),
-            unAuthorized<AnError>())
+            unAuthorized<AnError>()
+        )
     ) { _, body ->
 
         val currentUser = call.principal<UserIdPrincipal>()!!.name.toLowerCase()
@@ -113,7 +116,8 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             // 1. Check request body for users to add
             val usersToBeAdded = try {
                 body.members.map { member ->
-                    Pair(member.member, member.operation) }
+                    Pair(member.member, member.operation)
+                }
                     .filter { it.second == GroupMemberOperation.ADD }
                     .filter { !groupMembers.contains(it.first) } // 2. Add only users not already in group
             } catch (e: Exception) {
@@ -145,7 +149,8 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             // 1. Check request body for users to remove
             val usersToBeRemoved = try {
                 body.members.map { member ->
-                    Pair(member.member, member.operation) }
+                    Pair(member.member, member.operation)
+                }
                     .filter { GroupMemberOperation.REMOVE == it.second }
                     .filter { groupMembers.contains(it.first) }
             } catch (e: Exception) {
@@ -156,14 +161,14 @@ fun Routing.updateApiGwGroup(fasitConfig: FasitProperties) =
             }
             application.environment.log.debug("Users that will be removed: $usersToBeRemoved")
 
-            if (!usersToBeAdded.isEmpty()) {
+            if (usersToBeAdded.isNotEmpty()) {
                 val userResult = usersToBeAdded.map { it.first }
                 ldap.addToGroup(apiGw, userResult)
                 val msg = "$apiGw group got updated: added member(s): $userResult"
                 application.environment.log.info(msg)
             }
 
-            if (!usersToBeRemoved.isEmpty()) {
+            if (usersToBeRemoved.isNotEmpty()) {
                 val userResult = usersToBeRemoved.map { it.first }
                 ldap.removeGroupMembers(apiGw, userResult)
                 val msg = "$apiGw group got updated: removed member(s): $userResult"

@@ -43,10 +43,12 @@ internal data class AnError(val error: String)
 internal fun kafkaIsOk(adminClient: AdminClient?, fasitConfig: FasitProperties): Boolean =
     try {
         adminClient
-                ?.listTopics()
-                ?.namesToListings()
-                ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.isNotEmpty() ?: false
-    } catch (e: Exception) { false }
+            ?.listTopics()
+            ?.namesToListings()
+            ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.isNotEmpty() ?: false
+    } catch (e: Exception) {
+        false
+    }
 
 internal fun backEndServicesAreOk(
     adminClient: AdminClient?,
@@ -54,9 +56,9 @@ internal fun backEndServicesAreOk(
 ): Triple<Boolean, Boolean, Boolean> =
 
     Triple(
-            LDAPGroup(fasitConfig).use { ldapGroup -> ldapGroup.connectionOk },
-            LDAPAuthenticate(fasitConfig).use { ldapAuthenticate -> ldapAuthenticate.connectionOk },
-            kafkaIsOk(adminClient, fasitConfig)
+        LDAPGroup(fasitConfig).use { ldapGroup -> ldapGroup.connectionOk },
+        LDAPAuthenticate(fasitConfig).use { ldapAuthenticate -> ldapAuthenticate.connectionOk },
+        kafkaIsOk(adminClient, fasitConfig)
     )
 
 internal suspend fun PipelineContext<Unit, ApplicationCall>.respondOrServiceUnavailable(block: () -> Any) =
@@ -76,8 +78,8 @@ internal suspend fun PipelineContext<Unit, ApplicationCall>.respondOrServiceUnav
     fasitConfig: FasitProperties,
     block: (lc: LDAPGroup) -> Any
 ) = try {
-        LDAPGroup(fasitConfig).use { lc -> call.respond(block(lc)) }
-    } catch (e: Exception) {
-        application.environment.log.error(EXCEPTION, e)
-        call.respond(HttpStatusCode.ServiceUnavailable, AnError(e.localizedMessage))
-    }
+    LDAPGroup(fasitConfig).use { lc -> call.respond(block(lc)) }
+} catch (e: Exception) {
+    application.environment.log.error(EXCEPTION, e)
+    call.respond(HttpStatusCode.ServiceUnavailable, AnError(e.localizedMessage))
+}

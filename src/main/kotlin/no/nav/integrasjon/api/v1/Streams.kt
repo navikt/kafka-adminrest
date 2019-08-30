@@ -34,54 +34,61 @@ enum class PostStreamStatus {
 @Group(swGroup)
 @Location("$STREAMS/")
 class PostStream
+
 data class PostStreamBody(val applicationName: String, val user: String)
 
 data class PostStreamResponse(val status: PostStreamStatus, val message: String)
 
 fun Routing.streamsAPI(adminClient: AdminClient?, fasitConfig: FasitProperties) {
     post<PostStream, PostStreamBody>(
-            "new streams app. The stream app will get permissions to create new internal topics."
-                    .securityAndReponds(
-                            BasicAuthSecurity(),
-                            ok<PostStreamResponse>(),
-                            serviceUnavailable<AnError>(),
-                            badRequest<AnError>(),
-                            unAuthorized<Unit>()
-                    )
+        "new streams app. The stream app will get permissions to create new internal topics."
+            .securityAndReponds(
+                BasicAuthSecurity(),
+                ok<PostStreamResponse>(),
+                serviceUnavailable<AnError>(),
+                badRequest<AnError>(),
+                unAuthorized<Unit>()
+            )
     ) { _, body ->
-        adminClient?.listTopics()?.names()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.filter {
+        adminClient?.listTopics()?.names()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.firstOrNull {
             it.startsWith(body.applicationName)
-        }?.firstOrNull()?.let {
+        }?.let {
             log.error("Trying to register a stream app which is a prefix of $it")
-            call.respond(HttpStatusCode.BadRequest, PostStreamResponse(
+            call.respond(
+                HttpStatusCode.BadRequest, PostStreamResponse(
                     status = PostStreamStatus.ERROR,
                     message = "Stream name is prefix of a topic"
-            ))
+                )
+            )
         } ?: run {
             val streamsAcl = listOf(
-                    AclBinding(
-                            ResourcePattern(ResourceType.TOPIC, body.applicationName, PatternType.PREFIXED),
-                            AccessControlEntry("User:${body.user}", "*", AclOperation.ALL, AclPermissionType.ALLOW)
-                    ),
-                    AclBinding(
-                            ResourcePattern(ResourceType.GROUP, body.applicationName, PatternType.PREFIXED),
-                            AccessControlEntry("User:${body.user}", "*", AclOperation.ALL, AclPermissionType.ALLOW)
-                    )
+                AclBinding(
+                    ResourcePattern(ResourceType.TOPIC, body.applicationName, PatternType.PREFIXED),
+                    AccessControlEntry("User:${body.user}", "*", AclOperation.ALL, AclPermissionType.ALLOW)
+                ),
+                AclBinding(
+                    ResourcePattern(ResourceType.GROUP, body.applicationName, PatternType.PREFIXED),
+                    AccessControlEntry("User:${body.user}", "*", AclOperation.ALL, AclPermissionType.ALLOW)
+                )
             )
 
             try {
                 adminClient?.createAcls(streamsAcl)?.all()?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
                 log.info("Successfully updated acl for stream app ${body.applicationName}")
-                call.respond(PostStreamResponse(
+                call.respond(
+                    PostStreamResponse(
                         status = PostStreamStatus.OK,
                         message = "Successfully updated ACL"
-                ))
+                    )
+                )
             } catch (e: Exception) {
                 log.error("Exception caught while updating ACL for stream app ${body.applicationName}", e)
-                call.respond(HttpStatusCode.ServiceUnavailable, PostStreamResponse(
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable, PostStreamResponse(
                         status = PostStreamStatus.ERROR,
                         message = "Failed to update ACL"
-                ))
+                    )
+                )
             }
         }
     }
