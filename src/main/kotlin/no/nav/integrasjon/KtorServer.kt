@@ -96,6 +96,7 @@ fun Application.kafkaAdminREST() {
                 })
         }
     } catch (e: Exception) {
+        log.error(e) { "Could not initialize AdminClient" }
         null
     }
 
