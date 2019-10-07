@@ -14,6 +14,8 @@ import no.nav.integrasjon.ldap.LDAPAuthenticate
 import no.nav.integrasjon.ldap.LDAPGroup
 import org.apache.kafka.clients.admin.AdminClient
 
+val log = KotlinLogging.logger { }
+
 // nais api
 
 internal const val NAIS_ISALIVE = "/isAlive"
@@ -47,6 +49,7 @@ internal fun kafkaIsOk(adminClient: AdminClient?, fasitConfig: FasitProperties):
             ?.namesToListings()
             ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)?.isNotEmpty() ?: false
     } catch (e: Exception) {
+        logger.error(e) { "Could not connect to Kafka" }
         false
     }
 
