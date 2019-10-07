@@ -7,6 +7,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.response.respond
 import io.ktor.util.pipeline.PipelineContext
 import java.util.concurrent.TimeUnit
+import mu.KotlinLogging
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.FasitProperties
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
@@ -14,7 +15,7 @@ import no.nav.integrasjon.ldap.LDAPAuthenticate
 import no.nav.integrasjon.ldap.LDAPGroup
 import org.apache.kafka.clients.admin.AdminClient
 
-val log = KotlinLogging.logger { }
+private val logger = KotlinLogging.logger { }
 
 // nais api
 
