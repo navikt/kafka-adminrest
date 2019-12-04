@@ -457,7 +457,8 @@ enum class AllowedConfigEntries(val entryName: String) {
     RETENTION_MS("retention.ms"),
     RETENTION_BYTES("retention.bytes"),
     CLEANUP_POLICY("cleanup.policy"),
-    DELETE_RETENTION_MS("delete.retention.ms")
+    DELETE_RETENTION_MS("delete.retention.ms"),
+    MIN_COMPACTION_LAG_MS("min.compaction.lag.ms")
 }
 
 @Group(swGroup)
