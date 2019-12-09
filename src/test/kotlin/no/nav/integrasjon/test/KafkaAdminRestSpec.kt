@@ -647,6 +647,28 @@ object KafkaAdminRestSpec : Spek({
                                 call.response.status() shouldBe HttpStatusCode.OK
                             }
 
+                            it("should update 'min.compaction.lag.ms' configuration for topic tpc-03") {
+                                val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                    addHeader(HttpHeaders.ContentType, "application/json")
+                                    // relevant user is in the right place in UserAndGroups.ldif
+                                    addHeader(
+                                            HttpHeaders.Authorization,
+                                            "Basic ${encodeBase64("n145821:itest3".toByteArray())}"
+                                    )
+
+                                    val jsonPayload = Gson().toJson(ConfigEntries(listOf(
+                                            PutTopicConfigEntryBody(
+                                                    AllowedConfigEntries.MIN_COMPACTION_LAG_MS,
+                                                    "3600000"
+                                            )
+
+                                    )))
+                                    setBody(jsonPayload)
+                                }
+                                call.response.status() shouldBe HttpStatusCode.OK
+                            }
+
                             it("should return updated 'delete.retention.ms' configuration for tpc-03 and should not have reset configurations for 'retention.ms'") {
                                 val call = handleRequest(HttpMethod.Get, "$TOPICS/tpc-03") {
                                     addHeader(HttpHeaders.Accept, "application/json")
