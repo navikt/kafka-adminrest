@@ -19,10 +19,10 @@ jobs:
             ${{ runner.os }}-gradle-
       - name: Run tests
         run: |
-          ./gradlew kafak-adminrest:clean test
+          ./gradlew clean test
       - name: Build jar
         run: |
-          ./gradlew kafak-adminrest:shadowJar -x test
+          ./gradlew shadowJar -x test
       - name: Create Docker tag
         env:
           NAME: kafak-adminrest
