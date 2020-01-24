@@ -63,5 +63,5 @@ jobs:
         env:
           APIKEY: ${{ secrets.NAIS_DEPLOY_APIKEY }}
           CLUSTER: dev-fss
-          VAR: .nais/nais.yml
+          RESOURCE: .nais/nais.yml
           PRINT_PAYLOAD: true
