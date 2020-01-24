@@ -1,0 +1,43 @@
+kind: Application
+apiVersion: nais.io/v1alpha1
+metadata:
+  name: kafka-adminrest
+  namespace: t4
+  labels:
+    team: integrasjon
+spec:
+  image: {{image}}
+  ingresses:
+    - https://kafka-adminrest-t4.nais.preprod.local
+  liveness:
+    path: /isAlive
+    port: 8080
+    initialDelay: 30
+    periodSeconds: 5
+    failureThreshold: 30
+  port: 8080
+  prometheus:
+    enabled: true
+    path: /prometheus
+  readiness:
+    path: /isReady
+    port: 8080
+    initialDelay: 30
+    periodSeconds: 5
+    failureThreshold: 30
+  replicas:
+    min: 2
+    max: 4
+    cpuThresholdPercentage: 80
+  resources:
+    limits:
+      cpu: 250m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  vault:
+    enabled: true
+    paths:
+      - kvPath: /kv/preprod/fss/kafka-adminrest/t4
+        mountPath: /var/run/secrets/nais.io/vault

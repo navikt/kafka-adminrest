@@ -1,0 +1,67 @@
+name: Deploy to DEV-FSS - T4
+on:
+  push:
+    branches:
+      - "!master"
+jobs:
+  build-test-push:
+    name: Build - Test - Push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+      - name: Cache Dependecies
+        uses: actions/cache@v1
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: Run tests
+        run: |
+          ./gradlew kafak-adminrest:clean test
+      - name: Build jar
+        run: |
+          ./gradlew kafak-adminrest:shadowJar -x test
+      - name: Create Docker tag
+        env:
+          NAME: kafak-adminrest
+        run: |
+          echo -n "docker.pkg.github.com"/"$GITHUB_REPOSITORY"/"$NAME" > .docker
+          echo -n ":$(date "+%Y.%m.%d")-$(git rev-parse --short HEAD)" >> .docker
+          echo ::set-env name=IMAGE::$(cat .docker)
+      - name: Build Docker image
+        run: docker build -t $IMAGE .
+      - name: Login to Github Package Registry
+        env:
+          DOCKER_USERNAME: x-access-token
+          DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin docker.pkg.github.com
+      - name: Push Docker image
+        run: "docker push $IMAGE"
+      - name: Upload Docker image and tag
+        uses: actions/upload-artifact@v1
+        with:
+          name: docker
+          path: .docker
+
+  deploy:
+    name: Deploy to DEV-FSS
+    runs-on: ubuntu-latest
+    needs: build-test-push
+    steps:
+      - name: Download Docker image and tag
+        uses: actions/download-artifact@v1
+        with:
+          name: docker
+      - name: Set IMAGE env
+        run: echo ::set-env name=IMAGE::$(cat docker/.docker)
+      - name: Checkout code
+        uses: actions/checkout@v1
+      - name: Deploy to DEV-FSS - T4
+        uses: nais/deploy/actions/deploy@v1
+        env:
+          APIKEY: ${{ secrets.NAIS_DEPLOY_APIKEY }}
+          CLUSTER: dev-fss
+          VAR: .nais/nais.yml
+          PRINT_PAYLOAD: true

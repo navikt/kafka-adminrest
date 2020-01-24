@@ -2,7 +2,7 @@ package no.nav.integrasjon.api.v1
 
 import io.ktor.locations.Location
 import io.ktor.routing.Routing
-import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.ok
@@ -19,10 +19,9 @@ import no.nav.integrasjon.api.nielsfalk.ktor.swagger.serviceUnavailable
  */
 
 // a wrapper for this api to be installed as routes
-fun Routing.groupsAPI(fasitConfig: FasitProperties) {
-
-    getGroups(fasitConfig)
-    getGroupMembers(fasitConfig)
+fun Routing.groupsAPI(environment: Environment) {
+    getGroups(environment)
+    getGroupMembers(environment)
 }
 
 private const val swGroup = "Groups"
@@ -37,9 +36,9 @@ class GetGroups
 
 data class GetGroupsModel(val groups: List<String>)
 
-fun Routing.getGroups(fasitConfig: FasitProperties) =
+fun Routing.getGroups(environment: Environment) =
     get<GetGroups>("all groups".responds(ok<GetGroupsModel>(), serviceUnavailable<AnError>())) {
-        respondOrServiceUnavailable(fasitConfig) { lc -> GetGroupsModel(lc.getKafkaGroups().toList()) }
+        respondOrServiceUnavailable(environment) { lc -> GetGroupsModel(lc.getKafkaGroups().toList()) }
     }
 
 /**
@@ -52,14 +51,12 @@ data class GetGroupMembers(val groupName: String)
 
 data class GetGroupMembersModel(val name: String, val members: List<String>)
 
-fun Routing.getGroupMembers(fasitConfig: FasitProperties) =
+fun Routing.getGroupMembers(environment: Environment) =
     get<GetGroupMembers>(
-        "members in a group".responds(
-            ok<GetGroupMembersModel>(),
-            serviceUnavailable<AnError>()
-        )
+        "members in a group".responds(ok<GetGroupMembersModel>(),
+            serviceUnavailable<AnError>())
     ) { group ->
-        respondOrServiceUnavailable(fasitConfig) { lc ->
+        respondOrServiceUnavailable(environment) { lc ->
             GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))
         }
     }

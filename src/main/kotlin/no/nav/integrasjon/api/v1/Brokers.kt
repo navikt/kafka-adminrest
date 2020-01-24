@@ -3,7 +3,7 @@ package no.nav.integrasjon.api.v1
 import io.ktor.locations.Location
 import io.ktor.routing.Routing
 import java.util.concurrent.TimeUnit
-import no.nav.integrasjon.FasitProperties
+import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.get
@@ -23,10 +23,10 @@ import org.apache.kafka.common.config.ConfigResource
  */
 
 // a wrapper for this api to be installed as routes
-fun Routing.brokersAPI(adminClient: AdminClient?, fasitConfig: FasitProperties) {
+fun Routing.brokersAPI(adminClient: AdminClient?, environment: Environment) {
 
-    getBrokers(adminClient, fasitConfig)
-    getBrokerConfig(adminClient, fasitConfig)
+    getBrokers(adminClient, environment)
+    getBrokerConfig(adminClient, environment)
 }
 
 private const val swGroup = "Brokers"
@@ -41,14 +41,14 @@ class GetBrokers
 
 data class GetBrokersModel(val brokers: List<Node>)
 
-fun Routing.getBrokers(adminClient: AdminClient?, fasitConfig: FasitProperties) =
+fun Routing.getBrokers(adminClient: AdminClient?, environment: Environment) =
     get<GetBrokers>("all brokers".responds(ok<GetBrokersModel>(), serviceUnavailable<AnError>())) {
         respondOrServiceUnavailable {
 
             val nodes = adminClient
                 ?.describeCluster()
                 ?.nodes()
-                ?.get(fasitConfig.kafkaTimeout, TimeUnit.MILLISECONDS)
+                ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
                 ?.toList()
                 ?: throw Exception(SERVICES_ERR_K)
 
@@ -66,19 +66,16 @@ data class GetBrokerConfig(val brokerID: String)
 
 data class GetBrokerConfigModel(val id: String, val config: List<ConfigEntry>)
 
-fun Routing.getBrokerConfig(adminClient: AdminClient?, fasitProps: FasitProperties) =
+fun Routing.getBrokerConfig(adminClient: AdminClient?, environment: Environment) =
     get<GetBrokerConfig>(
-        "a broker configuration".responds(
-            ok<GetBrokerConfigModel>(),
-            serviceUnavailable<AnError>()
-        )
-    ) { broker ->
+        "a broker configuration".responds(ok<GetBrokerConfigModel>(),
+            serviceUnavailable<AnError>())) { broker ->
         respondOrServiceUnavailable {
 
             val brokerConfig = adminClient
                 ?.describeConfigs(listOf(ConfigResource(ConfigResource.Type.BROKER, broker.brokerID)))
                 ?.all()
-                ?.get(fasitProps.kafkaTimeout, TimeUnit.MILLISECONDS)
+                ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
                 ?.entries
                 ?.first()
                 ?.value
