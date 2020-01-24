@@ -1,8 +1,8 @@
 name: Deploy to DEV-FSS - T4
 on:
   push:
-    branches:
-      - "!master"
+    branches-ignore:
+      - master
 jobs:
   build-test-push:
     name: Build - Test - Push
