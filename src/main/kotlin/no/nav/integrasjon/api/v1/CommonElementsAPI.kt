@@ -47,7 +47,7 @@ internal fun kafkaIsOk(adminClient: AdminClient?, environment: Environment): Boo
         adminClient
             ?.listTopics()
             ?.namesToListings()
-            ?.get()?.isNotEmpty() ?: false
+            ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)?.isNotEmpty() ?: false
     } catch (e: Exception) {
         logger.error(e) { "Could not connect to kafka: timeout - ${environment.kafka.kafkaTimeout}" }
         false
