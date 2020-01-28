@@ -18,12 +18,9 @@ import com.unboundid.ldap.sdk.SearchResult
 import com.unboundid.ldap.sdk.SearchScope
 import mu.KotlinLogging
 import no.nav.integrasjon.EXCEPTION
-import no.nav.integrasjon.FasitProperties
-import no.nav.integrasjon.LdapConnectionType
-import no.nav.integrasjon.getConnectionInfo
-import no.nav.integrasjon.groupDN
+import no.nav.integrasjon.Environment
+import no.nav.integrasjon.getAuthenticationConnectionInfo
 import no.nav.integrasjon.ldap.LDAPGroup.Companion.simplify
-import no.nav.integrasjon.srvUserDN
 import org.apache.kafka.common.acl.AccessControlEntry
 import org.apache.kafka.common.acl.AclBinding
 import org.apache.kafka.common.acl.AclOperation
@@ -50,16 +47,26 @@ import org.apache.kafka.common.resource.ResourceType
 
 fun toGroupName(prefix: String, topicName: String) = "$prefix$topicName"
 
-class LDAPGroup(private val config: FasitProperties) :
-    LDAPBase(config.getConnectionInfo(LdapConnectionType.GROUP)) {
+class LDAPGroup(private val env: Environment) :
+    LDAPBase(
+        getAuthenticationConnectionInfo(
+            env.ldapGroup.ldapHost,
+            env.ldapGroup.ldapPort,
+            env.ldapCommon.ldapConnTimeout
+        )
+    ) {
 
     init {
         // initialize bind of user with enough authorization for group operations
 
-        val connInfo = config.getConnectionInfo(LdapConnectionType.GROUP)
-        val srvUserDN = config.srvUserDN()
+        val connInfo = getAuthenticationConnectionInfo(
+            env.ldapGroup.ldapHost,
+            env.ldapGroup.ldapPort,
+            env.ldapCommon.ldapConnTimeout
+        )
+        val srvUserDN = env.srvUserDN()
         try {
-            ldapConnection.bind(srvUserDN, config.ldapPassword)
+            ldapConnection.bind(srvUserDN, env.ldapUser.ldapPassword)
             log.debug { "Successfully bind of $srvUserDN to $connInfo" }
         } catch (e: LDAPException) {
             log.error("$EXCEPTION LDAP operations will fail. Bind failure for $srvUserDN to $connInfo - $e")
@@ -139,35 +146,35 @@ class LDAPGroup(private val config: FasitProperties) :
         )
 
     fun createGroup(groupName: String, initialMember: String? = null) {
-        ldapConnection.add(AddRequest(DN(config.groupDN(groupName)), newGroupAttr.toMutableList().apply {
+        ldapConnection.add(AddRequest(DN(env.groupDN(groupName)), newGroupAttr.toMutableList().apply {
             add(Attribute("cn", groupName))
             add(Attribute("sAMAccountName", groupName))
             if (initialMember != null) {
-                add(Attribute(config.ldapGrpMemberAttrName, resolveUserDN(initialMember)))
+                add(Attribute(env.ldapGroup.ldapGrpMemberAttrName, resolveUserDN(initialMember)))
             }
         }))
     }
 
     fun removeGroupMembers(groupName: String, membersToRemove: List<String>) {
-        ldapConnection.modify(config.groupDN(groupName), membersToRemove.map {
-            Modification(ModificationType.DELETE, config.ldapGrpMemberAttrName, resolveUserDN(it))
+        ldapConnection.modify(env.groupDN(groupName), membersToRemove.map {
+            Modification(ModificationType.DELETE, env.ldapGroup.ldapGrpMemberAttrName, resolveUserDN(it))
         })
     }
 
     fun addToGroup(groupName: String, groupMembers: List<String>) {
-        ldapConnection.modify(config.groupDN(groupName), groupMembers.map {
-            Modification(ModificationType.ADD, config.ldapGrpMemberAttrName, resolveUserDN(it))
+        ldapConnection.modify(env.groupDN(groupName), groupMembers.map {
+            Modification(ModificationType.ADD, env.ldapGroup.ldapGrpMemberAttrName, resolveUserDN(it))
         })
     }
 
     fun getGroupMembers(groupName: String): List<String> =
-        searchGetMembershipKN(Filter.createEqualityFilter(config.ldapGroupAttrName, groupName))
+        searchGetMembershipKN(Filter.createEqualityFilter(env.ldapGroup.ldapGroupAttrName, groupName))
             .searchEntries
-            .flatMap { searchResultEntry ->
-                (searchResultEntry.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: listOf<String>())
-                    .map { dnString ->
-                        DN(dnString).rdn.attributes.first { attribute ->
-                            attribute.name.equals(config.ldapUserAttrName, ignoreCase = true)
+            .flatMap {
+                (it.getAttribute(env.ldapGroup.ldapGrpMemberAttrName)?.values?.toList() ?: listOf<String>())
+                    .map { attribute ->
+                        DN(attribute).rdn.attributes.first { first ->
+                            first.name.equals(env.ldapCommon.ldapUserAttrName, ignoreCase = true)
                         }.value
                     }
             }
@@ -178,16 +185,15 @@ class LDAPGroup(private val config: FasitProperties) :
         else
             ldapConnection.add(
                 AddRequest(
-                    DN(config.groupDN(groupName)),
+                    DN(env.groupDN(groupName)),
                     newGroupAttr.toMutableList().apply {
                         add(Attribute("cn", groupName))
                         add(Attribute("sAMAccountName", groupName))
 
                         resolveUserDN(creator).let { userDN ->
                             if (groupName.startsWith(KafkaGroupType.MANAGER.prefix) &&
-                                userDN.isNotEmpty()
-                            )
-                                add(Attribute(config.ldapGrpMemberAttrName, userDN))
+                                userDN.isNotEmpty())
+                                add(Attribute(env.ldapGroup.ldapGrpMemberAttrName, userDN))
                         }
                     })
                     .also { req -> log.info { "Create group request: $req" } }
@@ -199,21 +205,20 @@ class LDAPGroup(private val config: FasitProperties) :
         else
             ldapConnection.delete(
                 DeleteRequest(
-                    DN(config.groupDN(groupName))
+                    DN(env.groupDN(groupName))
                 ).also { req -> log.info { "Delete group request: $req" } }
             ).simplify()
 
     fun getKafkaGroupMembers(groupName: String) = getMembersInKafkaGroup(groupName)
 
     fun updateKafkaGroupMembership(topicName: String, updateEntry: UpdateKafkaGroupMember): SLDAPResult =
-
         resolveUserDN(updateEntry.member).let { userDN ->
             if (userDN.isEmpty())
                 throw Exception("Cannot find ${updateEntry.member} under user - or service accounts")
             else if (updateEntry.role != KafkaGroupType.MANAGER && isNAVIdent(updateEntry.member))
                 throw Exception("Cannot have ${updateEntry.member} as consumer/producer")
             else
-                config.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
+                env.groupDN(toGroupName(updateEntry.role.prefix, topicName)).let { groupDN ->
 
                     val req = ModifyRequest(
                         groupDN,
@@ -222,7 +227,7 @@ class LDAPGroup(private val config: FasitProperties) :
                                 GroupMemberOperation.ADD -> ModificationType.ADD
                                 GroupMemberOperation.REMOVE -> ModificationType.DELETE
                             },
-                            config.ldapGrpMemberAttrName,
+                            env.ldapGroup.ldapGrpMemberAttrName,
                             userDN
                         )
                     )
@@ -246,7 +251,7 @@ class LDAPGroup(private val config: FasitProperties) :
         // careful, AD will raise exception if group is empty, thus, no member attribute issue
         if (groupEmpty(groupName)) false
         else ldapConnection
-            .compare(CompareRequest(groupDN, config.ldapGrpMemberAttrName, userDN))
+            .compare(CompareRequest(groupDN, env.ldapGroup.ldapGrpMemberAttrName, userDN))
             .compareMatched()
 
     fun userIsManager(topicName: String, userName: String): Boolean =
@@ -255,9 +260,8 @@ class LDAPGroup(private val config: FasitProperties) :
             if (groupName in getKafkaGroupNames())
                 userInGroup(
                     resolveUserDN(userName),
-                    config.groupDN(toGroupName(KafkaGroupType.MANAGER.prefix, topicName)),
-                    groupName
-                )
+                    env.groupDN(toGroupName(KafkaGroupType.MANAGER.prefix, topicName)),
+                    groupName)
             else false
         }
 
@@ -281,18 +285,16 @@ class LDAPGroup(private val config: FasitProperties) :
     /**
      * Level 1 - Search functions locked to specific nodes, based on generic search function
      */
-    private val searchInKafkaNode = searchXInY(config.ldapGroupBase, SearchScope.ONE)
-    private val searchInServiceAccountsNode = searchXInY(config.ldapSrvUserBase, SearchScope.SUB)
-    private val searchInUserAccountsNode = searchXInY(
-        inheritDNTail(config.ldapSrvUserBase, config.ldapAuthUserBase),
-        SearchScope.SUB
-    )
+    private val searchInKafkaNode = searchXInY(env.ldapGroup.ldapGroupBase, SearchScope.ONE)
+    private val searchInServiceAccountsNode = searchXInY(env.ldapGroup.ldapSrvUserBase, SearchScope.SUB)
+    private val searchInUserAccountsNode = searchXInY(inheritDNTail(env.ldapGroup.ldapSrvUserBase, env.ldapAuthenticate.ldapAuthUserBase),
+        SearchScope.SUB)
 
     /**
      * Level 2 - Search functions getting attributes, based on search functions locked to nodes
      */
-    private val searchGetMembershipKN = searchInKafkaNode(config.ldapGrpMemberAttrName)
-    private val searchGetNamesKN = searchInKafkaNode(config.ldapGroupAttrName)
+    private val searchGetMembershipKN = searchInKafkaNode(env.ldapGroup.ldapGrpMemberAttrName)
+    private val searchGetNamesKN = searchInKafkaNode(env.ldapGroup.ldapGroupAttrName)
 
     private val searchGetDNSAN = searchInServiceAccountsNode(SearchRequest.NO_ATTRIBUTES)
     private val searchGetDNUAN = searchInUserAccountsNode(SearchRequest.NO_ATTRIBUTES)
@@ -303,16 +305,16 @@ class LDAPGroup(private val config: FasitProperties) :
     private fun getMembersInKafkaGroup(groupName: String, exists: Boolean = true): List<String> =
         if (!exists) emptyList()
         else
-            searchGetMembershipKN(Filter.createEqualityFilter(config.ldapGroupAttrName, groupName))
+            searchGetMembershipKN(Filter.createEqualityFilter(env.ldapGroup.ldapGroupAttrName, groupName))
                 .searchEntries
-                .flatMap { it.getAttribute(config.ldapGrpMemberAttrName)?.values?.toList() ?: emptyList() }
+                .flatMap { it.getAttribute(env.ldapGroup.ldapGrpMemberAttrName)?.values?.toList() ?: emptyList() }
 
     private fun getKafkaGroupNames(): List<String> =
         searchGetNamesKN(Filter.createEqualityFilter("objectClass", "group"))
-            .searchEntries.map { it.getAttribute(config.ldapGroupAttrName).value }
+            .searchEntries.map { it.getAttribute(env.ldapGroup.ldapGroupAttrName).value }
 
     private fun getServiceUserDN(userName: String): String =
-        searchGetDNSAN(Filter.createEqualityFilter(config.ldapUserAttrName, userName))
+        searchGetDNSAN(Filter.createEqualityFilter(env.ldapCommon.ldapUserAttrName, userName))
             .let { searchRes ->
                 when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
                     true -> searchRes.searchEntries[0].dn
@@ -321,7 +323,7 @@ class LDAPGroup(private val config: FasitProperties) :
             }
 
     private fun getUserDN(userName: String): String =
-        searchGetDNUAN(Filter.createEqualityFilter(config.ldapUserAttrName, userName))
+        searchGetDNUAN(Filter.createEqualityFilter(env.ldapCommon.ldapUserAttrName, userName))
             .let { searchRes ->
                 when (searchRes.resultCode == ResultCode.SUCCESS && searchRes.entryCount == 1) {
                     true -> searchRes.searchEntries[0].dn

@@ -1,0 +1,114 @@
+name: Release Kafka-adminrest
+on:
+  push:
+    branches:
+      - master
+jobs:
+  build-test-push:
+    name: Build - Test - Push
+    runs-on: ubuntu-latest
+    if: "github.ref == 'refs/heads/master'"
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v1
+      - name: Cache Dependecies
+        uses: actions/cache@v1
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle.kts') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+      - name: Run tests
+        run: |
+          ./gradlew clean test
+      - name: Build jar
+        run: |
+          ./gradlew shadowJar -x test
+      - name: Create Docker tag
+        env:
+          NAME: kafka-adminrest
+        run: |
+          echo -n "docker.pkg.github.com"/"$GITHUB_REPOSITORY"/"$NAME" > .docker
+          echo -n ":$(date "+%Y.%m.%d")-$(git rev-parse --short HEAD)" >> .docker
+          echo ::set-env name=IMAGE::$(cat .docker)
+      - name: Build Docker image
+        run: docker build -t $IMAGE .
+      - name: Login to Github Package Registry
+        env:
+          DOCKER_USERNAME: x-access-token
+          DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin docker.pkg.github.com
+      - name: Push Docker image
+        run: "docker push $IMAGE"
+      - name: Upload Docker image and tag
+        uses: actions/upload-artifact@v1
+        with:
+          name: docker
+          path: .docker
+
+  deploy_test:
+    name: Deploy to DEV-FSS - T4
+    runs-on: ubuntu-latest
+    if: "github.ref == 'refs/heads/master'"
+    needs: build-test-push
+    steps:
+      - name: Download Docker image and tag
+        uses: actions/download-artifact@v1
+        with:
+          name: docker
+      - name: Set IMAGE env
+        run: echo ::set-env name=IMAGE::$(cat docker/.docker)
+      - name: Checkout code
+        uses: actions/checkout@v1
+      - name: Deploy
+        uses: nais/deploy/actions/deploy@v1
+        env:
+          APIKEY: ${{ secrets.NAIS_DEPLOY_APIKEY }}
+          CLUSTER: dev-fss
+          RESOURCE: .nais/nais.yml
+          VARS: .nais/t4_vars.yml
+          PRINT_PAYLOAD: true
+  deploy_dev:
+    name: Deploy to DEV-FSS
+    runs-on: ubuntu-latest
+    if: "github.ref == 'refs/heads/master'"
+    needs: deploy_test
+    steps:
+      - name: Download Docker image and tag
+        uses: actions/download-artifact@v1
+        with:
+          name: docker
+      - name: Set IMAGE env
+        run: echo ::set-env name=IMAGE::$(cat docker/.docker)
+      - name: Checkout code
+        uses: actions/checkout@v1
+      - name: Deploy
+        uses: nais/deploy/actions/deploy@v1
+        env:
+          APIKEY: ${{ secrets.NAIS_DEPLOY_APIKEY }}
+          CLUSTER: dev-fss
+          RESOURCE: .nais/nais.yml
+          VARS: .nais/default_vars.yml
+          PRINT_PAYLOAD: true
+  deploy_prod:
+    name: Deploy to PROD-FSS
+    runs-on: ubuntu-latest
+    if: "github.ref == 'refs/heads/master'"
+    needs: deploy_dev
+    steps:
+      - name: Download Docker image and tag
+        uses: actions/download-artifact@v1
+        with:
+          name: docker
+      - name: Set IMAGE env
+        run: echo ::set-env name=IMAGE::$(cat docker/.docker)
+      - name: Checkout code
+        uses: actions/checkout@v1
+      - name: Deploy
+        uses: nais/deploy/actions/deploy@v1
+        env:
+          APIKEY: ${{ secrets.NAIS_DEPLOY_APIKEY }}
+          CLUSTER: prod-fss
+          RESOURCE: .nais/nais.yml
+          VARS: .nais/prod_vars.yml
+          PRINT_PAYLOAD: true
