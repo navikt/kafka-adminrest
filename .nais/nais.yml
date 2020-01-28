@@ -37,6 +37,3 @@ spec:
       memory: 128Mi
   vault:
     enabled: true
-    paths:
-      - kvPath: /kv/preprod/fss/kafka-adminrest/{{namespace}}
-        mountPath: /var/run/secrets/nais.io/vault
