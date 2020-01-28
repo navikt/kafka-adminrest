@@ -2,13 +2,12 @@ kind: Application
 apiVersion: nais.io/v1alpha1
 metadata:
   name: kafka-adminrest
-  namespace: t4
+  namespace: {{namespace}}
   labels:
     team: integrasjon
 spec:
   image: {{image}}
-  ingresses:
-    - https://kafka-adminrest-t4.nais.preprod.local
+  ingresses: {{ingresses}}
   liveness:
     path: /isAlive
     port: 8080
