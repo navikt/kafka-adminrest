@@ -21,7 +21,7 @@ val log4jVersion = "1.7.25"
 
 val unboundidVersion = "4.0.14"
 
-val swaggerVersion = "3.24.3"
+val swaggerVersion = "3.1.7"
 
 val spekVersion = "2.0.9"
 val kluentVersion = "1.59"

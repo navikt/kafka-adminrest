@@ -25,7 +25,7 @@ jobs:
           ./gradlew shadowJar -x test
       - name: Create Docker tag
         env:
-          NAME: kafak-adminrest
+          NAME: kafka-adminrest
         run: |
           echo -n "docker.pkg.github.com"/"$GITHUB_REPOSITORY"/"$NAME" > .docker
           echo -n ":$(date "+%Y.%m.%d")-$(git rev-parse --short HEAD)" >> .docker
