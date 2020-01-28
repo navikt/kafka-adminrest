@@ -13,8 +13,7 @@ spec:
      {{/each}}
   liveness:
     path: /isAlive
-    port: 8080
-    initialDelay: 30
+    initialDelay: 5
     periodSeconds: 5
     failureThreshold: 30
   port: 8080
@@ -23,14 +22,12 @@ spec:
     path: /prometheus
   readiness:
     path: /isReady
-    port: 8080
-    initialDelay: 30
+    initialDelay: 5
     periodSeconds: 5
     failureThreshold: 30
   replicas:
-    min: 2
-    max: 4
-    cpuThresholdPercentage: 80
+    min: 1
+    max: 1
   resources:
     limits:
       cpu: 250m
