@@ -7,7 +7,10 @@ metadata:
     team: integrasjon
 spec:
   image: {{image}}
-  ingresses: {{ingresses}}
+  ingresses:
+    {{#each ingresses}}
+     - "{{this}}"
+     {{/each}}
   liveness:
     path: /isAlive
     port: 8080
@@ -38,5 +41,5 @@ spec:
   vault:
     enabled: true
     paths:
-      - kvPath: /kv/preprod/fss/kafka-adminrest/t4
+      - kvPath: /kv/preprod/fss/kafka-adminrest/{{namespace}}
         mountPath: /var/run/secrets/nais.io/vault
