@@ -1,8 +1,5 @@
 name: Release Kafka-adminrest
-on:
-  push:
-    branches:
-      - master
+on: [push]
 jobs:
   build-test-push:
     name: Build - Test - Push
@@ -90,6 +87,7 @@ jobs:
   deploy_prod:
     name: Deploy to PROD-FSS
     runs-on: ubuntu-latest
+    if: "github.ref == 'refs/heads/master'"
     needs: deploy_dev
     steps:
       - name: Download Docker image and tag
