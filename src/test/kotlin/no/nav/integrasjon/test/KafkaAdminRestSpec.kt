@@ -229,7 +229,7 @@ object KafkaAdminRestSpec : Spek({
 
                     beforeGroup {
                         engine.start(wait = false)
-                        engine.application.kafkaAdminREST(srvDown.environment).also { println("WHYY: ${srvDown.environment} AND URL ${kCluster.brokersURL}") }
+                        engine.application.kafkaAdminREST(srvDown.environment)
                     }
 
                     with(engine) {
