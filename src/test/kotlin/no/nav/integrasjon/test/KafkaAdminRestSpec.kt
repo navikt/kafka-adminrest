@@ -925,7 +925,50 @@ object KafkaAdminRestSpec : Spek({
                         )
                     )
 
-                    context("Put new oneshot request") {
+                    context("Put new invalid oneshot request") {
+                        it("should return bad request on topic member with invalid role") {
+                            val call = handleRequest(HttpMethod.Put, ONESHOT) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n000001:itest1".toByteArray())}"
+                                )
+                                setBody("""
+                                    {
+                                      "topics": [
+                                        {
+                                          "configEntries": {},
+                                          "members": [
+                                            {
+                                              "member": "igroup",
+                                              "role": "MAINTAINER"
+                                            }
+                                          ],
+                                          "numPartitions": 1,
+                                          "topicName": "integrationTestNoUpdate"
+                                        }
+                                      ]
+                                    }
+                                """.trimIndent())
+                            }
+                            call.response.status() shouldBe HttpStatusCode.BadRequest
+                        }
+                        it("should return bad request on invalid JSON input") {
+                            val call = handleRequest(HttpMethod.Put, ONESHOT) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n000001:itest1".toByteArray())}"
+                                )
+                                setBody("this is not json")
+                            }
+                            call.response.status() shouldBe HttpStatusCode.BadRequest
+                        }
+                    }
+
+                    context("Put new valid oneshot request") {
                         it("should successfully create a topic for duplicate combinations of roles and members (including both implicit and explicit MANAGER)") {
                             val call = handleRequest(HttpMethod.Put, ONESHOT) {
                                 addHeader(HttpHeaders.Accept, "application/json")

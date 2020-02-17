@@ -169,7 +169,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                 return@put
             }
 
-            log.debug("Validating user names$logFormat", *logKeys)
+            log.info("Validating user names$logFormat", *logKeys)
             request.topics
                 .flatMap {
                     it.members
@@ -179,7 +179,25 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                     log.info("Tried to add the user ${it.member} who doesn't exist in AD$logFormat", *logKeys)
                     val err = OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "The user ${it.member} does not exist"
+                        message = "The user ${it.member} does not exist",
+                        requestId = uuid
+                    )
+                    call.respond(HttpStatusCode.BadRequest, err)
+                    return@put
+                }
+
+            log.info("Validating member roles$logFormat", *logKeys)
+            request.topics
+                .flatMap { it.members }
+                .filter { it.role == null } // Gson breaks non-nullability when values that don't exist in enums
+                .any {
+                    val validRoles: String = KafkaGroupType.values().joinToString(prefix = "[", postfix = "]")
+                    val message: String = "Tried to add the user '${it.member}' with an invalid role (valid roles: $validRoles))"
+                    log.info("$message $logFormat", *logKeys)
+                    val err = OneshotResponse(
+                        status = OneshotStatus.ERROR,
+                        message = message,
+                        requestId = uuid
                     )
                     call.respond(HttpStatusCode.BadRequest, err)
                     return@put
