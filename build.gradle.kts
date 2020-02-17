@@ -7,12 +7,12 @@ group = "no.nav.integrasjon"
 
 val kotlinVersion = "1.3.61"
 val kotlinLogginVersion = "1.7.8"
-val ktorVersion = "1.3.0"
+val ktorVersion = "1.3.1"
 
 val jacksonDatatypeVersion = "2.10.2"
 
-val kafkaVersion = "2.3.0"
-val embeddedkafkaVersion = "2.3.0"
+val kafkaVersion = "2.4.0"
+val embeddedkafkaVersion = "2.4.0"
 
 val prometheusVersion = "0.8.1"
 val logstashEncoderVersion = "6.3"
@@ -21,17 +21,18 @@ val log4jVersion = "1.7.25"
 
 val unboundidVersion = "4.0.14"
 
+// do not update - breaks compatibility (should look into fixing this)
 val swaggerVersion = "3.1.7"
 
 val spekVersion = "2.0.9"
-val kluentVersion = "1.59"
+val kluentVersion = "1.60"
 
 val konfigVersion = "1.6.10.0"
 
 plugins {
     java
     kotlin("jvm") version "1.3.61"
-    id("org.jmailen.kotlinter") version "2.2.0"
+    id("org.jmailen.kotlinter") version "2.3.0"
     id("maven-publish")
     id("com.github.ben-manes.versions") version "0.27.0"
     id("com.github.johnrengelman.shadow") version "5.2.0"
@@ -49,29 +50,29 @@ configurations.compileClasspath {
 }
 
 dependencies {
-    compile(kotlin("stdlib"))
-    compile("org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlinVersion")
-    compile("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
+    implementation(kotlin("stdlib"))
+    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlinVersion")
+    implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
 
-    compile("org.apache.kafka:kafka-clients:$kafkaVersion")
-    compile("com.unboundid:unboundid-ldapsdk:$unboundidVersion")
+    implementation("org.apache.kafka:kafka-clients:$kafkaVersion")
+    implementation("com.unboundid:unboundid-ldapsdk:$unboundidVersion")
 
-    compile("io.ktor:ktor-server-netty:$ktorVersion")
-    compile("io.ktor:ktor-gson:$ktorVersion")
-    compile("io.ktor:ktor-auth:$ktorVersion")
-    compile("io.ktor:ktor-locations:$ktorVersion")
+    implementation("io.ktor:ktor-server-netty:$ktorVersion")
+    implementation("io.ktor:ktor-gson:$ktorVersion")
+    implementation("io.ktor:ktor-auth:$ktorVersion")
+    implementation("io.ktor:ktor-locations:$ktorVersion")
 
-    compile("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jacksonDatatypeVersion")
+    implementation("com.fasterxml.jackson.datatype:jackson-datatype-jsr310:$jacksonDatatypeVersion")
 
-    compile("io.github.microutils:kotlin-logging:$kotlinLogginVersion")
-    compile("ch.qos.logback:logback-classic:$logbackVersion")
-    compile("net.logstash.logback:logstash-logback-encoder:$logstashEncoderVersion")
+    implementation("io.github.microutils:kotlin-logging:$kotlinLogginVersion")
+    implementation("ch.qos.logback:logback-classic:$logbackVersion")
+    implementation("net.logstash.logback:logstash-logback-encoder:$logstashEncoderVersion")
 
-    compile("io.prometheus:simpleclient_common:$prometheusVersion")
+    implementation("io.prometheus:simpleclient_common:$prometheusVersion")
 
-    compile("org.webjars:swagger-ui:$swaggerVersion")
+    implementation("org.webjars:swagger-ui:$swaggerVersion")
 
-    compile("com.natpryce:konfig:$konfigVersion")
+    implementation("com.natpryce:konfig:$konfigVersion")
 
     testImplementation("org.amshove.kluent:kluent:$kluentVersion")
     testImplementation("no.nav:kafka-embedded-env:$embeddedkafkaVersion")
