@@ -29,6 +29,7 @@ import io.ktor.routing.get
 import io.ktor.util.error
 import io.prometheus.client.CollectorRegistry
 import java.util.Properties
+import java.util.UUID
 import mu.KotlinLogging
 import no.nav.integrasjon.api.nais.client.naisAPI
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Contact
@@ -49,7 +50,6 @@ import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.config.SaslConfigs
 import org.slf4j.event.Level
-import java.util.UUID
 
 const val AUTHENTICATION_BASIC = "basicAuth"
 
