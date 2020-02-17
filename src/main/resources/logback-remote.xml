@@ -1,7 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
     <appender name="stdout_json" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder class="net.logstash.logback.encoder.LogstashEncoder" />
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <message>[ignore]</message>
+            </fieldNames>
+            <provider class="net.logstash.logback.composite.loggingevent.LoggingEventPatternJsonProvider">
+                <pattern>{ "message": "[%X] - %m" }</pattern>
+            </provider>
+        </encoder>
     </appender>
 
     <logger name="no.nav.integrasjon" level="INFO"/>

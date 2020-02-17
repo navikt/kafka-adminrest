@@ -1,5 +1,6 @@
 package no.nav.integrasjon
 
+import com.google.gson.JsonSyntaxException
 import io.ktor.application.Application
 import io.ktor.application.call
 import io.ktor.application.install
@@ -7,13 +8,16 @@ import io.ktor.auth.Authentication
 import io.ktor.auth.UserIdPrincipal
 import io.ktor.auth.basic
 import io.ktor.features.AutoHeadResponse
+import io.ktor.features.CallId
 import io.ktor.features.CallLogging
 import io.ktor.features.Compression
 import io.ktor.features.ConditionalHeaders
 import io.ktor.features.ContentNegotiation
 import io.ktor.features.DefaultHeaders
 import io.ktor.features.StatusPages
+import io.ktor.features.callIdMdc
 import io.ktor.gson.gson
+import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpStatusCode
 import io.ktor.locations.KtorExperimentalLocationsAPI
 import io.ktor.locations.Locations
@@ -45,6 +49,7 @@ import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.config.SaslConfigs
 import org.slf4j.event.Level
+import java.util.UUID
 
 const val AUTHENTICATION_BASIC = "basicAuth"
 
@@ -109,6 +114,7 @@ fun Application.kafkaAdminREST(environment: Environment) {
     install(CallLogging) {
         level = Level.INFO
         filter { call -> call.request.path().startsWith(API_V1) }
+        callIdMdc("callId")
     }
     // install(XForwardedHeadersSupport) - is this needed, and supported in reverse proxy in matter?
     install(StatusPages) {
@@ -116,6 +122,19 @@ fun Application.kafkaAdminREST(environment: Environment) {
             log.error(cause)
             call.respond(HttpStatusCode.InternalServerError)
         }
+        exception<JsonSyntaxException> { cause ->
+            log.error(cause) {
+                "Received an invalid input that could not be parsed as JSON"
+            }
+            call.respond(HttpStatusCode.BadRequest) {
+                "The request could not be parsed as JSON. Check your input."
+            }
+        }
+    }
+    install(CallId) {
+        generate { UUID.randomUUID().toString() }
+        verify { callId: String -> callId.isNotEmpty() }
+        header(HttpHeaders.XCorrelationId)
     }
     install(Authentication) {
         basic(name = AUTHENTICATION_BASIC) {

@@ -32,6 +32,7 @@ import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.common.config.ConfigResource
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
+import org.slf4j.MDC
 
 val log: Logger = LoggerFactory.getLogger("kafka-adminrest.oneshot.v1")
 
@@ -58,7 +59,13 @@ enum class OneshotStatus {
 
 data class GroupMember(val group: String, val user: String)
 
-data class OneshotResponse(val status: OneshotStatus, val message: String, val data: OneshotResult? = null)
+data class OneshotResponse(
+    val status: OneshotStatus,
+    val message: String,
+    val data: OneshotResult? = null,
+    val requestId: String
+)
+
 data class OneshotResult(val creationId: String)
 
 @Group("Oneshot")
@@ -79,7 +86,11 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
 
         val currentUser = call.principal<UserIdPrincipal>()!!.name.toLowerCase()
 
-        val uuid = UUID.randomUUID().toString()
+        val uuid = try {
+            MDC.get("callId") ?: UUID.randomUUID().toString()
+        } catch (e: Exception) {
+            UUID.randomUUID().toString()
+        }
 
         val logKeys = arrayOf(
             keyValue("requestId", uuid),
@@ -94,7 +105,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                 val err = OneshotResponse(
                     status = OneshotStatus.ERROR,
                     message = "authenticated user $currentUser doesn't exist as NAV ident or service user in " +
-                        "current LDAP domain, cannot be manager of topic"
+                        "current LDAP domain, cannot be manager of topic",
+                    requestId = uuid
                 )
                 application.environment.log.error(EXCEPTION, err)
                 call.respond(HttpStatusCode.Unauthorized, err)
@@ -107,7 +119,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
             }.any {
                 val err = OneshotResponse(
                     status = OneshotStatus.ERROR,
-                    message = "configEntry ${it.key} is not allowed to update automatically"
+                    message = "configEntry ${it.key} is not allowed to update automatically",
+                    requestId = uuid
                 )
                 call.respond(HttpStatusCode.BadRequest, err)
                 return@put
@@ -123,7 +136,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                     HttpStatusCode.ServiceUnavailable,
                     OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "Failed to get topic from kafka"
+                        message = "Failed to get topic from kafka",
+                        requestId = uuid
                     )
                 )
                 return@put
@@ -136,7 +150,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                 .any {
                     val err = OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "The user $currentUser does not have access to modify topic $it"
+                        message = "The user $currentUser does not have access to modify topic $it",
+                        requestId = uuid
                     )
                     call.respond(HttpStatusCode.Unauthorized, err)
                     return@put
@@ -147,7 +162,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                 val err = OneshotResponse(
                     status = OneshotStatus.ERROR,
                     message = "Invalid topic name - $it. Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
-                        "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}"
+                        "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}",
+                    requestId = uuid
                 )
                 call.respond(HttpStatusCode.BadRequest, err)
                 return@put
@@ -267,7 +283,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                     HttpStatusCode.ServiceUnavailable,
                     OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "Failed to fetch existing configuration(s) for topic(s)"
+                        message = "Failed to fetch existing configuration(s) for topic(s)",
+                        requestId = uuid
                     )
                 )
                 return@put
@@ -305,7 +322,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                     HttpStatusCode.ServiceUnavailable,
                     OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "Failed to create topic"
+                        message = "Failed to create topic",
+                        requestId = uuid
                     )
                 )
             }
@@ -323,7 +341,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                     OneshotResponse(
                         status = OneshotStatus.OK,
                         message = "Successfully created topic",
-                        data = OneshotResult(uuid)
+                        data = OneshotResult(uuid),
+                        requestId = uuid
                     )
                 )
             } catch (e: Exception) {
@@ -335,7 +354,8 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                     HttpStatusCode.ServiceUnavailable,
                     OneshotResponse(
                         status = OneshotStatus.ERROR,
-                        message = "Failed to create ACL for topic(s)"
+                        message = "Failed to create ACL for topic(s)",
+                        requestId = uuid
                     )
                 )
             }

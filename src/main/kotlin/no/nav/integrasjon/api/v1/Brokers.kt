@@ -2,7 +2,6 @@ package no.nav.integrasjon.api.v1
 
 import io.ktor.locations.Location
 import io.ktor.routing.Routing
-import java.util.concurrent.TimeUnit
 import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
@@ -14,6 +13,7 @@ import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.ConfigEntry
 import org.apache.kafka.common.Node
 import org.apache.kafka.common.config.ConfigResource
+import java.util.concurrent.TimeUnit
 
 /**
  * Brokers API
