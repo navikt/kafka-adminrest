@@ -63,7 +63,6 @@ fun Routing.getIsReady(adminClient: AdminClient?, environment: Environment) =
                 ldapGroupIsOK && ldapAuthenIsOk && kafkaIsOk -> SERVICES_OK
                 else -> SERVICES_ERR_STRANGE
             }
-
             if (ldapGroupIsOK && ldapAuthenIsOk && kafkaIsOk) msg else throw Exception(msg)
         }
     }

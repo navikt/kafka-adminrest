@@ -57,8 +57,18 @@ internal fun backEndServicesAreOk(
     adminClient: AdminClient?,
     environment: Environment
 ): Triple<Boolean, Boolean, Boolean> = Triple(
-    LDAPGroup(environment).use { ldapGroup -> ldapGroup.connectionOk },
-    LDAPAuthenticate(environment).use { ldapAuthenticate -> ldapAuthenticate.connectionOk },
+    try {
+        LDAPGroup(environment).use { ldapGroup -> ldapGroup.connectionOk }
+    } catch (e: Exception) {
+        logger.error(e) { "LDAP group unavailable" }
+        false
+    },
+    try {
+        LDAPAuthenticate(environment).use { ldapAuthenticate -> ldapAuthenticate.connectionOk }
+    } catch (e: Exception) {
+        logger.error(e) { "LDAP authentication unavailable" }
+        false
+    },
     kafkaIsOk(adminClient, environment)
 )
 

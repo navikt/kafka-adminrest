@@ -35,11 +35,13 @@ abstract class LDAPBase(private val connInfo: ConnectionInfo) : AutoCloseable {
             ldapConnection.connect(connInfo.host, connInfo.port)
             log.debug { "Successfully connected to $connInfo" }
         } catch (e: LDAPException) {
-            log.error { "$EXCEPTION LDAP operations against $connInfo will fail - $e" }
+            log.error(e) { "$EXCEPTION LDAP operations against $connInfo will fail - $e" }
             ldapConnection.setDisconnectInfo(
                 DisconnectType.IO_ERROR,
                 "$EXCEPTION when connecting to LDAPS $connInfo", e
             )
+        } catch (e: Exception) {
+            log.error(e) { "Unhandled exception during attempt to connect to LDAP" }
         }
     }
 
