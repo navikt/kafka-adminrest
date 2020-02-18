@@ -90,8 +90,10 @@ tasks {
     create("printVersion") {
         println(project.version)
     }
-    withType <Jar>{
+    withType<Jar> {
         manifest.attributes["Main-Class"] = "no.nav.integrasjon.MainKt"
+        archiveBaseName.set("app")
+        archiveClassifier.set("")
     }
     withType<Test> {
         useJUnitPlatform {
