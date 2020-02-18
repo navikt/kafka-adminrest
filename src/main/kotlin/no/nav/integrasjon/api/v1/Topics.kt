@@ -233,6 +233,18 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
 
         val newTopic = NewTopic(body.name, body.numPartitions, defaultRepFactor)
 
+        // ensure groups are created before topic to prevent orphaned topics without managers in case LDAP operations fail
+        val groupsResult = LDAPGroup(environment).use { ldap -> ldap.createKafkaGroups(newTopic.name(), currentUser) }
+        val groupsAreOk = groupsResult
+            .asSequence()
+            .map { it.ldapResult.resultCode }
+            .all { it == ResultCode.SUCCESS }
+        if (groupsAreOk)
+            application.environment.log.info("Groups for topic $newTopic have been created")
+        else
+            application.environment.log.error("Groups for topic $newTopic have some issues")
+
+        // create topic
         val (topicIsOk, topicResult) = try {
             adminClient?.let { ac ->
                 ac.createTopics(mutableListOf(newTopic)).all()
@@ -245,18 +257,6 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
             application.environment.log.error("$EXCEPTION topic create request $newTopic - $e")
             Pair(false, "failure for topic $newTopic creation, $e")
         }
-
-        val groupsResult = LDAPGroup(environment).use { ldap -> ldap.createKafkaGroups(newTopic.name(), currentUser) }
-
-        val groupsAreOk = groupsResult
-            .asSequence()
-            .map { it.ldapResult.resultCode }
-            .all { it == ResultCode.SUCCESS }
-
-        if (groupsAreOk)
-            application.environment.log.info("Groups for topic $newTopic have been created")
-        else
-            application.environment.log.info("Groups for topic $newTopic have some issues")
 
         // create ACLs based on kafka groups in LDAP, except manager group KM-
         val acls = groupsResult.asSequence()
