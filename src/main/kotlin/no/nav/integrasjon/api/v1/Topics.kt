@@ -12,8 +12,6 @@ import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
 import io.ktor.util.pipeline.PipelineContext
-import java.util.concurrent.TimeUnit
-import java.util.regex.Pattern
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_G
@@ -37,7 +35,7 @@ import no.nav.integrasjon.ldap.SLDAPResult
 import no.nav.integrasjon.ldap.UpdateKafkaGroupMember
 import no.nav.integrasjon.ldap.intoAcls
 import org.apache.kafka.clients.admin.AdminClient
-import org.apache.kafka.clients.admin.Config
+import org.apache.kafka.clients.admin.AlterConfigOp
 import org.apache.kafka.clients.admin.ConfigEntry
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.common.acl.AccessControlEntryFilter
@@ -47,6 +45,8 @@ import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.PatternType
 import org.apache.kafka.common.resource.ResourcePatternFilter
 import org.apache.kafka.common.resource.ResourceType
+import java.util.concurrent.TimeUnit
+import java.util.regex.Pattern
 
 /**
  * Topic API
@@ -536,32 +536,17 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, environment: Environmen
             return@put
         }
 
-        val (topicConfigRequestOk, existingTopicConfig) = fetchTopicConfig(adminClient, topicName, environment)
-
-        if (!topicConfigRequestOk) {
-            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
-            return@put
-        }
-
         // Use existing topic configuration and only update entries provided in request
-        val newConfigEntriesMap: Map<String, String> = newConfigEntries.associate { it.name() to it.value() }
-        val updatedTopicConfig: List<ConfigEntry> = existingTopicConfig.map { existingEntry ->
-            if (newConfigEntriesMap.containsKey(existingEntry.name())) {
-                ConfigEntry(existingEntry.name(), newConfigEntriesMap[existingEntry.name()])
-            } else {
-                existingEntry
-            }
-        }
-
+        val updatedTopicConfig: List<AlterConfigOp> = newConfigEntries
+            .map { entry -> AlterConfigOp(entry, AlterConfigOp.OpType.SET) }
         val configResource = ConfigResource(ConfigResource.Type.TOPIC, topicName)
-        val configReq = mapOf(configResource to Config(updatedTopicConfig))
-
+        val configReq: Map<ConfigResource, Collection<AlterConfigOp>> = mapOf(configResource to updatedTopicConfig)
         application.environment.log.info("Update topic config request: $configReq")
 
         // NB! .all is throwing error... Use of future for specific entry instead
         val (alterConfigRequestOk, _) = try {
             Pair(true, adminClient?.let { ac ->
-                ac.alterConfigs(configReq)
+                ac.incrementalAlterConfigs(configReq)
                     .values()
                     .get(configResource)
                     ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS) ?: Unit

@@ -26,7 +26,7 @@ import no.nav.integrasjon.ldap.LDAPGroup
 import no.nav.integrasjon.ldap.intoAcls
 import no.nav.integrasjon.ldap.toGroupName
 import org.apache.kafka.clients.admin.AdminClient
-import org.apache.kafka.clients.admin.Config
+import org.apache.kafka.clients.admin.AlterConfigOp
 import org.apache.kafka.clients.admin.ConfigEntry
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.common.config.ConfigResource
@@ -277,54 +277,21 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                     ldap.removeGroupMembers(group, members)
                 }
 
-            val existingTopicsInRequest: Map<ConfigResource, Map<String, String>> = request.topics
+            val incrementallyUpdatedConfigurationsForTopics: Map<ConfigResource, List<AlterConfigOp>> = request.topics
                 .filter { existingTopics.contains(it.topicName) }
                 .associate { topicCreation ->
                     ConfigResource(ConfigResource.Type.TOPIC, topicCreation.topicName) to (topicCreation.configEntries
                         ?: emptyMap())
                 }
-
-            // Fetch configurations for existing topics (until we're able to use AdminClient incrementalAlterConfigs)
-            log.debug("Fetching configurations for existing topics$logFormat", *logKeys)
-            val existingConfigurationsForTopicsInRequest: Map<ConfigResource, Config> = try {
-                adminClient
-                    ?.describeConfigs(existingTopicsInRequest.map { it.key })
-                    ?.all()
-                    ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
-                    ?.toMap()
-                    ?: emptyMap()
-            } catch (e: Exception) {
-                log.error(
-                    "Exception caught while fetching existing configurations for topic(s), request: {} $logFormat",
-                    logKeys, e
-                )
-                call.respond(
-                    HttpStatusCode.ServiceUnavailable,
-                    OneshotResponse(
-                        status = OneshotStatus.ERROR,
-                        message = "Failed to fetch existing configuration(s) for topic(s)",
-                        requestId = uuid
-                    )
-                )
-                return@put
-            }
-
-            // Only set new values for topic configurations if provided in request, otherwise use existing values
-            val incrementallyUpdatedConfigurationsForTopics: Map<ConfigResource, Config> =
-                existingConfigurationsForTopicsInRequest.mapValues { (topicResource, config) ->
-                    Config(config.entries().map { entry ->
-                        existingTopicsInRequest[topicResource]
-                            ?.get(entry.name())
-                            ?.let { value ->
-                                ConfigEntry(entry.name(), value)
-                            }
-                            ?: entry
-                    })
+                .mapValues { (_, configEntries) ->
+                    configEntries.map { (key, value) ->
+                        AlterConfigOp(ConfigEntry(key, value), AlterConfigOp.OpType.SET)
+                    }
                 }
 
             // Alter configurations for existing topics
             log.debug("Altering configurations for existing topics$logFormat", *logKeys)
-            adminClient?.alterConfigs(incrementallyUpdatedConfigurationsForTopics)
+            adminClient?.incrementalAlterConfigs(incrementallyUpdatedConfigurationsForTopics)
 
             // Create topics that are missing
             log.debug("Creating topics$logFormat", *logKeys)
