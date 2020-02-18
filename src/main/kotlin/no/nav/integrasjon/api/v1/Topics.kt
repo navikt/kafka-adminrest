@@ -200,10 +200,10 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
         if (!body.name.isValidTopicName()) {
             call.respond(
                 HttpStatusCode.BadRequest, AnError(
-                "Invalid topic name - $body.name. " +
-                    "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
-                    "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}"
-            )
+                    "Invalid topic name - $body.name. " +
+                        "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
+                        "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}"
+                )
             )
             return@post
         }
@@ -223,8 +223,10 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
         }
 
         if (defaultRepFactor == repFactorError) {
-            call.respond(HttpStatusCode.ServiceUnavailable, AnError(
-                "Could not get replicationFactor for topic from Kafka")
+            call.respond(
+                HttpStatusCode.ServiceUnavailable, AnError(
+                    "Could not get replicationFactor for topic from Kafka"
+                )
             )
             return@post
         }
@@ -233,7 +235,8 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
 
         val (topicIsOk, topicResult) = try {
             adminClient?.let { ac ->
-                ac.createTopics(mutableListOf(newTopic)).all().get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                ac.createTopics(mutableListOf(newTopic)).all()
+                    .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
                 application.environment.log.info("Topic created - $newTopic")
                 Pair(true, "created topic $newTopic")
             } ?: Pair(false, "failure for topic $newTopic creation, $SERVICES_ERR_K")
@@ -412,10 +415,13 @@ data class GetTopicConfig(val topicName: String)
 data class GetTopicConfigModel(val name: String, val config: List<ConfigEntry>)
 
 fun Routing.getTopicConfig(adminClient: AdminClient?, environment: Environment) =
-    get<GetTopicConfig>("a topic's configuration".responds(
-        ok<GetTopicConfigModel>(),
-        serviceUnavailable<AnError>(),
-        badRequest<AnError>())) { param ->
+    get<GetTopicConfig>(
+        "a topic's configuration".responds(
+            ok<GetTopicConfigModel>(),
+            serviceUnavailable<AnError>(),
+            badRequest<AnError>()
+        )
+    ) { param ->
 
         val topicName = param.topicName
 
@@ -582,10 +588,11 @@ data class GetTopicACL(val topicName: String)
 data class GetTopicACLModel(val name: String, val acls: List<AclBinding>)
 
 fun Routing.getTopicAcls(adminClient: AdminClient?, environment: Environment) =
-    get<GetTopicACL>("a topic's access control lists".responds(
-        ok<GetTopicACLModel>(),
-        serviceUnavailable<AnError>()
-    )
+    get<GetTopicACL>(
+        "a topic's access control lists".responds(
+            ok<GetTopicACLModel>(),
+            serviceUnavailable<AnError>()
+        )
     ) { param ->
 
         val topicName = param.topicName
@@ -598,11 +605,11 @@ fun Routing.getTopicAcls(adminClient: AdminClient?, environment: Environment) =
         val (aclRequestOk, acls) = try {
             Pair(
                 true, adminClient
-                ?.describeAcls(aclFilter)
-                ?.values()
-                ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
-                ?.toList()
-                ?: throw Exception(SERVICES_ERR_K)
+                    ?.describeAcls(aclFilter)
+                    ?.values()
+                    ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                    ?.toList()
+                    ?: throw Exception(SERVICES_ERR_K)
             )
         } catch (e: Exception) {
             Pair(false, emptyList<AclBinding>())
@@ -628,9 +635,11 @@ data class GetTopicGroups(val topicName: String)
 data class GetTopicGroupsModel(val name: String, val groups: List<KafkaGroup>)
 
 fun Routing.getTopicGroups(environment: Environment) =
-    get<GetTopicGroups>("a topic's groups".responds(
-        ok<GetTopicGroupsModel>(),
-        serviceUnavailable<AnError>())
+    get<GetTopicGroups>(
+        "a topic's groups".responds(
+            ok<GetTopicGroupsModel>(),
+            serviceUnavailable<AnError>()
+        )
     ) { param ->
         respondOrServiceUnavailable(environment) { lc ->
 
@@ -660,7 +669,8 @@ fun Routing.updateTopicGroup(environment: Environment) =
             ok<PutTopicGMemberModel>(),
             serviceUnavailable<AnError>(),
             badRequest<AnError>(),
-            unAuthorized<Unit>())
+            unAuthorized<Unit>()
+        )
     ) { param, body ->
 
         val currentUser = call.principal<UserIdPrincipal>()!!.name
