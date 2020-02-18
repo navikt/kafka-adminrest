@@ -30,10 +30,8 @@ val kluentVersion = "1.60"
 val konfigVersion = "1.6.10.0"
 
 plugins {
-    java
     kotlin("jvm") version "1.3.61"
     id("org.jmailen.kotlinter") version "2.3.0"
-    id("maven-publish")
     id("com.github.ben-manes.versions") version "0.27.0"
     id("com.github.johnrengelman.shadow") version "5.2.0"
 }
@@ -95,12 +93,6 @@ tasks {
     withType <Jar>{
         manifest.attributes["Main-Class"] = "no.nav.integrasjon.MainKt"
     }
-    withType<ShadowJar> {
-        transform(ServiceFileTransformer::class.java) {
-            setPath("META-INF/cxf")
-            include("bus-extensions.txt")
-        }
-    }
     withType<Test> {
         useJUnitPlatform {
             includeEngines("spek2")
@@ -120,8 +112,4 @@ tasks {
             "-Xuse-experimental=io.ktor.util.KtorExperimentalAPI"
         )
     }
-}
-
-java {
-    sourceSets["main"].java.srcDirs(generatedSourcesDir)
 }
