@@ -1,6 +1,7 @@
 package no.nav.integrasjon.ldap
 
 import com.google.gson.annotations.SerializedName
+import com.unboundid.asn1.ASN1OctetString
 import com.unboundid.ldap.sdk.AddRequest
 import com.unboundid.ldap.sdk.Attribute
 import com.unboundid.ldap.sdk.CompareRequest
@@ -15,7 +16,10 @@ import com.unboundid.ldap.sdk.ModifyRequest
 import com.unboundid.ldap.sdk.ResultCode
 import com.unboundid.ldap.sdk.SearchRequest
 import com.unboundid.ldap.sdk.SearchResult
+import com.unboundid.ldap.sdk.SearchResultEntry
 import com.unboundid.ldap.sdk.SearchScope
+import com.unboundid.ldap.sdk.controls.SimplePagedResultsControl
+import com.unboundid.util.LDAPTestUtils
 import mu.KotlinLogging
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.Environment
@@ -169,7 +173,6 @@ class LDAPGroup(private val env: Environment) :
 
     fun getGroupMembers(groupName: String): List<String> =
         searchGetMembershipKN(Filter.createEqualityFilter(env.ldapGroup.ldapGroupAttrName, groupName))
-            .searchEntries
             .flatMap {
                 (it.getAttribute(env.ldapGroup.ldapGrpMemberAttrName)?.values?.toList() ?: listOf<String>())
                     .map { attribute ->
@@ -282,10 +285,35 @@ class LDAPGroup(private val env: Environment) :
         }
     }
 
+    private fun searchWithPagination(
+        searchBase: String,
+        searchScope: SearchScope
+    ): (String) -> (Filter) -> List<SearchResultEntry> = { attribute ->
+        { filter ->
+            val searchRequest: SearchRequest = SearchRequest(searchBase, searchScope, filter, attribute)
+            var resumeCookie: ASN1OctetString? = ASN1OctetString()
+            val searchResultEntries: MutableList<SearchResultEntry> = mutableListOf()
+            while (resumeCookie != null) {
+                searchRequest.setControls(SimplePagedResultsControl(1000, resumeCookie))
+                val searchResult: SearchResult = ldapConnection.search(searchRequest)
+                searchResultEntries.addAll(searchResult.searchEntries)
+                LDAPTestUtils.assertHasControl(searchResult, SimplePagedResultsControl.PAGED_RESULTS_OID)
+                SimplePagedResultsControl.get(searchResult).let { responseControl ->
+                    resumeCookie = if (responseControl.moreResultsToReturn()) {
+                        responseControl.cookie
+                    } else {
+                        null
+                    }
+                }
+            }
+            searchResultEntries
+        }
+    }
+
     /**
      * Level 1 - Search functions locked to specific nodes, based on generic search function
      */
-    private val searchInKafkaNode = searchXInY(env.ldapGroup.ldapGroupBase, SearchScope.ONE)
+    private val searchInKafkaNode = searchWithPagination(env.ldapGroup.ldapGroupBase, SearchScope.ONE)
     private val searchInServiceAccountsNode = searchXInY(env.ldapGroup.ldapSrvUserBase, SearchScope.SUB)
     private val searchInUserAccountsNode = searchXInY(inheritDNTail(env.ldapGroup.ldapSrvUserBase, env.ldapAuthenticate.ldapAuthUserBase),
         SearchScope.SUB)
@@ -306,12 +334,11 @@ class LDAPGroup(private val env: Environment) :
         if (!exists) emptyList()
         else
             searchGetMembershipKN(Filter.createEqualityFilter(env.ldapGroup.ldapGroupAttrName, groupName))
-                .searchEntries
                 .flatMap { it.getAttribute(env.ldapGroup.ldapGrpMemberAttrName)?.values?.toList() ?: emptyList() }
 
     private fun getKafkaGroupNames(): List<String> =
         searchGetNamesKN(Filter.createEqualityFilter("objectClass", "group"))
-            .searchEntries.map { it.getAttribute(env.ldapGroup.ldapGroupAttrName).value }
+            .map { it.getAttribute(env.ldapGroup.ldapGroupAttrName).value }
 
     private fun getServiceUserDN(userName: String): String =
         searchGetDNSAN(Filter.createEqualityFilter(env.ldapCommon.ldapUserAttrName, userName))

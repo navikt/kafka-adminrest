@@ -12,6 +12,8 @@ import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
 import io.ktor.util.pipeline.PipelineContext
+import java.util.concurrent.TimeUnit
+import java.util.regex.Pattern
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_G
@@ -45,8 +47,6 @@ import org.apache.kafka.common.config.ConfigResource
 import org.apache.kafka.common.resource.PatternType
 import org.apache.kafka.common.resource.ResourcePatternFilter
 import org.apache.kafka.common.resource.ResourceType
-import java.util.concurrent.TimeUnit
-import java.util.regex.Pattern
 
 /**
  * Topic API
