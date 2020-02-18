@@ -239,10 +239,17 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
             .asSequence()
             .map { it.ldapResult.resultCode }
             .all { it == ResultCode.SUCCESS }
-        if (groupsAreOk)
+        if (groupsAreOk) {
             application.environment.log.info("Groups for topic $newTopic have been created")
-        else
+        } else {
             application.environment.log.error("Groups for topic $newTopic have some issues")
+            call.respond(
+                HttpStatusCode.ServiceUnavailable, AnError(
+                    "Could not create LDAP groups for topic - ${groupsResult.map { it.ldapResult.message }}"
+                )
+            )
+            return@post
+        }
 
         // create topic
         val (topicIsOk, topicResult) = try {
@@ -255,7 +262,12 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
         } catch (e: Exception) {
             // TODO should have warning for topcis already exists
             application.environment.log.error("$EXCEPTION topic create request $newTopic - $e")
-            Pair(false, "failure for topic $newTopic creation, $e")
+            call.respond(
+                HttpStatusCode.ServiceUnavailable, AnError(
+                    "Failed to create Kafka topic $newTopic - $e"
+                )
+            )
+            return@post
         }
 
         // create ACLs based on kafka groups in LDAP, except manager group KM-
@@ -274,7 +286,12 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
             } ?: Pair(false, "failure for $acls creation, $SERVICES_ERR_K")
         } catch (e: Exception) {
             application.environment.log.error("$EXCEPTION ACLs create request $acls - $e")
-            Pair(false, "failure for $acls creation, $e")
+            call.respond(
+                HttpStatusCode.ServiceUnavailable, AnError(
+                    "Failed to create ACLs $acls for Kafka topic - $e"
+                )
+            )
+            return@post
         }
 
         val errorMsg = "Topic: $topicResult " +

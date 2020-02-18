@@ -115,7 +115,7 @@ class LDAPGroup(private val env: Environment) :
                     resBlck(groupExists, groupName)
                 )
             } catch (e: LDAPException) {
-                log.error { "$EXCEPTION$e" }
+                log.error(e) { "$EXCEPTION$e" }
                 KafkaGroup(groupType, groupName, emptyList(), e.toLDAPResult().simplify())
             }
         }
