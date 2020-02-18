@@ -304,7 +304,7 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
         }
     }
 
-private enum class UserIsManager { LDAP_NOT_AVAILABLE, IS_NOT_MANAGER, IS_MANAGER }
+private enum class UserIsManager { LDAP_NOT_AVAILABLE, IS_NOT_MANAGER, IS_MANAGER, LDAP_NO_GROUPS_FOUND }
 
 private suspend fun PipelineContext<Unit, ApplicationCall>.userTopicManagerStatus(
     user: String,
@@ -315,7 +315,22 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.userTopicManagerStatu
     val (isMngRequestOk, authorized) = try {
         Pair(true, LDAPGroup(environment).use { ldap -> ldap.userIsManager(topicName, user) })
     } catch (e: Exception) {
+        application.environment.log.warn("Error when checking manager status for user $user for topic $topicName", e)
         Pair(first = false, second = false)
+    }
+
+    val groupsExist: Boolean = try {
+        LDAPGroup(environment)
+            .use { ldap -> ldap.getKafkaGroupsAndMembers(topicName) }
+            .none { kafkaGroup -> kafkaGroup.ldapResult.resultCode == ResultCode.NO_SUCH_OBJECT }
+    } catch (e: Exception) {
+        application.environment.log.warn(SERVICES_ERR_G, e)
+        return UserIsManager.LDAP_NOT_AVAILABLE
+    }
+
+    if (!groupsExist) {
+        application.environment.log.warn("Groups not found for topic $topicName - probably orphaned")
+        return UserIsManager.LDAP_NO_GROUPS_FOUND
     }
 
     if (!isMngRequestOk) {
@@ -327,7 +342,7 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.userTopicManagerStatu
     if (!authorized) {
         val msg = "$user is NOT manager of $topicName"
         application.environment.log.warn(msg)
-        call.respond(HttpStatusCode.BadRequest, AnError(msg))
+        call.respond(HttpStatusCode.Unauthorized, AnError(msg))
         return UserIsManager.IS_NOT_MANAGER
     }
 
@@ -356,7 +371,7 @@ fun Routing.deleteTopic(adminClient: AdminClient?, environment: Environment) =
             ok<DeleteTopicModel>(),
             serviceUnavailable<AnError>(),
             badRequest<AnError>(),
-            unAuthorized<Unit>()
+            unAuthorized<AnError>()
         )
     ) { param ->
 
@@ -366,13 +381,16 @@ fun Routing.deleteTopic(adminClient: AdminClient?, environment: Environment) =
         val logEntry = "Topic deletion request by $currentUser - $topicName"
         application.environment.log.info(logEntry)
 
-        when (userTopicManagerStatus(currentUser, topicName, environment)) {
+        val userIsManagerStatus = userTopicManagerStatus(currentUser, topicName, environment)
+        when (userIsManagerStatus) {
             UserIsManager.LDAP_NOT_AVAILABLE -> return@delete
             UserIsManager.IS_NOT_MANAGER -> return@delete
-            else -> {
+            UserIsManager.IS_MANAGER -> {
+            }
+            UserIsManager.LDAP_NO_GROUPS_FOUND -> {
+                application.environment.log.warn("No groups found - assuming orphaned topic and allowing delete")
             }
         }
-
         // delete ACLs
         val acls = AclBindingFilter(
             ResourcePatternFilter(ResourceType.TOPIC, topicName, PatternType.LITERAL),
@@ -381,20 +399,41 @@ fun Routing.deleteTopic(adminClient: AdminClient?, environment: Environment) =
 
         application.environment.log.info("ACLs delete request: $acls")
 
-        val (aclsAreOk, aclsResult) = try {
-            adminClient?.let { ac ->
-                ac.deleteAcls(mutableListOf(acls)).all().get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
-                application.environment.log.info("ACLs deleted - $acls")
-                Pair(true, "deleted $acls")
-            } ?: Pair(false, "failure for $acls deletion, $SERVICES_ERR_K")
-        } catch (e: Exception) {
-            application.environment.log.error("$EXCEPTION ACLs delete request $acls - $e")
-            Pair(false, "failure for $acls deletion, $e")
+        val (aclsAreOk: Boolean, aclsResult: String) = if (userIsManagerStatus != UserIsManager.LDAP_NO_GROUPS_FOUND) {
+            try {
+                adminClient?.let { ac ->
+                    ac.deleteAcls(mutableListOf(acls)).all().get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                    application.environment.log.info("ACLs deleted - $acls")
+                    Pair(true, "deleted $acls")
+                } ?: Pair(false, "failure for $acls deletion, $SERVICES_ERR_K")
+            } catch (e: Exception) {
+                application.environment.log.error("$EXCEPTION ACLs delete request $acls - $e")
+                Pair(false, "failure for $acls deletion, $e")
+            }
+        } else {
+            true to "no acls to delete"
         }
 
         // delete related kafka ldap groups
-        val groupsResult = LDAPGroup(environment).use { ldap -> ldap.deleteKafkaGroups(topicName) }
-        val groupsAreOk = groupsResult
+        val groupsResult: List<KafkaGroup> = if (userIsManagerStatus != UserIsManager.LDAP_NO_GROUPS_FOUND) {
+            LDAPGroup(environment).use { ldap -> ldap.deleteKafkaGroups(topicName) }
+        } else {
+            listOf(
+                KafkaGroup(
+                    type = KafkaGroupType.MANAGER,
+                    ldapResult = SLDAPResult(resultCode = ResultCode.SUCCESS, message = "success")
+                ),
+                KafkaGroup(
+                    type = KafkaGroupType.PRODUCER,
+                    ldapResult = SLDAPResult(resultCode = ResultCode.SUCCESS, message = "success")
+                ),
+                KafkaGroup(
+                    type = KafkaGroupType.CONSUMER,
+                    ldapResult = SLDAPResult(resultCode = ResultCode.SUCCESS, message = "success")
+                )
+            )
+        }
+        val groupsAreOk: Boolean = groupsResult
             .asSequence()
             .map { it.ldapResult.resultCode }
             .all { it == ResultCode.SUCCESS }
@@ -505,7 +544,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, environment: Environmen
             ok<PutTopicConfigEntryModel>(),
             serviceUnavailable<AnError>(),
             badRequest<AnError>(),
-            unAuthorized<Unit>()
+            unAuthorized<AnError>()
         )
     ) { param, body ->
 
@@ -518,7 +557,14 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, environment: Environmen
         when (userTopicManagerStatus(currentUser, topicName, environment)) {
             UserIsManager.LDAP_NOT_AVAILABLE -> return@put
             UserIsManager.IS_NOT_MANAGER -> return@put
-            else -> {
+            UserIsManager.LDAP_NO_GROUPS_FOUND -> {
+                call.respond(
+                    HttpStatusCode.Unauthorized,
+                    AnError("No groups found for topic - delete the topic and recreate it")
+                )
+                return@put
+            }
+            UserIsManager.IS_MANAGER -> {
             }
         }
 
@@ -686,7 +732,7 @@ fun Routing.updateTopicGroup(environment: Environment) =
             ok<PutTopicGMemberModel>(),
             serviceUnavailable<AnError>(),
             badRequest<AnError>(),
-            unAuthorized<Unit>()
+            unAuthorized<AnError>()
         )
     ) { param, body ->
 
@@ -700,7 +746,14 @@ fun Routing.updateTopicGroup(environment: Environment) =
         when (userTopicManagerStatus(currentUser, topicName, environment)) {
             UserIsManager.LDAP_NOT_AVAILABLE -> return@put
             UserIsManager.IS_NOT_MANAGER -> return@put
-            else -> {
+            UserIsManager.LDAP_NO_GROUPS_FOUND -> {
+                call.respond(
+                    HttpStatusCode.Unauthorized,
+                    AnError("No groups found for topic - delete the topic and recreate it")
+                )
+                return@put
+            }
+            UserIsManager.IS_MANAGER -> {
             }
         }
 

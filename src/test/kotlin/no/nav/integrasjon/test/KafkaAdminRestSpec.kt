@@ -69,7 +69,7 @@ import org.spekframework.spek2.style.specification.describe
 object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
-    val preTopics = setOf("tpc-01", "tpc-02", "tpc-03")
+    val preTopics = setOf("tpc-01", "tpc-02", "tpc-03", "tpc-no-groups")
 
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
     val kCluster = KafkaEnvironment(1, topicNames = preTopics.toList(), withSecurity = true, autoStart = true)
@@ -664,7 +664,30 @@ object KafkaAdminRestSpec : Spek({
                                 )
                             }
 
-                            call.response.status() shouldBe HttpStatusCode.BadRequest
+                            call.response.status() shouldBe HttpStatusCode.Unauthorized
+                        }
+
+                        it("should be possible to delete orphaned topic with no LDAP groups") {
+                            val call = handleRequest(HttpMethod.Delete, "$TOPICS/tpc-no-groups") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("igroup:itest".toByteArray())}"
+                                )
+                            }
+
+                            val result: DeleteTopicModel = gson.fromJson(call.response.content ?: "")
+
+                            call.response.status() shouldBe HttpStatusCode.OK
+
+                            result.topicStatus shouldContain "deleted topic"
+                            result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf(
+                                "success",
+                                "success",
+                                "success"
+                            )
+                            result.aclStatus shouldContain "no acls to delete"
                         }
 
                         topics2CreateDelete.forEach { topicToDelete ->
