@@ -72,6 +72,7 @@ data class OneshotResult(val creationId: String)
 @Location(ONESHOT)
 class Oneshot
 
+@Suppress("SENSELESS_COMPARISON")
 fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environment) {
     put<Oneshot, OneshotCreationRequest>(
         "Provides a one-shot kafka topic creation and ACL creation, it returns an ID and an endpoint where you can await a result from this request"
