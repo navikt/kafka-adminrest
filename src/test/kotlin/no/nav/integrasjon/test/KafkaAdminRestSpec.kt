@@ -59,6 +59,7 @@ import no.nav.integrasjon.ldap.UpdateKafkaGroupMember
 import no.nav.integrasjon.ldap.intoAcls
 import no.nav.integrasjon.test.common.InMemoryLDAPServer
 import org.amshove.kluent.shouldBe
+import org.amshove.kluent.shouldBeEmpty
 import org.amshove.kluent.shouldBeEqualTo
 import org.amshove.kluent.shouldContain
 import org.amshove.kluent.shouldContainAll
@@ -700,11 +701,7 @@ object KafkaAdminRestSpec : Spek({
                             call.response.status() shouldBe HttpStatusCode.OK
 
                             result.topicStatus shouldContain "deleted topic"
-                            result.groupsStatus.map { it.ldapResult.resultCode.name } shouldContainAll listOf(
-                                "success",
-                                "success",
-                                "success"
-                            )
+                            result.groupsStatus.shouldBeEmpty()
                             result.aclStatus shouldContain "no acls to delete"
                         }
 

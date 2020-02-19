@@ -442,20 +442,7 @@ fun Routing.deleteTopic(adminClient: AdminClient?, environment: Environment) =
         val groupsResult: List<KafkaGroup> = if (userIsManagerStatus != UserIsManager.LDAP_NO_GROUPS_FOUND) {
             LDAPGroup(environment).use { ldap -> ldap.deleteKafkaGroups(topicName) }
         } else {
-            listOf(
-                KafkaGroup(
-                    type = KafkaGroupType.MANAGER,
-                    ldapResult = SLDAPResult(resultCode = ResultCode.SUCCESS, message = "success")
-                ),
-                KafkaGroup(
-                    type = KafkaGroupType.PRODUCER,
-                    ldapResult = SLDAPResult(resultCode = ResultCode.SUCCESS, message = "success")
-                ),
-                KafkaGroup(
-                    type = KafkaGroupType.CONSUMER,
-                    ldapResult = SLDAPResult(resultCode = ResultCode.SUCCESS, message = "success")
-                )
-            )
+            emptyList()
         }
         val groupsAreOk: Boolean = groupsResult
             .asSequence()
