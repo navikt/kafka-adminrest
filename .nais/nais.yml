@@ -10,7 +10,7 @@ spec:
   ingresses:
     {{#each ingresses}}
      - "{{this}}"
-     {{/each}}
+    {{/each}}
   liveness:
     path: /isAlive
     initialDelay: 5
