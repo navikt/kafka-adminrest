@@ -339,6 +339,7 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.userTopicManagerStatu
             .none { kafkaGroup -> kafkaGroup.ldapResult.resultCode == ResultCode.NO_SUCH_OBJECT }
     } catch (e: Exception) {
         application.environment.log.warn(SERVICES_ERR_G, e)
+        call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_G))
         return UserIsManager.LDAP_NOT_AVAILABLE
     }
 
