@@ -13,6 +13,7 @@ val jacksonDatatypeVersion = "2.10.2"
 
 val kafkaVersion = "2.4.0"
 val embeddedkafkaVersion = "2.4.0"
+val confluentVersion = "5.4.0"
 
 val prometheusVersion = "0.8.1"
 val logstashEncoderVersion = "6.3"
@@ -53,6 +54,8 @@ dependencies {
     implementation("org.jetbrains.kotlin:kotlin-reflect:$kotlinVersion")
 
     implementation("org.apache.kafka:kafka-clients:$kafkaVersion")
+    implementation("org.apache.kafka:kafka-streams:$kafkaVersion")
+    implementation("io.confluent:kafka-schema-registry:$confluentVersion")
     implementation("com.unboundid:unboundid-ldapsdk:$unboundidVersion")
 
     implementation("io.ktor:ktor-server-netty:$ktorVersion")

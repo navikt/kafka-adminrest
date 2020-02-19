@@ -70,9 +70,27 @@ object KafkaAdminRestSpec : Spek({
 
     // Creating topics for predefined kafka groups in LDAP
     val preTopics = setOf("tpc-01", "tpc-02", "tpc-03", "tpc-no-groups")
+    val orphanedInternalTopics = setOf(
+        "tpc-kstream-changelog",
+        "tpc-kstream-repartition",
+        "tpc-kstream-00000002",
+        "tpc-ktable-source-0000001",
+        "tpc-ktable-filter-00000003-topic",
+        "tpc-app-state-store-repartition",
+        "tpc-app-state-changelog",
+        "__consumer_offsets",
+        "__transaction_state",
+        "_schemas"
+    )
 
     // create and start kafka cluster - not sure when ktor start versus beforeGroup...
-    val kCluster = KafkaEnvironment(1, topicNames = preTopics.toList(), withSecurity = true, autoStart = true)
+    val kCluster = KafkaEnvironment(
+        noOfBrokers = 1,
+        topicNames = preTopics.toList() + orphanedInternalTopics.toList(),
+        withSecurity = true,
+        autoStart = true,
+        withSchemaRegistry = true
+    )
 
     val environment = Environment(
         kafka = Environment.Kafka(kafkaBrokers = kCluster.brokersURL, kafkaTimeout = 1000L),
@@ -688,6 +706,22 @@ object KafkaAdminRestSpec : Spek({
                                 "success"
                             )
                             result.aclStatus shouldContain "no acls to delete"
+                        }
+
+                        orphanedInternalTopics.forEach { topic ->
+                            it("should not be able to delete \"orphaned\" internal topic '$topic'") {
+                                val call = handleRequest(HttpMethod.Delete, "$TOPICS/$topic") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                    addHeader(HttpHeaders.ContentType, "application/json")
+                                    addHeader(
+                                        HttpHeaders.Authorization,
+                                        "Basic ${encodeBase64("igroup:itest".toByteArray())}"
+                                    )
+                                }
+
+                                val result: DeleteTopicModel = gson.fromJson(call.response.content ?: "")
+                                call.response.status() shouldBe HttpStatusCode.Unauthorized
+                            }
                         }
 
                         topics2CreateDelete.forEach { topicToDelete ->

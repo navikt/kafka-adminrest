@@ -1,6 +1,7 @@
 package no.nav.integrasjon.api.v1
 
 import com.unboundid.ldap.sdk.ResultCode
+import io.confluent.kafka.schemaregistry.rest.SchemaRegistryConfig
 import io.ktor.application.ApplicationCall
 import io.ktor.application.application
 import io.ktor.application.call
@@ -44,6 +45,7 @@ import org.apache.kafka.common.acl.AccessControlEntryFilter
 import org.apache.kafka.common.acl.AclBinding
 import org.apache.kafka.common.acl.AclBindingFilter
 import org.apache.kafka.common.config.ConfigResource
+import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.resource.PatternType
 import org.apache.kafka.common.resource.ResourcePatternFilter
 import org.apache.kafka.common.resource.ResourceType
@@ -306,6 +308,18 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
 
 private enum class UserIsManager { LDAP_NOT_AVAILABLE, IS_NOT_MANAGER, IS_MANAGER, LDAP_NO_GROUPS_FOUND }
 
+// prevent deletion of orphaned topics for any topic containing these terms
+private val protectedOrphantedTopics: Set<String> = setOf(
+    Topic.GROUP_METADATA_TOPIC_NAME,
+    Topic.TRANSACTION_STATE_TOPIC_NAME,
+    SchemaRegistryConfig.DEFAULT_KAFKASTORE_TOPIC,
+    "-repartition",
+    "-changelog",
+    "-topic",
+    "KTABLE-",
+    "KSTREAM-"
+)
+
 private suspend fun PipelineContext<Unit, ApplicationCall>.userTopicManagerStatus(
     user: String,
     topicName: String,
@@ -330,7 +344,16 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.userTopicManagerStatu
 
     if (!groupsExist) {
         application.environment.log.warn("Groups not found for topic $topicName - probably orphaned")
-        return UserIsManager.LDAP_NO_GROUPS_FOUND
+        val isProtectedTopic = protectedOrphantedTopics.any { protectedTopicName ->
+            topicName.contains(protectedTopicName, ignoreCase = true)
+        }
+        if (isProtectedTopic) {
+            application.environment.log.warn("User attempted to delete internal protected topic, denying request")
+            call.respond(HttpStatusCode.Unauthorized, AnError("Cannot delete internal topic"))
+            return UserIsManager.IS_NOT_MANAGER
+        } else {
+            return UserIsManager.LDAP_NO_GROUPS_FOUND
+        }
     }
 
     if (!isMngRequestOk) {
