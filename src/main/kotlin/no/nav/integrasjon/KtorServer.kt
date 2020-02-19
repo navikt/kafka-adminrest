@@ -59,7 +59,7 @@ val swagger = Swagger(
         title = "Kafka self service API",
         description = "[kafka-adminrest](https://github.com/navikt/kafka-adminrest)",
         contact = Contact(
-            name = "Torstein Nesby, Trong Huu Nguyen, Kevin Sillerud",
+            name = "GitHub",
             url = "https://github.com/navikt/kafka-adminrest",
             email = ""
         )
