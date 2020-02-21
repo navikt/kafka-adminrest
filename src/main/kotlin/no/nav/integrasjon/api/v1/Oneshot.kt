@@ -285,7 +285,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                 }
                 .mapValues { (_, configEntries) ->
                     configEntries.map { (key, value) ->
-                        AlterConfigOp(ConfigEntry(key, value), AlterConfigOp.OpType.SET)
+                        AlterConfigOp(ConfigEntry(key, value.toLowerCase()), AlterConfigOp.OpType.SET)
                     }
                 }
 
@@ -300,7 +300,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                     .filterNot { existingTopics.contains(it.topicName) }
                     .map {
                         NewTopic(it.topicName, it.numPartitions, getDefaultReplicationFactor(adminClient, environment))
-                            .configs(it.configEntries)
+                            .configs(it.configEntries?.mapValues { it.value.toLowerCase() })
                     })?.all()?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
             } catch (e: Exception) {
                 log.error("Exception caught while creating topic(s), request: {} $logFormat", logKeys, e)

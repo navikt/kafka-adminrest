@@ -581,7 +581,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, environment: Environmen
 
         val newConfigEntries = try {
             body.entries.map {
-                ConfigEntry(it.configentry.entryName, it.value)
+                ConfigEntry(it.configentry.entryName, it.value.toLowerCase())
             }
         } catch (e: Exception) {
             log.warn("Could not parse input body", e)

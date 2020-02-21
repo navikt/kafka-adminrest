@@ -640,6 +640,9 @@ object KafkaAdminRestSpec : Spek({
                                     ?.value()
                                     ?: ""
                                 retentionMsValue shouldBeEqualTo updatedRetentionMsConfig.value
+
+                                val cleanupPolicyValue = result.config.find { it.name() == "cleanup.policy" }?.value() ?: ""
+                                cleanupPolicyValue shouldBeEqualTo "delete"
                             }
                         }
 
@@ -668,6 +671,29 @@ object KafkaAdminRestSpec : Spek({
                             }
 
                             call.response.status() shouldBe HttpStatusCode.BadRequest
+                        }
+                        it("should allow uppercase values when updating 'cleanup.policy' configuration for tpc-03") {
+
+                            val call = handleRequest(HttpMethod.Put, "$TOPICS/tpc-03") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                // relevant user is in the right place in UserAndGroups.ldif
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n145821:itest3".toByteArray())}"
+                                )
+
+                                val jsonPayload = gson.toJson(
+                                    ConfigEntries(
+                                        listOf(
+                                            PutTopicConfigEntryBody(AllowedConfigEntries.RETENTION_MS, "6600666"),
+                                            PutTopicConfigEntryBody(AllowedConfigEntries.CLEANUP_POLICY, "COMPACT")
+                                        )
+                                    )
+                                )
+                                setBody(jsonPayload)
+                            }
+                            call.response.status() shouldBe HttpStatusCode.OK
                         }
                     }
 
@@ -913,6 +939,7 @@ object KafkaAdminRestSpec : Spek({
                 context("Route $ONESHOT") {
                     val retentionMsConfigEntry = AllowedConfigEntries.RETENTION_MS.entryName to "1234"
                     val retentionBytesConfigEntry = AllowedConfigEntries.RETENTION_BYTES.entryName to "98765"
+                    val cleanupPolicyConfigEntry = AllowedConfigEntries.CLEANUP_POLICY.entryName to "DELETE"
 
                     val oneshotCreationRequest = OneshotCreationRequest(
                         topics = listOf(
@@ -929,7 +956,7 @@ object KafkaAdminRestSpec : Spek({
                                     RoleMember("igroup", KafkaGroupType.CONSUMER),
                                     RoleMember("igroup", KafkaGroupType.CONSUMER)
                                 ),
-                                configEntries = mapOf(retentionMsConfigEntry),
+                                configEntries = mapOf(retentionMsConfigEntry, cleanupPolicyConfigEntry),
                                 numPartitions = 3
                             )
                         )
@@ -1050,6 +1077,12 @@ object KafkaAdminRestSpec : Spek({
                                 ?.value()
                                 ?: ""
                             retentionMsValue shouldBeEqualTo retentionMsConfigEntry.second
+
+                            val cleanupPolicyValue = result.config
+                                .find { it.name() == cleanupPolicyConfigEntry.first }
+                                ?.value()
+                                ?: ""
+                            cleanupPolicyValue shouldBeEqualTo cleanupPolicyConfigEntry.second.toLowerCase()
                         }
                     }
                 }
