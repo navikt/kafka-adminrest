@@ -21,7 +21,6 @@ import no.nav.integrasjon.api.nielsfalk.ktor.swagger.put
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.securityAndReponds
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.serviceUnavailable
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.unAuthorized
-import no.nav.integrasjon.ldap.KafkaGroup
 import no.nav.integrasjon.ldap.KafkaGroupType
 import no.nav.integrasjon.ldap.LDAPGroup
 import no.nav.integrasjon.ldap.intoAcls
@@ -29,6 +28,7 @@ import no.nav.integrasjon.ldap.toGroupName
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.AlterConfigOp
 import org.apache.kafka.clients.admin.ConfigEntry
+import org.apache.kafka.clients.admin.NewPartitions
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.common.config.ConfigResource
 import org.slf4j.Logger
@@ -51,6 +51,12 @@ data class TopicCreation(
     val numPartitions: Int,
     val configEntries: Map<String, String>?,
     val members: List<RoleMember>
+)
+
+private data class TopicPartitions(
+    val topicName: String,
+    val existingCount: Int,
+    val requestedCount: Int
 )
 
 enum class OneshotStatus {
@@ -293,6 +299,55 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
             // Alter configurations for existing topics
             log.debug("Altering configurations for existing topics$logFormat", *logKeys)
             adminClient?.incrementalAlterConfigs(incrementallyUpdatedConfigurationsForTopics)
+
+            // Alter partition count for topic(s)
+            try {
+                val topicsAndPartitions: List<TopicPartitions> = request.topics
+                    .filter { topic -> topic.topicName in existingTopics }
+                    .map { topic ->
+                        val existingCount = adminClient.getTopicPartitions(topic.topicName, environment)
+                        TopicPartitions(
+                            topicName = topic.topicName,
+                            existingCount = existingCount,
+                            requestedCount = topic.numPartitions
+                        )
+                    }
+                if (topicsAndPartitions.isNotEmpty() && topicsAndPartitions.none { topic -> topic.requestedCount >= topic.existingCount }) {
+                    val violations: List<TopicPartitions> = topicsAndPartitions
+                        .filter { topic -> topic.requestedCount < topic.existingCount }
+                    val message = "Number of partitions for topic(s) cannot be reduced - $violations"
+                    log.info(message)
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        OneshotResponse(
+                            status = OneshotStatus.ERROR,
+                            message = message,
+                            requestId = uuid
+                        )
+                    )
+                    return@put
+                } else {
+                    val topicsToAlter: Map<String, NewPartitions> = topicsAndPartitions
+                        .filter { topic -> topic.requestedCount > topic.existingCount }
+                        .map { topic ->
+                            log.info("Increasing partition count for topic '${topic.topicName}' from '${topic.existingCount}' to '${topic.requestedCount}'")
+                            topic.topicName to NewPartitions.increaseTo(topic.requestedCount)
+                        }
+                        .toMap()
+                    adminClient?.createPartitions(topicsToAlter)
+                }
+            } catch (e: Exception) {
+                log.error("Exception caught while increasing partitions for existing topic(s) $logFormat", logKeys, e)
+                call.respond(
+                    HttpStatusCode.ServiceUnavailable,
+                    OneshotResponse(
+                        status = OneshotStatus.ERROR,
+                        message = "Failed to increase topic partitions in kafka",
+                        requestId = uuid
+                    )
+                )
+                return@put
+            }
 
             // Create topics that are missing
             log.debug("Creating topics$logFormat", *logKeys)

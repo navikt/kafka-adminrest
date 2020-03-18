@@ -1053,6 +1053,12 @@ object KafkaAdminRestSpec : Spek({
 
                     context("Put oneshot request for existing topic with new added config entry and previous config entry removed") {
                         it("should successfully perform the request") {
+                            val request = oneshotCreationRequest.copy(
+                                topics = listOf(oneshotCreationRequest.topics
+                                    .first()
+                                    .copy(configEntries = mapOf(retentionBytesConfigEntry))
+                                )
+                            )
                             val call = handleRequest(HttpMethod.Put, ONESHOT) {
                                 addHeader(HttpHeaders.Accept, "application/json")
                                 addHeader(HttpHeaders.ContentType, "application/json")
@@ -1060,18 +1066,20 @@ object KafkaAdminRestSpec : Spek({
                                     HttpHeaders.Authorization,
                                     "Basic ${encodeBase64("n000001:itest1".toByteArray())}"
                                 )
-                                setBody(
-                                    gson.toJson(
-                                        oneshotCreationRequest.copy(
-                                            topics = listOf(
-                                                oneshotCreationRequest.topics.first()
-                                                    .copy(configEntries = mapOf(retentionBytesConfigEntry))
-                                            )
-                                        )
-                                    )
-                                )
+                                setBody(gson.toJson(request))
                             }
                             call.response.status() shouldBe HttpStatusCode.OK
+                            val result: OneshotResponse = gson.fromJson(call.response.content ?: "")
+
+                            val inputTopic = request.topics.first()
+                            val outputTopic = result.data!!.topics.first()
+
+                            outputTopic.topicName shouldBeEqualTo inputTopic.topicName
+                            outputTopic.numPartitions shouldBeEqualTo inputTopic.numPartitions
+                            outputTopic.members.size shouldBeEqualTo 5
+                            outputTopic.configEntries!!.forEach { (key, value) ->
+                                value.shouldBeEqualTo(inputTopic.configEntries!!.get(key)!!.toLowerCase())
+                            }
                         }
                         it("should have preserved the missing previous config entry value") {
                             val call = handleRequest(HttpMethod.Get, "$TOPICS/integrationTestNoUpdate") {
@@ -1097,6 +1105,47 @@ object KafkaAdminRestSpec : Spek({
                                 ?.value()
                                 ?: ""
                             cleanupPolicyValue shouldBeEqualTo cleanupPolicyConfigEntry.second.toLowerCase()
+                        }
+                    }
+                    context("Put oneshot request for existing topic with increased partition count") {
+                        it("should successfully perform the request") {
+                            val request = oneshotCreationRequest.copy(
+                                topics = listOf(oneshotCreationRequest.topics.first().copy(numPartitions = 5))
+                            )
+                            val call = handleRequest(HttpMethod.Put, ONESHOT) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n000001:itest1".toByteArray())}"
+                                )
+                                setBody(gson.toJson(request))
+                            }
+                            call.response.status() shouldBe HttpStatusCode.OK
+                            val result: OneshotResponse = gson.fromJson(call.response.content ?: "")
+
+                            val inputTopic = request.topics.first()
+                            val outputTopic = result.data!!.topics.first()
+
+                            outputTopic.topicName shouldBeEqualTo inputTopic.topicName
+                            outputTopic.numPartitions shouldBeEqualTo inputTopic.numPartitions
+                        }
+                    }
+                    context("Put oneshot request for existing topic with reduced partition count") {
+                        it("should fail the request") {
+                            val request = oneshotCreationRequest.copy(
+                                topics = listOf(oneshotCreationRequest.topics.first().copy(numPartitions = 1))
+                            )
+                            val call = handleRequest(HttpMethod.Put, ONESHOT) {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("n000001:itest1".toByteArray())}"
+                                )
+                                setBody(gson.toJson(request))
+                            }
+                            call.response.status() shouldBe HttpStatusCode.BadRequest
                         }
                     }
                 }
