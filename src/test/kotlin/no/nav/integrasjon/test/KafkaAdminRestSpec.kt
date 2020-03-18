@@ -41,6 +41,7 @@ import no.nav.integrasjon.api.v1.NAIS_ISALIVE
 import no.nav.integrasjon.api.v1.NAIS_ISREADY
 import no.nav.integrasjon.api.v1.ONESHOT
 import no.nav.integrasjon.api.v1.OneshotCreationRequest
+import no.nav.integrasjon.api.v1.OneshotResponse
 import no.nav.integrasjon.api.v1.PostStreamBody
 import no.nav.integrasjon.api.v1.PostStreamResponse
 import no.nav.integrasjon.api.v1.PostStreamStatus
@@ -940,6 +941,7 @@ object KafkaAdminRestSpec : Spek({
                     val retentionMsConfigEntry = AllowedConfigEntries.RETENTION_MS.entryName to "1234"
                     val retentionBytesConfigEntry = AllowedConfigEntries.RETENTION_BYTES.entryName to "98765"
                     val cleanupPolicyConfigEntry = AllowedConfigEntries.CLEANUP_POLICY.entryName to "DELETE"
+                    val originalNumberOfPartitions = 3
 
                     val oneshotCreationRequest = OneshotCreationRequest(
                         topics = listOf(
@@ -957,7 +959,7 @@ object KafkaAdminRestSpec : Spek({
                                     RoleMember("igroup", KafkaGroupType.CONSUMER)
                                 ),
                                 configEntries = mapOf(retentionMsConfigEntry, cleanupPolicyConfigEntry),
-                                numPartitions = 3
+                                numPartitions = originalNumberOfPartitions
                             )
                         )
                     )
@@ -1017,6 +1019,18 @@ object KafkaAdminRestSpec : Spek({
                                 setBody(gson.toJson(oneshotCreationRequest))
                             }
                             call.response.status() shouldBe HttpStatusCode.OK
+
+                            val result: OneshotResponse = gson.fromJson(call.response.content ?: "")
+
+                            val inputTopic = oneshotCreationRequest.topics.first()
+                            val outputTopic = result.data!!.topics.first()
+
+                            outputTopic.topicName shouldBeEqualTo inputTopic.topicName
+                            outputTopic.numPartitions shouldBeEqualTo inputTopic.numPartitions
+                            outputTopic.members.size shouldBeEqualTo 5
+                            outputTopic.configEntries!!.forEach { (key, value) ->
+                                value.shouldBeEqualTo(inputTopic.configEntries!!.get(key)!!.toLowerCase())
+                            }
                         }
 
                         it("should report groups and 2 members for topic integrationTestNoUpdate, KM:igroup and KC:srvp02") {

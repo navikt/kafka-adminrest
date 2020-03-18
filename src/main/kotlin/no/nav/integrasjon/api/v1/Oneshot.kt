@@ -21,6 +21,7 @@ import no.nav.integrasjon.api.nielsfalk.ktor.swagger.put
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.securityAndReponds
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.serviceUnavailable
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.unAuthorized
+import no.nav.integrasjon.ldap.KafkaGroup
 import no.nav.integrasjon.ldap.KafkaGroupType
 import no.nav.integrasjon.ldap.LDAPGroup
 import no.nav.integrasjon.ldap.intoAcls
@@ -66,7 +67,7 @@ data class OneshotResponse(
     val requestId: String
 )
 
-data class OneshotResult(val creationId: String)
+data class OneshotResult(val creationId: String, val topics: List<TopicCreation>)
 
 @Group("Oneshot")
 @Location(ONESHOT)
@@ -323,14 +324,6 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
             try {
                 adminClient?.createAcls(acl)?.all()?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
                 log.info("Successfully updated acl for topic(s) - {} $logFormat", acl, logKeys)
-                call.respond(
-                    OneshotResponse(
-                        status = OneshotStatus.OK,
-                        message = "Successfully created topic",
-                        data = OneshotResult(uuid),
-                        requestId = uuid
-                    )
-                )
             } catch (e: Exception) {
                 log.error(
                     "Exception caught while creating ACL for topic(s), request: {} $logFormat", acl,
@@ -345,6 +338,66 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                     )
                 )
             }
+
+            log.info("Fetching updated configurations$logFormat", *logKeys)
+            val result = try {
+                OneshotResult(uuid, request.topics.getCreationResult(adminClient, environment))
+            } catch (e: Exception) {
+                log.error(
+                    "Exception caught while fetching updated configurations for topic(s), request: {} $logFormat",
+                    logKeys, e
+                )
+                null
+            }
+            call.respond(
+                OneshotResponse(
+                    status = OneshotStatus.OK,
+                    message = "Successfully created and/or updated topic(s)",
+                    data = result,
+                    requestId = uuid
+                )
+            )
         }
+    }
+}
+
+private fun List<TopicCreation>.getCreationResult(
+    adminClient: AdminClient?,
+    environment: Environment
+): List<TopicCreation> {
+    return this.map { topicCreation ->
+        val members: List<RoleMember> = LDAPGroup(environment)
+            .use { ldap -> ldap.getKafkaGroupsAndMembers(topicCreation.topicName) }
+            .flatMap { group ->
+                group.members
+                    .map { ldapMember -> // hack for fetching user OID/CN from ldap query string
+                        ldapMember
+                            .substringAfter("=")
+                            .substringBefore(",")
+                    }
+                    .map { member -> Pair(member, group.type) }
+            }
+            .map { (member, type) -> RoleMember(member, type) }
+
+        val partitions: Int = adminClient.getTopicPartitions(topicCreation.topicName, environment)
+
+        val configEntries: Map<String, String> = adminClient
+            .getConfigEntries(topicCreation.topicName, environment)
+            .map { entry -> Pair(entry.name(), entry.value().toLowerCase()) }
+            .toMap()
+            .flatMap { actualEntries ->
+                topicCreation.configEntries
+                    ?.filterKeys { expectedKey -> actualEntries.key == expectedKey }
+                    ?.map { _ -> actualEntries.key to actualEntries.value }
+                    ?: emptyList()
+            }
+            .toMap()
+
+        TopicCreation(
+            topicName = topicCreation.topicName,
+            numPartitions = partitions,
+            configEntries = configEntries,
+            members = members
+        )
     }
 }

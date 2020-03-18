@@ -479,7 +479,7 @@ fun Routing.deleteTopic(adminClient: AdminClient?, environment: Environment) =
 @Location("$TOPICS/{topicName}")
 data class GetTopicConfig(val topicName: String)
 
-data class GetTopicConfigModel(val name: String, val config: List<ConfigEntry>)
+data class GetTopicConfigModel(val name: String, val config: List<ConfigEntry>, val partitions: Int)
 
 fun Routing.getTopicConfig(adminClient: AdminClient?, environment: Environment) =
     get<GetTopicConfig>(
@@ -512,7 +512,14 @@ fun Routing.getTopicConfig(adminClient: AdminClient?, environment: Environment) 
             return@get
         }
 
-        call.respond(GetTopicConfigModel(topicName, topicConfig))
+        val (topicsPartitionsRequestOk, topicPartitions) = fetchTopicPartitions(adminClient, topicName, environment)
+
+        if (!topicsPartitionsRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@get
+        }
+
+        call.respond(GetTopicConfigModel(topicName, topicConfig, topicPartitions))
     }
 
 /**
@@ -812,20 +819,42 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchTopicConfig(
     environment: Environment
 ): Pair<Boolean, List<ConfigEntry>> {
     return try {
-        Pair(
-            true,
-            adminClient
-                ?.describeConfigs(mutableListOf(ConfigResource(ConfigResource.Type.TOPIC, topicName)))
-                ?.all()
-                ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
-                ?.values
-                ?.first()
-                ?.entries()
-                ?.toList()
-                ?: throw Exception(SERVICES_ERR_K)
-        )
+        Pair(true, adminClient.getConfigEntries(topicName, environment))
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
         Pair(false, emptyList())
     }
 }
+
+private fun PipelineContext<Unit, ApplicationCall>.fetchTopicPartitions(
+    adminClient: AdminClient?,
+    topicName: String,
+    environment: Environment
+): Pair<Boolean, Int> {
+    return try {
+        Pair(true, adminClient.getTopicPartitions(topicName, environment))
+    } catch (e: Exception) {
+        application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
+        Pair(false, 0)
+    }
+}
+
+internal fun AdminClient?.getConfigEntries(topicName: String, environment: Environment): List<ConfigEntry> =
+    this?.describeConfigs(mutableListOf(ConfigResource(ConfigResource.Type.TOPIC, topicName)))
+        ?.all()
+        ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+        ?.values
+        ?.first()
+        ?.entries()
+        ?.toList()
+        ?: throw Exception(SERVICES_ERR_K)
+
+internal fun AdminClient?.getTopicPartitions(topicName: String, environment: Environment): Int =
+    this?.describeTopics(mutableListOf(topicName))
+        ?.all()
+        ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+        ?.values
+        ?.first()
+        ?.partitions()
+        ?.size
+        ?: throw Exception(SERVICES_ERR_K)
