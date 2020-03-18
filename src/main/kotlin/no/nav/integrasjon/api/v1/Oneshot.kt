@@ -312,7 +312,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                             requestedCount = topic.numPartitions
                         )
                     }
-                if (topicsAndPartitions.isNotEmpty() && topicsAndPartitions.none { topic -> topic.requestedCount >= topic.existingCount }) {
+                if (topicsAndPartitions.isNotEmpty() && topicsAndPartitions.any { topic -> topic.requestedCount < topic.existingCount }) {
                     val violations: List<TopicPartitions> = topicsAndPartitions
                         .filter { topic -> topic.requestedCount < topic.existingCount }
                     val message = "Number of partitions for topic(s) cannot be reduced - $violations"
