@@ -700,6 +700,19 @@ object KafkaAdminRestSpec : Spek({
 
                     context("Delete topics") {
 
+                        it("should return bad request when attempting to delete non-existent topic") {
+                            val call = handleRequest(HttpMethod.Delete, "$TOPICS/thistopicdoesntexist") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                                addHeader(HttpHeaders.ContentType, "application/json")
+                                addHeader(
+                                    HttpHeaders.Authorization,
+                                    "Basic ${encodeBase64("igroup:itest".toByteArray())}"
+                                )
+                            }
+
+                            call.response.status() shouldBe HttpStatusCode.BadRequest
+                        }
+
                         it("should not be possible to delete ${topics2CreateDelete.first()} for non-member in KM-") {
                             val call = handleRequest(HttpMethod.Delete, "$TOPICS/${topics2CreateDelete.first()}") {
                                 addHeader(HttpHeaders.Accept, "application/json")

@@ -415,6 +415,18 @@ fun Routing.deleteTopic(adminClient: AdminClient?, environment: Environment) =
                 application.environment.log.warn("No groups found - assuming orphaned topic and allowing delete")
             }
         }
+
+        val (topicsRequestOk, existingTopics) = fetchTopics(adminClient, environment, topicName)
+
+        if (!topicsRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@delete
+        }
+
+        if (existingTopics.isNotEmpty() && !existingTopics.contains(topicName)) {
+            call.respond(HttpStatusCode.BadRequest, AnError("Cannot find topic $topicName"))
+            return@delete
+        }
         // delete ACLs
         val acls = AclBindingFilter(
             ResourcePatternFilter(ResourceType.TOPIC, topicName, PatternType.LITERAL),
