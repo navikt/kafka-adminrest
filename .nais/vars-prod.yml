@@ -1,3 +1,4 @@
 namespace: default
 ingresses:
   - https://kafka-adminrest.nais.adeo.no
+  - https://kafka-adminrest.prod-fss.nais.io
