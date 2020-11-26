@@ -37,7 +37,7 @@ Automated testing of (most) Ktor routes by embedded LDAP and embedded kafka clus
 
 See related [Wiki](https://github.com/navikt/kafka-adminrest/wiki) for quick start and code structure
 
-See also swagger documentation at host:port/api/v1 or at https://kafka-adminrest.nais.preprod.local/api/v1/
+See also swagger documentation at host:port/api/v1 or at https://kafka-adminrest.dev-fss.nais.io/api/v1/
 
 ## Build 
 
