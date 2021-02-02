@@ -25,6 +25,7 @@ import no.nav.integrasjon.api.v1.AnError
 import no.nav.integrasjon.api.v1.ApiGwGroupMember
 import no.nav.integrasjon.api.v1.ApiGwRequest
 import no.nav.integrasjon.api.v1.BROKERS
+import no.nav.integrasjon.api.v1.CONSUMERGROUPS
 import no.nav.integrasjon.api.v1.ConfigEntries
 import no.nav.integrasjon.api.v1.DeleteTopicModel
 import no.nav.integrasjon.api.v1.GROUPS
@@ -698,17 +699,6 @@ object KafkaAdminRestSpec : Spek({
                         }
                     }
 
-                    context("Get topic consumer groups") {
-                        preTopics.forEach { topic ->
-                            it("should return consumer groups for $topic") {
-                                val call = handleRequest(HttpMethod.Get, "$TOPICS/$topic/consumergroups") {
-                                    addHeader(HttpHeaders.Accept, "application/json")
-                                }
-                                call.response.status() shouldBe HttpStatusCode.OK
-                            }
-                        }
-                    }
-
                     context("Get topic offsets") {
                         preTopics.forEach { topic ->
                             it("should return offsets for $topic") {
@@ -968,6 +958,18 @@ object KafkaAdminRestSpec : Spek({
                                 true
                             )
                             result.groups.flatMap { it.members }.size shouldBeEqualTo 1
+                        }
+                    }
+                }
+
+                context("Route $CONSUMERGROUPS") {
+                    context("Get consumer group offsets") {
+                        val consumerGroupName = "some-consumer-group"
+                        it("should return consumer group description and offsets for $consumerGroupName") {
+                            val call = handleRequest(HttpMethod.Get, "$CONSUMERGROUPS/$consumerGroupName/offsets") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                            }
+                            call.response.status() shouldBe HttpStatusCode.OK
                         }
                     }
                 }

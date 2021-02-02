@@ -40,6 +40,7 @@ import no.nav.integrasjon.api.v1.API_V1
 import no.nav.integrasjon.api.v1.aclAPI
 import no.nav.integrasjon.api.v1.apigwAPI
 import no.nav.integrasjon.api.v1.brokersAPI
+import no.nav.integrasjon.api.v1.consumerGroupsAPI
 import no.nav.integrasjon.api.v1.groupsAPI
 import no.nav.integrasjon.api.v1.registerOneshotApi
 import no.nav.integrasjon.api.v1.streamsAPI
@@ -178,6 +179,7 @@ fun Application.kafkaAdminREST(environment: Environment) {
         streamsAPI(adminClient, environment)
         registerOneshotApi(adminClient, environment)
         topicsAPI(adminClient, environment)
+        consumerGroupsAPI(adminClient, environment)
         brokersAPI(adminClient, environment)
         aclAPI(adminClient, environment)
         groupsAPI(environment)

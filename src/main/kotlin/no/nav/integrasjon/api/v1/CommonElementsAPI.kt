@@ -32,6 +32,7 @@ const val GROUPS = "$API_V1/groups"
 // route for topics in kafka environment, and zoom into related acls and groups per topic
 const val TOPICS = "$API_V1/topics"
 const val ONESHOT = "$API_V1/oneshot"
+const val CONSUMERGROUPS = "$API_V1/consumergroups"
 
 // Route for streams
 const val STREAMS = "$API_V1/streams"
