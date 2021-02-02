@@ -698,6 +698,28 @@ object KafkaAdminRestSpec : Spek({
                         }
                     }
 
+                    context("Get topic consumer groups") {
+                        preTopics.forEach { topic ->
+                            it("should return consumer groups for $topic") {
+                                val call = handleRequest(HttpMethod.Get, "$TOPICS/$topic/consumergroups") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                }
+                                call.response.status() shouldBe HttpStatusCode.OK
+                            }
+                        }
+                    }
+
+                    context("Get topic offsets") {
+                        preTopics.forEach { topic ->
+                            it("should return offsets for $topic") {
+                                val call = handleRequest(HttpMethod.Get, "$TOPICS/$topic/offsets") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                }
+                                call.response.status() shouldBe HttpStatusCode.OK
+                            }
+                        }
+                    }
+
                     context("Delete topics") {
 
                         it("should return bad request when attempting to delete non-existent topic") {

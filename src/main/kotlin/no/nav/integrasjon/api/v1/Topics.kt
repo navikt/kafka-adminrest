@@ -40,7 +40,13 @@ import no.nav.integrasjon.ldap.intoAcls
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.AlterConfigOp
 import org.apache.kafka.clients.admin.ConfigEntry
+import org.apache.kafka.clients.admin.ConsumerGroupDescription
+import org.apache.kafka.clients.admin.ListOffsetsResult
 import org.apache.kafka.clients.admin.NewTopic
+import org.apache.kafka.clients.admin.OffsetSpec
+import org.apache.kafka.clients.consumer.OffsetAndMetadata
+import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.TopicPartitionInfo
 import org.apache.kafka.common.acl.AccessControlEntryFilter
 import org.apache.kafka.common.acl.AclBinding
 import org.apache.kafka.common.acl.AclBindingFilter
@@ -49,6 +55,7 @@ import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.resource.PatternType
 import org.apache.kafka.common.resource.ResourcePatternFilter
 import org.apache.kafka.common.resource.ResourceType
+import java.util.Optional
 
 /**
  * Topic API
@@ -81,6 +88,9 @@ fun Routing.topicsAPI(adminClient: AdminClient?, environment: Environment) {
 
     getTopicGroups(environment)
     updateTopicGroup(environment)
+
+    getConsumerGroups(adminClient, environment)
+    getTopicOffsets(adminClient, environment)
 }
 
 private const val swGroup = "Topics"
@@ -145,6 +155,7 @@ fun getDefaultReplicationFactor(adminClient: AdminClient?, environment: Environm
     } ?: throw Exception(SERVICES_ERR_K)
 
 private val topicPattern: Pattern = Pattern.compile("[A-Za-z0-9-]+")
+
 // extension function for validating a topic name and that the future group names are of valid length
 fun String.isValidTopicName(): Boolean = topicPattern.matcher(this).matches() &&
     LDAPGroup.validGroupLength(this)
@@ -491,7 +502,11 @@ fun Routing.deleteTopic(adminClient: AdminClient?, environment: Environment) =
 @Location("$TOPICS/{topicName}")
 data class GetTopicConfig(val topicName: String)
 
-data class GetTopicConfigModel(val name: String, val config: List<ConfigEntry>, val partitions: Int)
+data class GetTopicConfigModel(
+    val name: String,
+    val config: List<ConfigEntry>,
+    val partitions: List<TopicPartitionInfo>
+)
 
 fun Routing.getTopicConfig(adminClient: AdminClient?, environment: Environment) =
     get<GetTopicConfig>(
@@ -806,6 +821,176 @@ fun Routing.updateTopicGroup(environment: Environment) =
         call.respond(PutTopicGMemberModel(topicName, body, result))
     }
 
+@Group(swGroup)
+@Location("$TOPICS/{topicName}/consumergroups")
+data class GetConsumerGroups(val topicName: String)
+
+data class GetConsumerGroupsModel(val name: String, val groups: Map<String, ConsumerGroupsWithOffsets>)
+
+data class ConsumerGroupsWithOffsets(
+    val description: ConsumerGroupDescription,
+    val offsets: Map<TopicPartition, OffsetAndMetadata>
+)
+
+fun Routing.getConsumerGroups(adminClient: AdminClient?, environment: Environment) =
+    get<GetConsumerGroups>(
+        "a topic's consumer groups with offsets".responds(
+            ok<GetConsumerGroupsModel>(),
+            serviceUnavailable<AnError>()
+        )
+    ) { param ->
+
+        val topicName = param.topicName
+
+        // NB! AdminClient is listing a default config independent of topic exists or not, verify existence!
+        val (topicsRequestOk, existingTopics) = fetchTopics(adminClient, environment, topicName)
+
+        if (!topicsRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@get
+        }
+
+        if (existingTopics.isNotEmpty() && !existingTopics.contains(topicName)) {
+            call.respond(HttpStatusCode.BadRequest, AnError("Cannot find topic $topicName"))
+            return@get
+        }
+
+        val (consumerGroupsRequestOk, consumerGroups) = fetchConsumerGroupsWithOffsets(
+            adminClient,
+            environment,
+            topicName
+        )
+        if (!consumerGroupsRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@get
+        }
+
+        call.respond(GetConsumerGroupsModel(topicName, consumerGroups))
+    }
+
+@Group(swGroup)
+@Location("$TOPICS/{topicName}/offsets")
+data class GetTopicOffsets(val topicName: String)
+
+data class GetTopicOffsetsModel(
+    val name: String,
+    val partitions: Map<TopicPartitionInfo, OffsetResultInfo>
+)
+
+data class OffsetResultInfo(
+    val earliest: ListOffsetsResult.ListOffsetsResultInfo?,
+    val latest: ListOffsetsResult.ListOffsetsResultInfo?
+)
+
+fun Routing.getTopicOffsets(adminClient: AdminClient?, environment: Environment) =
+    get<GetTopicOffsets>(
+        "a topic's offsets".responds(
+            ok<GetTopicOffsetsModel>(),
+            serviceUnavailable<AnError>()
+        )
+    ) { param ->
+
+        val topicName = param.topicName
+
+        // NB! AdminClient is listing a default config independent of topic exists or not, verify existence!
+        val (topicsRequestOk, existingTopics) = fetchTopics(adminClient, environment, topicName)
+
+        if (!topicsRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@get
+        }
+
+        if (existingTopics.isNotEmpty() && !existingTopics.contains(topicName)) {
+            call.respond(HttpStatusCode.BadRequest, AnError("Cannot find topic $topicName"))
+            return@get
+        }
+
+        val (topicsPartitionsRequestOk, topicPartitions) = fetchTopicPartitions(adminClient, topicName, environment)
+        if (!topicsPartitionsRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@get
+        }
+
+        val (partitionsWithOffsetsRequestOk, partitionsWithOffsets) = fetchOffsetsForPartitions(
+            adminClient,
+            environment,
+            topicPartitions,
+            topicName
+        )
+        if (!partitionsWithOffsetsRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@get
+        }
+
+        call.respond(GetTopicOffsetsModel(topicName, partitionsWithOffsets))
+    }
+
+private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupsWithOffsets(
+    adminClient: AdminClient?,
+    environment: Environment,
+    topicName: String
+): Pair<Boolean, Map<String, ConsumerGroupsWithOffsets>> {
+    return try {
+        Pair(true, adminClient?.let { ac ->
+            val groupIds: List<String> = ac.listConsumerGroups()
+                .all()
+                .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                .map { listing -> listing.groupId() }
+
+            val consumerGroups: Map<String, ConsumerGroupDescription> = ac.describeConsumerGroups(groupIds)
+                .all()
+                .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+
+            consumerGroups.mapValues { (groupId, description) ->
+                ConsumerGroupsWithOffsets(
+                    description, ac.listConsumerGroupOffsets(groupId)
+                        .partitionsToOffsetAndMetadata()
+                        .get()
+                        .toMap()
+                )
+            }
+        } ?: throw Exception(SERVICES_ERR_K)
+        )
+    } catch (e: Exception) {
+        application.environment.log.error("$EXCEPTION topic get consumer groups request $topicName - $e")
+        Pair(false, emptyMap())
+    }
+}
+
+private fun PipelineContext<Unit, ApplicationCall>.fetchOffsetsForPartitions(
+    adminClient: AdminClient?,
+    environment: Environment,
+    partitions: List<TopicPartitionInfo>,
+    topicName: String
+): Pair<Boolean, Map<TopicPartitionInfo, OffsetResultInfo>> {
+    return try {
+        Pair(true, adminClient?.let { ac ->
+            partitions.associate { partition ->
+                val topicPartition = TopicPartition(topicName, partition.partition())
+
+                val earliest = ac.listOffsets(mapOf(topicPartition to OffsetSpec.earliest()))
+                    .all()
+                    .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+
+                val latest = ac.listOffsets(mapOf(topicPartition to OffsetSpec.latest()))
+                    .all()
+                    .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+
+                val offsetInfo = OffsetResultInfo(
+                    earliest = earliest[topicPartition],
+                    latest = latest[topicPartition]
+                )
+
+                partition to offsetInfo
+            }
+        } ?: throw Exception(SERVICES_ERR_K)
+        )
+    } catch (e: Exception) {
+        application.environment.log.error("$EXCEPTION topic get consumer groups request $topicName - $e")
+        Pair(false, emptyMap())
+    }
+}
+
 private fun PipelineContext<Unit, ApplicationCall>.fetchTopics(
     adminClient: AdminClient?,
     environment: Environment,
@@ -842,12 +1027,12 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchTopicPartitions(
     adminClient: AdminClient?,
     topicName: String,
     environment: Environment
-): Pair<Boolean, Int> {
+): Pair<Boolean, List<TopicPartitionInfo>> {
     return try {
         Pair(true, adminClient.getTopicPartitions(topicName, environment))
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")
-        Pair(false, 0)
+        Pair(false, emptyList())
     }
 }
 
@@ -861,12 +1046,11 @@ internal fun AdminClient?.getConfigEntries(topicName: String, environment: Envir
         ?.toList()
         ?: throw Exception(SERVICES_ERR_K)
 
-internal fun AdminClient?.getTopicPartitions(topicName: String, environment: Environment): Int =
+internal fun AdminClient?.getTopicPartitions(topicName: String, environment: Environment): List<TopicPartitionInfo> =
     this?.describeTopics(mutableListOf(topicName))
         ?.all()
         ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
         ?.values
         ?.first()
         ?.partitions()
-        ?.size
         ?: throw Exception(SERVICES_ERR_K)

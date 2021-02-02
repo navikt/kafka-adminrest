@@ -11,9 +11,9 @@ val ktorVersion = "1.3.1"
 
 val jacksonDatatypeVersion = "2.10.2"
 
-val kafkaVersion = "2.4.0"
-val embeddedkafkaVersion = "2.4.0"
-val confluentVersion = "5.4.0"
+val kafkaVersion = "2.5.0"
+val embeddedkafkaVersion = "2.5.0"
+val confluentVersion = "5.5.0"
 
 val prometheusVersion = "0.8.1"
 val logstashEncoderVersion = "6.3"
@@ -42,6 +42,7 @@ repositories {
     maven(url = "https://dl.bintray.com/kotlin/ktor")
     mavenCentral()
     jcenter()
+    maven(url = "https://jitpack.io")
 }
 
 configurations.compileClasspath {

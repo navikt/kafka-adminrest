@@ -305,10 +305,10 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                 val topicsAndPartitions: List<TopicPartitions> = request.topics
                     .filter { topic -> topic.topicName in existingTopics }
                     .map { topic ->
-                        val existingCount = adminClient.getTopicPartitions(topic.topicName, environment)
+                        val partitions = adminClient.getTopicPartitions(topic.topicName, environment)
                         TopicPartitions(
                             topicName = topic.topicName,
-                            existingCount = existingCount,
+                            existingCount = partitions.size,
                             requestedCount = topic.numPartitions
                         )
                     }
@@ -434,7 +434,7 @@ private fun List<TopicCreation>.getCreationResult(
             }
             .map { (member, type) -> RoleMember(member, type) }
 
-        val partitions: Int = adminClient.getTopicPartitions(topicCreation.topicName, environment)
+        val partitions: Int = adminClient.getTopicPartitions(topicCreation.topicName, environment).size
 
         val configEntries: Map<String, String> = adminClient
             .getConfigEntries(topicCreation.topicName, environment)
