@@ -872,8 +872,13 @@ fun Routing.getConsumerGroups(adminClient: AdminClient?, environment: Environmen
 data class GetTopicOffsets(val topicName: String)
 
 data class GetTopicOffsetsModel(
-    val name: String,
-    val partitions: Map<TopicPartitionInfo, OffsetResultInfo>
+    val topicName: String,
+    val partitions: Map<Int, PartitionOffsetResultInfo>
+)
+
+data class PartitionOffsetResultInfo(
+    val partitionInfo: TopicPartitionInfo,
+    val offsets: OffsetResultInfo
 )
 
 data class OffsetResultInfo(
@@ -961,27 +966,30 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchOffsetsForPartitions(
     environment: Environment,
     partitions: List<TopicPartitionInfo>,
     topicName: String
-): Pair<Boolean, Map<TopicPartitionInfo, OffsetResultInfo>> {
+): Pair<Boolean, Map<Int, PartitionOffsetResultInfo>> {
     return try {
         Pair(true, adminClient?.let { ac ->
-            partitions.associate { partition ->
-                val topicPartition = TopicPartition(topicName, partition.partition())
+            partitions.associateBy(
+                { partitionInfo -> partitionInfo.partition() },
+                { partitionInfo ->
+                    val topicPartition = TopicPartition(topicName, partitionInfo.partition())
 
-                val earliest = ac.listOffsets(mapOf(topicPartition to OffsetSpec.earliest()))
-                    .all()
-                    .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                    val earliest = ac.listOffsets(mapOf(topicPartition to OffsetSpec.earliest()))
+                        .all()
+                        .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
 
-                val latest = ac.listOffsets(mapOf(topicPartition to OffsetSpec.latest()))
-                    .all()
-                    .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                    val latest = ac.listOffsets(mapOf(topicPartition to OffsetSpec.latest()))
+                        .all()
+                        .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
 
-                val offsetInfo = OffsetResultInfo(
-                    earliest = earliest[topicPartition],
-                    latest = latest[topicPartition]
-                )
+                    val offsetInfo = OffsetResultInfo(
+                        earliest = earliest[topicPartition],
+                        latest = latest[topicPartition]
+                    )
 
-                partition to offsetInfo
-            }
+                    PartitionOffsetResultInfo(partitionInfo, offsetInfo)
+                }
+            )
         } ?: throw Exception(SERVICES_ERR_K)
         )
     } catch (e: Exception) {
