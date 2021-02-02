@@ -55,7 +55,6 @@ import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.resource.PatternType
 import org.apache.kafka.common.resource.ResourcePatternFilter
 import org.apache.kafka.common.resource.ResourceType
-import java.util.Optional
 
 /**
  * Topic API
