@@ -710,6 +710,17 @@ object KafkaAdminRestSpec : Spek({
                         }
                     }
 
+                    context("Get topic consumer groups") {
+                        preTopics.forEach { topic ->
+                            it("should return consumer groups for $topic") {
+                                val call = handleRequest(HttpMethod.Get, "$TOPICS/$topic/consumergroups") {
+                                    addHeader(HttpHeaders.Accept, "application/json")
+                                }
+                                call.response.status() shouldBe HttpStatusCode.OK
+                            }
+                        }
+                    }
+
                     context("Delete topics") {
 
                         it("should return bad request when attempting to delete non-existent topic") {
@@ -963,9 +974,29 @@ object KafkaAdminRestSpec : Spek({
                 }
 
                 context("Route $CONSUMERGROUPS") {
+                    context("Get consumer group description") {
+                        val consumerGroupName = "some-consumer-group"
+                        it("should return consumer group description for $consumerGroupName") {
+                            val call = handleRequest(HttpMethod.Get, "$CONSUMERGROUPS/$consumerGroupName") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                            }
+                            call.response.status() shouldBe HttpStatusCode.OK
+                        }
+                    }
+
+                    context("Get consumer group members") {
+                        val consumerGroupName = "some-consumer-group"
+                        it("should return consumer group members for $consumerGroupName") {
+                            val call = handleRequest(HttpMethod.Get, "$CONSUMERGROUPS/$consumerGroupName/members") {
+                                addHeader(HttpHeaders.Accept, "application/json")
+                            }
+                            call.response.status() shouldBe HttpStatusCode.OK
+                        }
+                    }
+
                     context("Get consumer group offsets") {
                         val consumerGroupName = "some-consumer-group"
-                        it("should return consumer group description and offsets for $consumerGroupName") {
+                        it("should return consumer group offsets for $consumerGroupName") {
                             val call = handleRequest(HttpMethod.Get, "$CONSUMERGROUPS/$consumerGroupName/offsets") {
                                 addHeader(HttpHeaders.Accept, "application/json")
                             }
