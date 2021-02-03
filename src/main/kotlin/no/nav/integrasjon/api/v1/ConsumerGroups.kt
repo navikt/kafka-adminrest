@@ -21,9 +21,7 @@ import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.ConsumerGroupDescription
 import org.apache.kafka.clients.admin.MemberAssignment
 import org.apache.kafka.clients.admin.MemberDescription
-import org.apache.kafka.clients.consumer.OffsetAndMetadata
 import org.apache.kafka.common.ConsumerGroupState
-import org.apache.kafka.common.TopicPartition
 
 fun Routing.consumerGroupsAPI(adminClient: AdminClient?, environment: Environment) {
     getConsumerGroup(adminClient, environment)
@@ -31,11 +29,11 @@ fun Routing.consumerGroupsAPI(adminClient: AdminClient?, environment: Environmen
     // todo putConsumerGroupOffsetForTopic(adminClient, environment)
 }
 
-private const val swGroup = "Consumer Groups (Group IDs)"
+private const val swGroup = "Consumer Groups"
 
 @Group(swGroup)
-@Location("$CONSUMERGROUPS/{consumerGroup}")
-data class GetConsumerGroup(val consumerGroup: String)
+@Location("$CONSUMERGROUPS/{groupId}")
+data class GetConsumerGroup(val groupId: String)
 
 data class GetConsumerGroupModel(
     val groupId: String = "",
@@ -60,7 +58,7 @@ fun Routing.getConsumerGroup(adminClient: AdminClient?, environment: Environment
             serviceUnavailable<AnError>()
         )
     ) { param ->
-        val consumerGroupName = param.consumerGroup
+        val consumerGroupName = param.groupId
 
         val (consumerGroupDescriptionRequestOk, consumerGroupDescription) = fetchConsumerGroupDescription(
             adminClient,
@@ -76,10 +74,10 @@ fun Routing.getConsumerGroup(adminClient: AdminClient?, environment: Environment
     }
 
 @Group(swGroup)
-@Location("$CONSUMERGROUPS/{consumerGroup}/offsets")
-data class GetConsumerGroupOffsets(val consumerGroup: String)
+@Location("$CONSUMERGROUPS/{groupId}/offsets")
+data class GetConsumerGroupOffsets(val groupId: String)
 
-data class GetConsumerGroupOffsetsModel(val name: String, val offsets: Map<TopicPartition, OffsetAndMetadata>)
+data class GetConsumerGroupOffsetsModel(val name: String, val offsets: List<TopicPartitionOffsetAndMetadata>)
 
 fun Routing.getConsumerGroupOffsets(adminClient: AdminClient?, environment: Environment) =
     get<GetConsumerGroupOffsets>(
@@ -88,7 +86,7 @@ fun Routing.getConsumerGroupOffsets(adminClient: AdminClient?, environment: Envi
             serviceUnavailable<AnError>()
         )
     ) { param ->
-        val consumerGroupName = param.consumerGroup
+        val consumerGroupName = param.groupId
 
         val (consumerGroupRequestOk, consumerGroups) = fetchConsumerGroupOffsets(
             adminClient,
@@ -126,17 +124,18 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupOffsets(
     adminClient: AdminClient?,
     environment: Environment,
     consumerGroupName: String
-): Pair<Boolean, Map<TopicPartition, OffsetAndMetadata>> {
+): Pair<Boolean, List<TopicPartitionOffsetAndMetadata>> {
     return try {
         Pair(
             true, adminClient
                 ?.listConsumerGroupOffsets(consumerGroupName)?.partitionsToOffsetAndMetadata()
                 ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                ?.toTopicPartitionOffsetAndMetadata()
                 ?: throw Exception(SERVICES_ERR_K)
         )
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION get consumer group offsets request $consumerGroupName - $e")
-        Pair(false, emptyMap())
+        Pair(false, emptyList())
     }
 }
 

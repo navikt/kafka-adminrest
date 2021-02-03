@@ -40,7 +40,6 @@ import no.nav.integrasjon.ldap.intoAcls
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.AlterConfigOp
 import org.apache.kafka.clients.admin.ConfigEntry
-import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsOptions
 import org.apache.kafka.clients.admin.ListOffsetsResult
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.admin.OffsetSpec
@@ -884,9 +883,28 @@ data class GetTopicConsumerGroups(val topicName: String)
 data class GetTopicConsumerGroupsModel(val topicName: String, val groups: List<ConsumerGroupWithOffsets>)
 
 data class ConsumerGroupWithOffsets(
-    val consumerGroup: String,
-    val offsets: Map<TopicPartition, OffsetAndMetadata>
+    val groupId: String,
+    val offsets: List<TopicPartitionOffsetAndMetadata>
 )
+
+data class TopicPartitionOffsetAndMetadata(
+    val partition: Int,
+    val topicName: String,
+    val offset: Long,
+    val metadata: String,
+    val leaderEpoch: Int?
+)
+
+fun Map<TopicPartition, OffsetAndMetadata>.toTopicPartitionOffsetAndMetadata() =
+    this.map { (key, value) ->
+        TopicPartitionOffsetAndMetadata(
+            partition = key.partition(),
+            topicName = key.topic(),
+            offset = value.offset(),
+            metadata = value.metadata(),
+            leaderEpoch = value.leaderEpoch().orElse(null)
+        )
+    }
 
 fun Routing.getTopicConsumerGroups(adminClient: AdminClient?, environment: Environment) =
     get<GetTopicConsumerGroups>(
@@ -913,7 +931,6 @@ fun Routing.getTopicConsumerGroups(adminClient: AdminClient?, environment: Envir
 
         val (consumerGroupsRequestOk, consumerGroups) = fetchConsumerGroupsWithOffsets(
             adminClient,
-            environment,
             topicName
         )
         if (!consumerGroupsRequestOk) {
@@ -961,26 +978,23 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchOffsetsForPartitions(
 
 private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupsWithOffsets(
     adminClient: AdminClient?,
-    environment: Environment,
     topicName: String
 ): Pair<Boolean, List<ConsumerGroupWithOffsets>> {
     return try {
         Pair(true, adminClient?.let { ac ->
-            val partitions = ac.getTopicPartitions(topicName, environment)
-                .map { TopicPartition(topicName, it.partition()) }
-
             ac.listConsumerGroups()
                 .all()
                 .get()
                 .map { listing -> listing.groupId() }
                 .associateWith { groupId ->
-                    ac.listConsumerGroupOffsets(groupId, ListConsumerGroupOffsetsOptions().topicPartitions(partitions))
+                    ac.listConsumerGroupOffsets(groupId)
                         .partitionsToOffsetAndMetadata()
                         .get()
                         .toMap()
+                        .filterKeys { it.topic() == topicName }
                 }
                 .filter { (_, value) -> value.isNotEmpty() }
-                .map { (key, value) -> ConsumerGroupWithOffsets(key, value) }
+                .map { (key, value) -> ConsumerGroupWithOffsets(key, value.toTopicPartitionOffsetAndMetadata()) }
         } ?: throw Exception(SERVICES_ERR_K)
         )
     } catch (e: Exception) {
