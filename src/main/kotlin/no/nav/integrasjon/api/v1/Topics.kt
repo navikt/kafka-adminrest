@@ -986,6 +986,19 @@ fun Routing.updateConsumerGroupOffsetsForTopic(adminClient: AdminClient?, enviro
             UserIsManager.IS_MANAGER -> {
             }
         }
+
+        val (topicsRequestOk, existingTopics) = fetchTopics(adminClient, environment, topicName)
+
+        if (!topicsRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@put
+        }
+
+        if (existingTopics.isNotEmpty() && !existingTopics.contains(topicName)) {
+            call.respond(HttpStatusCode.BadRequest, AnError("Cannot find topic $topicName"))
+            return@put
+        }
+
         val (alterConsumerGroupOffsetRequestOk, exception) = alterConsumerGroupOffsets(
             adminClient,
             environment,
