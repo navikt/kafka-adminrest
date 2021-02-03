@@ -26,7 +26,6 @@ import org.apache.kafka.common.ConsumerGroupState
 fun Routing.consumerGroupsAPI(adminClient: AdminClient?, environment: Environment) {
     getConsumerGroup(adminClient, environment)
     getConsumerGroupOffsets(adminClient, environment)
-    // todo putConsumerGroupOffsetForTopic(adminClient, environment)
 }
 
 private const val swGroup = "Consumer Groups"
@@ -81,24 +80,24 @@ data class GetConsumerGroupOffsetsModel(val name: String, val offsets: List<Topi
 
 fun Routing.getConsumerGroupOffsets(adminClient: AdminClient?, environment: Environment) =
     get<GetConsumerGroupOffsets>(
-        "offsets for a consumer group".responds(
+        "offsets for a consumer group (for all topics and partitions the group is subscribed to)".responds(
             ok<GetConsumerGroupOffsetsModel>(),
             serviceUnavailable<AnError>()
         )
     ) { param ->
         val consumerGroupName = param.groupId
 
-        val (consumerGroupRequestOk, consumerGroups) = fetchConsumerGroupOffsets(
+        val (consumerGroupOffsetRequestOk, consumerGroupOffsets) = fetchConsumerGroupOffsets(
             adminClient,
             environment,
             consumerGroupName
         )
-        if (!consumerGroupRequestOk) {
+        if (!consumerGroupOffsetRequestOk) {
             call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
             return@get
         }
 
-        call.respond(GetConsumerGroupOffsetsModel(consumerGroupName, consumerGroups))
+        call.respond(GetConsumerGroupOffsetsModel(consumerGroupName, consumerGroupOffsets))
     }
 
 private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupDescription(
@@ -120,7 +119,7 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupDescription
     }
 }
 
-private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupOffsets(
+fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupOffsets(
     adminClient: AdminClient?,
     environment: Environment,
     consumerGroupName: String

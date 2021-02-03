@@ -13,6 +13,8 @@ import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
 import io.ktor.util.pipeline.PipelineContext
+import java.time.LocalDateTime
+import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import java.util.regex.Pattern
 import no.nav.integrasjon.EXCEPTION
@@ -89,6 +91,8 @@ fun Routing.topicsAPI(adminClient: AdminClient?, environment: Environment) {
 
     getTopicOffsets(adminClient, environment)
     getTopicConsumerGroups(adminClient, environment)
+
+    updateConsumerGroupOffsetsForTopic(adminClient, environment)
 }
 
 private const val swGroup = "Topics"
@@ -895,7 +899,7 @@ data class TopicPartitionOffsetAndMetadata(
     val leaderEpoch: Int?
 )
 
-fun Map<TopicPartition, OffsetAndMetadata>.toTopicPartitionOffsetAndMetadata() =
+fun Map<TopicPartition, OffsetAndMetadata>.toTopicPartitionOffsetAndMetadata(): List<TopicPartitionOffsetAndMetadata> =
     this.map { (key, value) ->
         TopicPartitionOffsetAndMetadata(
             partition = key.partition(),
@@ -908,7 +912,7 @@ fun Map<TopicPartition, OffsetAndMetadata>.toTopicPartitionOffsetAndMetadata() =
 
 fun Routing.getTopicConsumerGroups(adminClient: AdminClient?, environment: Environment) =
     get<GetTopicConsumerGroups>(
-        "a topic's consumer groups with offsets".responds(
+        "a topic's consumer groups with offsets (slow operation, please be patient or lookup using group ID instead)".responds(
             ok<GetTopicConsumerGroupsModel>(),
             serviceUnavailable<AnError>()
         )
@@ -940,6 +944,145 @@ fun Routing.getTopicConsumerGroups(adminClient: AdminClient?, environment: Envir
 
         call.respond(GetTopicConsumerGroupsModel(topicName, consumerGroups))
     }
+
+@Group(swGroup)
+@Location("$TOPICS/{topicName}/consumergroups/{groupId}/offsets")
+data class PutTopicConsumerGroupOffsets(val topicName: String, val groupId: String)
+
+data class UpdateConsumerGroupOffsets(
+    val dateTime: LocalDateTime
+)
+
+fun Routing.updateConsumerGroupOffsetsForTopic(adminClient: AdminClient?, environment: Environment) =
+    put<PutTopicConsumerGroupOffsets, UpdateConsumerGroupOffsets>(
+        "Sets offset for all partitions belonging to topic for the given consumer group. Make sure that all the consumer instances are inactive. Only members in KM-{topicName} are authorized."
+            .securityAndReponds(
+                BasicAuthSecurity(),
+                ok<GetConsumerGroupOffsetsModel>(),
+                serviceUnavailable<AnError>(),
+                badRequest<AnError>(),
+                unAuthorized<AnError>()
+            )
+    ) { param, body ->
+
+        val currentUser = call.principal<UserIdPrincipal>()!!.name
+        val topicName = param.topicName
+        val consumerGroupName = param.groupId
+
+        val logEntry = " " +
+            "${this.context.authentication.principal} - topic: '$topicName', groupId: '$consumerGroupName', request: '$body'"
+        application.environment.log.info(logEntry)
+
+        when (userTopicManagerStatus(currentUser, topicName, environment)) {
+            UserIsManager.LDAP_NOT_AVAILABLE -> return@put
+            UserIsManager.IS_NOT_MANAGER -> return@put
+            UserIsManager.LDAP_NO_GROUPS_FOUND -> {
+                call.respond(
+                    HttpStatusCode.Unauthorized,
+                    AnError("No groups found for topic - delete the topic and recreate it")
+                )
+                return@put
+            }
+            UserIsManager.IS_MANAGER -> {
+            }
+        }
+        val (alterConsumerGroupOffsetRequestOk, exception) = alterConsumerGroupOffsets(
+            adminClient,
+            environment,
+            topicName,
+            consumerGroupName,
+            body
+        )
+        if (!alterConsumerGroupOffsetRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@put
+        }
+        if (exception != null) {
+            call.respond(HttpStatusCode.ServiceUnavailable, exception)
+            return@put
+        }
+
+        val (consumerGroupOffsetRequestOk, consumerGroupOffsets) = fetchConsumerGroupOffsets(
+            adminClient,
+            environment,
+            consumerGroupName
+        )
+        if (!consumerGroupOffsetRequestOk) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+            return@put
+        }
+
+        call.respond(
+            GetConsumerGroupOffsetsModel(
+                consumerGroupName,
+                consumerGroupOffsets.filter { it.topicName == topicName })
+        )
+    }
+
+private fun PipelineContext<Unit, ApplicationCall>.alterConsumerGroupOffsets(
+    adminClient: AdminClient?,
+    environment: Environment,
+    topicName: String,
+    groupId: String,
+    body: UpdateConsumerGroupOffsets
+): Pair<Boolean, Throwable?> {
+    return try {
+        adminClient?.let { ac ->
+            val topicPartitions: List<TopicPartition> = ac.getTopicPartitions(topicName, environment)
+                .map { TopicPartition(topicName, it.partition()) }
+
+            val offsetSpec: OffsetSpec = OffsetSpec.forTimestamp(
+                body.dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            )
+
+            val partitionsWithDesiredOffsets: Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> =
+                topicPartitions.associateWith { partition ->
+                    ac.listOffsets(mapOf(partition to offsetSpec))
+                        .all()
+                        .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)[partition]
+                        ?: throw Exception("partition ${partition.partition()} for ${partition.topic()} not found in listOffsets method invocation")
+                }
+
+            val offsets: Map<TopicPartition, OffsetAndMetadata> = partitionsWithDesiredOffsets
+                .mapValues { (_, value) -> OffsetAndMetadata(value.offset()) }
+
+            ac.alterConsumerGroupOffsets(groupId, offsets)
+                .all()
+                .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+        } ?: throw Exception(SERVICES_ERR_K)
+        Pair(true, null)
+    } catch (e: Exception) {
+        application.environment.log.error("$EXCEPTION topic get consumer groups request $topicName - $e")
+        Pair(false, e)
+    }
+}
+
+private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupsWithOffsets(
+    adminClient: AdminClient?,
+    topicName: String
+): Pair<Boolean, List<ConsumerGroupWithOffsets>> {
+    return try {
+        Pair(true, adminClient?.let { ac ->
+            ac.listConsumerGroups()
+                .all()
+                .get()
+                .map { listing -> listing.groupId() }
+                .associateWith { groupId ->
+                    ac.listConsumerGroupOffsets(groupId)
+                        .partitionsToOffsetAndMetadata()
+                        .get()
+                        .toMap()
+                        .filterKeys { it.topic() == topicName }
+                }
+                .filterValues { it.isNotEmpty() }
+                .map { (key, value) -> ConsumerGroupWithOffsets(key, value.toTopicPartitionOffsetAndMetadata()) }
+        } ?: throw Exception(SERVICES_ERR_K)
+        )
+    } catch (e: Exception) {
+        application.environment.log.error("$EXCEPTION topic get consumer groups request $topicName - $e")
+        Pair(false, emptyList())
+    }
+}
 
 private fun PipelineContext<Unit, ApplicationCall>.fetchOffsetsForPartitions(
     adminClient: AdminClient?,
@@ -973,33 +1116,6 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchOffsetsForPartitions(
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION topic get consumer groups request $topicName - $e")
         Pair(false, emptyMap())
-    }
-}
-
-private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupsWithOffsets(
-    adminClient: AdminClient?,
-    topicName: String
-): Pair<Boolean, List<ConsumerGroupWithOffsets>> {
-    return try {
-        Pair(true, adminClient?.let { ac ->
-            ac.listConsumerGroups()
-                .all()
-                .get()
-                .map { listing -> listing.groupId() }
-                .associateWith { groupId ->
-                    ac.listConsumerGroupOffsets(groupId)
-                        .partitionsToOffsetAndMetadata()
-                        .get()
-                        .toMap()
-                        .filterKeys { it.topic() == topicName }
-                }
-                .filter { (_, value) -> value.isNotEmpty() }
-                .map { (key, value) -> ConsumerGroupWithOffsets(key, value.toTopicPartitionOffsetAndMetadata()) }
-        } ?: throw Exception(SERVICES_ERR_K)
-        )
-    } catch (e: Exception) {
-        application.environment.log.error("$EXCEPTION topic get consumer groups request $topicName - $e")
-        Pair(false, emptyList())
     }
 }
 
