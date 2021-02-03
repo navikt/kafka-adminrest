@@ -984,16 +984,6 @@ object KafkaAdminRestSpec : Spek({
                         }
                     }
 
-                    context("Get consumer group members") {
-                        val consumerGroupName = "some-consumer-group"
-                        it("should return consumer group members for $consumerGroupName") {
-                            val call = handleRequest(HttpMethod.Get, "$CONSUMERGROUPS/$consumerGroupName/members") {
-                                addHeader(HttpHeaders.Accept, "application/json")
-                            }
-                            call.response.status() shouldBe HttpStatusCode.OK
-                        }
-                    }
-
                     context("Get consumer group offsets") {
                         val consumerGroupName = "some-consumer-group"
                         it("should return consumer group offsets for $consumerGroupName") {

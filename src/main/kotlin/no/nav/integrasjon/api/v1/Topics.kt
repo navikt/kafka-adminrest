@@ -40,7 +40,6 @@ import no.nav.integrasjon.ldap.intoAcls
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.AlterConfigOp
 import org.apache.kafka.clients.admin.ConfigEntry
-import org.apache.kafka.clients.admin.ConsumerGroupDescription
 import org.apache.kafka.clients.admin.ListOffsetsResult
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.admin.OffsetSpec
@@ -881,10 +880,10 @@ fun Routing.getTopicOffsets(adminClient: AdminClient?, environment: Environment)
 @Location("$TOPICS/{topicName}/consumergroups")
 data class GetTopicConsumerGroups(val topicName: String)
 
-data class GetTopicConsumerGroupsModel(val name: String, val groups: Map<String, ConsumerGroupsWithOffsets>)
+data class GetTopicConsumerGroupsModel(val topicName: String, val groups: List<ConsumerGroupWithOffsets>)
 
-data class ConsumerGroupsWithOffsets(
-    val description: DescriptionWithDefaults,
+data class ConsumerGroupWithOffsets(
+    val consumerGroup: String,
     val offsets: Map<TopicPartition, OffsetAndMetadata>
 )
 
@@ -963,32 +962,27 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupsWithOffset
     adminClient: AdminClient?,
     environment: Environment,
     topicName: String
-): Pair<Boolean, Map<String, ConsumerGroupsWithOffsets>> {
+): Pair<Boolean, List<ConsumerGroupWithOffsets>> {
     return try {
         Pair(true, adminClient?.let { ac ->
-            val groupIds: List<String> = ac.listConsumerGroups()
+            ac.listConsumerGroups()
                 .all()
                 .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
                 .map { listing -> listing.groupId() }
-
-            val consumerGroups: Map<String, ConsumerGroupDescription> = ac.describeConsumerGroups(groupIds)
-                .all()
-                .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
-
-            consumerGroups.mapValues { (groupId, description) ->
-                ConsumerGroupsWithOffsets(
-                    description.toSafeDeserializable(), ac.listConsumerGroupOffsets(groupId)
+                .associateWith { groupId ->
+                    ac.listConsumerGroupOffsets(groupId)
                         .partitionsToOffsetAndMetadata()
                         .get()
                         .toMap()
                         .filterKeys { it.topic() == topicName }
-                )
-            }
+                }
+                .filter { (_, value) -> value.isNotEmpty() }
+                .map { (key, value) -> ConsumerGroupWithOffsets(key, value) }
         } ?: throw Exception(SERVICES_ERR_K)
         )
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION topic get consumer groups request $topicName - $e")
-        Pair(false, emptyMap())
+        Pair(false, emptyList())
     }
 }
 
