@@ -27,7 +27,6 @@ import org.apache.kafka.common.TopicPartition
 
 fun Routing.consumerGroupsAPI(adminClient: AdminClient?, environment: Environment) {
     getConsumerGroup(adminClient, environment)
-    getConsumerGroupMembers(adminClient, environment)
     getConsumerGroupOffsets(adminClient, environment)
     // todo putConsumerGroupOffsetForTopic(adminClient, environment)
 }
@@ -43,13 +42,22 @@ data class GetConsumerGroupModel(val name: String, val group: DescriptionWithDef
 data class DescriptionWithDefaults(
     val groupId: String = "",
     val isSimpleConsumerGroup: Boolean = true,
+    val members: List<ConsumerGroupMemberDescription> = emptyList(),
     val partitionAssignor: String = "",
     val state: ConsumerGroupState = ConsumerGroupState.UNKNOWN
-)
+) {
+    data class ConsumerGroupMemberDescription(
+        val memberId: String?,
+        val groupInstanceId: String?,
+        val clientId: String?,
+        val host: String?,
+        val assignment: MemberAssignment?
+    )
+}
 
 fun Routing.getConsumerGroup(adminClient: AdminClient?, environment: Environment) =
     get<GetConsumerGroup>(
-        "description for a consumer group".responds(
+        "description and list of members for a consumer group".responds(
             ok<GetConsumerGroupModel>(),
             serviceUnavailable<AnError>()
         )
@@ -67,42 +75,6 @@ fun Routing.getConsumerGroup(adminClient: AdminClient?, environment: Environment
         }
 
         call.respond(GetConsumerGroupModel(consumerGroupName, consumerGroupDescription))
-    }
-
-@Group(swGroup)
-@Location("$CONSUMERGROUPS/{consumerGroup}/members")
-data class GetConsumerGroupMembers(val consumerGroup: String)
-
-data class GetConsumerGroupMembersModel(val name: String, val members: List<ConsumerGroupMemberDescription>)
-
-data class ConsumerGroupMemberDescription(
-    val memberId: String?,
-    val groupInstanceId: String?,
-    val clientId: String?,
-    val host: String?,
-    val assignment: MemberAssignment?
-)
-
-fun Routing.getConsumerGroupMembers(adminClient: AdminClient?, environment: Environment) =
-    get<GetConsumerGroupMembers>(
-        "members of a consumer group".responds(
-            ok<GetConsumerGroupMembersModel>(),
-            serviceUnavailable<AnError>()
-        )
-    ) { param ->
-        val consumerGroupName = param.consumerGroup
-
-        val (consumerGroupMembersRequestOk, consumerGroupMembers) = fetchConsumerGroupMembers(
-            adminClient,
-            environment,
-            consumerGroupName
-        )
-        if (!consumerGroupMembersRequestOk) {
-            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
-            return@get
-        }
-
-        call.respond(GetConsumerGroupMembersModel(consumerGroupName, consumerGroupMembers))
     }
 
 @Group(swGroup)
@@ -152,27 +124,6 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupDescription
     }
 }
 
-private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupMembers(
-    adminClient: AdminClient?,
-    environment: Environment,
-    consumerGroupName: String
-): Pair<Boolean, List<ConsumerGroupMemberDescription>> {
-    return try {
-        Pair(true, adminClient?.let { ac ->
-            ac.describeConsumerGroups(listOf(consumerGroupName))
-                .all()
-                .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)[consumerGroupName]
-                ?.members()
-                ?.toList()?.map { it.toSafeDeserializable() }
-                ?: emptyList()
-        } ?: throw Exception(SERVICES_ERR_K)
-        )
-    } catch (e: Exception) {
-        application.environment.log.error("$EXCEPTION get consumer group description request $consumerGroupName - $e")
-        Pair(false, emptyList())
-    }
-}
-
 private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupOffsets(
     adminClient: AdminClient?,
     environment: Environment,
@@ -195,12 +146,13 @@ fun ConsumerGroupDescription?.toSafeDeserializable(): DescriptionWithDefaults =
     DescriptionWithDefaults(
         groupId = this?.groupId() ?: "",
         isSimpleConsumerGroup = this?.isSimpleConsumerGroup ?: true,
+        members = this?.members()?.toList()?.map { it.toSafeDeserializable() } ?: emptyList(),
         partitionAssignor = this?.partitionAssignor() ?: "",
         state = this?.state() ?: ConsumerGroupState.UNKNOWN
     )
 
-private fun MemberDescription.toSafeDeserializable(): ConsumerGroupMemberDescription =
-    ConsumerGroupMemberDescription(
+private fun MemberDescription.toSafeDeserializable(): DescriptionWithDefaults.ConsumerGroupMemberDescription =
+    DescriptionWithDefaults.ConsumerGroupMemberDescription(
         memberId = this.consumerId(),
         groupInstanceId = this.groupInstanceId().orElse(null),
         clientId = this.clientId(),
