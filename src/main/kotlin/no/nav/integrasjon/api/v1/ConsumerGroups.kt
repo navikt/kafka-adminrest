@@ -37,23 +37,21 @@ private const val swGroup = "Consumer Groups (Group IDs)"
 @Location("$CONSUMERGROUPS/{consumerGroup}")
 data class GetConsumerGroup(val consumerGroup: String)
 
-data class GetConsumerGroupModel(val name: String, val group: DescriptionWithDefaults)
-
-data class DescriptionWithDefaults(
+data class GetConsumerGroupModel(
     val groupId: String = "",
     val isSimpleConsumerGroup: Boolean = true,
     val members: List<ConsumerGroupMemberDescription> = emptyList(),
     val partitionAssignor: String = "",
     val state: ConsumerGroupState = ConsumerGroupState.UNKNOWN
-) {
-    data class ConsumerGroupMemberDescription(
-        val memberId: String?,
-        val groupInstanceId: String?,
-        val clientId: String?,
-        val host: String?,
-        val assignment: MemberAssignment?
-    )
-}
+)
+
+data class ConsumerGroupMemberDescription(
+    val memberId: String?,
+    val groupInstanceId: String?,
+    val clientId: String?,
+    val host: String?,
+    val assignment: MemberAssignment?
+)
 
 fun Routing.getConsumerGroup(adminClient: AdminClient?, environment: Environment) =
     get<GetConsumerGroup>(
@@ -74,7 +72,7 @@ fun Routing.getConsumerGroup(adminClient: AdminClient?, environment: Environment
             return@get
         }
 
-        call.respond(GetConsumerGroupModel(consumerGroupName, consumerGroupDescription))
+        call.respond(consumerGroupDescription)
     }
 
 @Group(swGroup)
@@ -109,7 +107,7 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupDescription
     adminClient: AdminClient?,
     environment: Environment,
     consumerGroupName: String
-): Pair<Boolean, DescriptionWithDefaults> {
+): Pair<Boolean, GetConsumerGroupModel> {
     return try {
         Pair(true, adminClient?.let { ac ->
             ac.describeConsumerGroups(listOf(consumerGroupName))
@@ -120,7 +118,7 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupDescription
         )
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION get consumer group description request $consumerGroupName - $e")
-        Pair(false, DescriptionWithDefaults())
+        Pair(false, GetConsumerGroupModel())
     }
 }
 
@@ -142,8 +140,8 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupOffsets(
     }
 }
 
-fun ConsumerGroupDescription?.toSafeDeserializable(): DescriptionWithDefaults =
-    DescriptionWithDefaults(
+fun ConsumerGroupDescription?.toSafeDeserializable(): GetConsumerGroupModel =
+    GetConsumerGroupModel(
         groupId = this?.groupId() ?: "",
         isSimpleConsumerGroup = this?.isSimpleConsumerGroup ?: true,
         members = this?.members()?.toList()?.map { it.toSafeDeserializable() } ?: emptyList(),
@@ -151,8 +149,8 @@ fun ConsumerGroupDescription?.toSafeDeserializable(): DescriptionWithDefaults =
         state = this?.state() ?: ConsumerGroupState.UNKNOWN
     )
 
-private fun MemberDescription.toSafeDeserializable(): DescriptionWithDefaults.ConsumerGroupMemberDescription =
-    DescriptionWithDefaults.ConsumerGroupMemberDescription(
+private fun MemberDescription.toSafeDeserializable(): ConsumerGroupMemberDescription =
+    ConsumerGroupMemberDescription(
         memberId = this.consumerId(),
         groupInstanceId = this.groupInstanceId().orElse(null),
         clientId = this.clientId(),

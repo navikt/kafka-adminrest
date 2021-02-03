@@ -40,6 +40,7 @@ import no.nav.integrasjon.ldap.intoAcls
 import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.admin.AlterConfigOp
 import org.apache.kafka.clients.admin.ConfigEntry
+import org.apache.kafka.clients.admin.ListConsumerGroupOffsetsOptions
 import org.apache.kafka.clients.admin.ListOffsetsResult
 import org.apache.kafka.clients.admin.NewTopic
 import org.apache.kafka.clients.admin.OffsetSpec
@@ -965,16 +966,18 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupsWithOffset
 ): Pair<Boolean, List<ConsumerGroupWithOffsets>> {
     return try {
         Pair(true, adminClient?.let { ac ->
+            val partitions = ac.getTopicPartitions(topicName, environment)
+                .map { TopicPartition(topicName, it.partition()) }
+
             ac.listConsumerGroups()
                 .all()
-                .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                .get()
                 .map { listing -> listing.groupId() }
                 .associateWith { groupId ->
-                    ac.listConsumerGroupOffsets(groupId)
+                    ac.listConsumerGroupOffsets(groupId, ListConsumerGroupOffsetsOptions().topicPartitions(partitions))
                         .partitionsToOffsetAndMetadata()
                         .get()
                         .toMap()
-                        .filterKeys { it.topic() == topicName }
                 }
                 .filter { (_, value) -> value.isNotEmpty() }
                 .map { (key, value) -> ConsumerGroupWithOffsets(key, value) }
