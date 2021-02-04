@@ -950,15 +950,27 @@ fun Routing.getTopicConsumerGroups(adminClient: AdminClient?, environment: Envir
 data class PutTopicConsumerGroupOffsets(val topicName: String, val groupId: String)
 
 data class UpdateConsumerGroupOffsets(
-    val dateTime: LocalDateTime
+    val dateTime: LocalDateTime,
+    val dryrun: Boolean = false
 )
+
+data class UpdateConsumerGroupOffsetsResponse(
+    val input: UpdateConsumerGroupOffsets,
+    val groupId: String,
+    val result: Result
+) {
+    data class Result(
+        val offsets: List<TopicPartitionOffsetAndMetadata>,
+        val error: String? = null
+    )
+}
 
 fun Routing.updateConsumerGroupOffsetsForTopic(adminClient: AdminClient?, environment: Environment) =
     put<PutTopicConsumerGroupOffsets, UpdateConsumerGroupOffsets>(
         "Sets offset for all partitions belonging to topic for the given consumer group. Make sure that all the consumer instances are inactive. Only members in KM-{topicName} are authorized."
             .securityAndReponds(
                 BasicAuthSecurity(),
-                ok<GetConsumerGroupOffsetsModel>(),
+                ok<UpdateConsumerGroupOffsetsResponse>(),
                 serviceUnavailable<AnError>(),
                 badRequest<AnError>(),
                 unAuthorized<AnError>()
@@ -999,36 +1011,25 @@ fun Routing.updateConsumerGroupOffsetsForTopic(adminClient: AdminClient?, enviro
             return@put
         }
 
-        val (alterConsumerGroupOffsetRequestOk, exception) = alterConsumerGroupOffsets(
+        val alterConsumerGroupOffsetResult = alterConsumerGroupOffsets(
             adminClient,
             environment,
             topicName,
             consumerGroupName,
             body
         )
-        if (!alterConsumerGroupOffsetRequestOk) {
-            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
-            return@put
-        }
-        if (exception != null) {
-            call.respond(HttpStatusCode.ServiceUnavailable, exception)
-            return@put
-        }
 
-        val (consumerGroupOffsetRequestOk, consumerGroupOffsets) = fetchConsumerGroupOffsets(
-            adminClient,
-            environment,
-            consumerGroupName
-        )
-        if (!consumerGroupOffsetRequestOk) {
-            call.respond(HttpStatusCode.ServiceUnavailable, AnError(SERVICES_ERR_K))
+        if (alterConsumerGroupOffsetResult.error != null) {
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(alterConsumerGroupOffsetResult.error.toString()))
             return@put
         }
 
         call.respond(
-            GetConsumerGroupOffsetsModel(
-                consumerGroupName,
-                consumerGroupOffsets.filter { it.topicName == topicName })
+            UpdateConsumerGroupOffsetsResponse(
+                input = body,
+                groupId = consumerGroupName,
+                result = alterConsumerGroupOffsetResult
+            )
         )
     }
 
@@ -1038,8 +1039,8 @@ private fun PipelineContext<Unit, ApplicationCall>.alterConsumerGroupOffsets(
     topicName: String,
     groupId: String,
     body: UpdateConsumerGroupOffsets
-): Pair<Boolean, Throwable?> {
-    return try {
+): UpdateConsumerGroupOffsetsResponse.Result {
+    try {
         adminClient?.let { ac ->
             val topicPartitions: List<TopicPartition> = ac.getTopicPartitions(topicName, environment)
                 .map { TopicPartition(topicName, it.partition()) }
@@ -1062,11 +1063,31 @@ private fun PipelineContext<Unit, ApplicationCall>.alterConsumerGroupOffsets(
             ac.alterConsumerGroupOffsets(groupId, offsets)
                 .all()
                 .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+
+            if (body.dryrun) {
+                application.environment.log.debug("dry run enabled, returning computed results for altering consumer group offsets")
+                return UpdateConsumerGroupOffsetsResponse.Result(
+                    offsets = offsets.toTopicPartitionOffsetAndMetadata()
+                        .filter { it.topicName == topicName }
+                )
+            }
+
+            val persistedOffsets = adminClient
+                .listConsumerGroupOffsets(groupId)
+                .partitionsToOffsetAndMetadata()
+                .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                .toTopicPartitionOffsetAndMetadata()
+                .filter { it.topicName == topicName }
+
+            return UpdateConsumerGroupOffsetsResponse.Result(
+                offsets = persistedOffsets
+            )
         } ?: throw Exception(SERVICES_ERR_K)
-        Pair(true, null)
     } catch (e: Exception) {
-        application.environment.log.error("$EXCEPTION topic get consumer groups request $topicName - $e")
-        Pair(false, e)
+        application.environment.log.error("$EXCEPTION altering offsets for consumer group '$groupId' for topic '$topicName' - $e")
+        return UpdateConsumerGroupOffsetsResponse.Result(
+            offsets = listOf(), error = e.toString()
+        )
     }
 }
 
