@@ -1,5 +1,6 @@
 package no.nav.integrasjon.api.v1
 
+import com.google.gson.annotations.SerializedName
 import com.unboundid.ldap.sdk.ResultCode
 import io.confluent.kafka.schemaregistry.rest.SchemaRegistryConfig
 import io.ktor.application.ApplicationCall
@@ -949,9 +950,16 @@ fun Routing.getTopicConsumerGroups(adminClient: AdminClient?, environment: Envir
 @Location("$TOPICS/{topicName}/consumergroups/{groupId}/offsets")
 data class PutTopicConsumerGroupOffsets(val topicName: String, val groupId: String)
 
+enum class DryrunOperation {
+    @SerializedName("true")
+    `true`,
+    @SerializedName("false")
+    `false`
+}
+
 data class UpdateConsumerGroupOffsets(
     val dateTime: LocalDateTime,
-    val dryrun: Boolean = false
+    val dryrun: DryrunOperation = DryrunOperation.`false`
 )
 
 data class UpdateConsumerGroupOffsetsResponse(
@@ -1064,7 +1072,7 @@ private fun PipelineContext<Unit, ApplicationCall>.alterConsumerGroupOffsets(
                 .all()
                 .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
 
-            if (body.dryrun) {
+            if (body.dryrun == DryrunOperation.`true`) {
                 application.environment.log.debug("dry run enabled, returning computed results for altering consumer group offsets")
                 return UpdateConsumerGroupOffsetsResponse.Result(
                     offsets = offsets.toTopicPartitionOffsetAndMetadata()
