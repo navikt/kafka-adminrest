@@ -1067,12 +1067,18 @@ private fun PipelineContext<Unit, ApplicationCall>.alterConsumerGroupOffsets(
                     .filterValues { it.offset() > -1 }
                     .mapValues { (_, value) -> OffsetAndMetadata(value.offset()) }
 
-            if (body.dryrun == SwaggerBoolean.`true`) {
+            val desiredResult = UpdateConsumerGroupOffsetsResponse.Result(
+                offsets = partitionsWithDesiredOffsets.toTopicPartitionOffsetAndMetadata()
+            )
+
+            val isDryRun = body.dryrun == SwaggerBoolean.`true`
+
+            if (isDryRun) {
                 application.environment.log.info("dry run enabled, returning computed results for altering consumer group offsets")
-                return UpdateConsumerGroupOffsetsResponse.Result(
-                    offsets = partitionsWithDesiredOffsets.toTopicPartitionOffsetAndMetadata()
-                        .filter { it.topicName == topicName }
-                )
+            }
+
+            if (partitionsWithDesiredOffsets.isEmpty() || isDryRun) {
+                return desiredResult
             }
 
             ac.alterConsumerGroupOffsets(groupId, partitionsWithDesiredOffsets)
