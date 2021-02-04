@@ -1063,14 +1063,10 @@ private fun PipelineContext<Unit, ApplicationCall>.alterConsumerGroupOffsets(
                         .all()
                         .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)[partition]
                         ?: throw Exception("partition ${partition.partition()} for ${partition.topic()} not found in listOffsets method invocation")
-                }
-
-            application.environment.log.info(partitionsWithDesiredOffsets.toString())
+                }.filterValues { it.offset() > -1 }
 
             val offsets: Map<TopicPartition, OffsetAndMetadata> = partitionsWithDesiredOffsets
                 .mapValues { (_, value) -> OffsetAndMetadata(value.offset()) }
-
-            application.environment.log.info(offsets.toString())
 
             if (body.dryrun == DryrunOperation.`true`) {
                 application.environment.log.info("dry run enabled, returning computed results for altering consumer group offsets")
