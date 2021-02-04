@@ -1068,10 +1068,6 @@ private fun PipelineContext<Unit, ApplicationCall>.alterConsumerGroupOffsets(
             val offsets: Map<TopicPartition, OffsetAndMetadata> = partitionsWithDesiredOffsets
                 .mapValues { (_, value) -> OffsetAndMetadata(value.offset()) }
 
-            ac.alterConsumerGroupOffsets(groupId, offsets)
-                .all()
-                .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
-
             if (body.dryrun == DryrunOperation.`true`) {
                 application.environment.log.debug("dry run enabled, returning computed results for altering consumer group offsets")
                 return UpdateConsumerGroupOffsetsResponse.Result(
@@ -1079,6 +1075,10 @@ private fun PipelineContext<Unit, ApplicationCall>.alterConsumerGroupOffsets(
                         .filter { it.topicName == topicName }
                 )
             }
+
+            ac.alterConsumerGroupOffsets(groupId, offsets)
+                .all()
+                .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
 
             val persistedOffsets = adminClient
                 .listConsumerGroupOffsets(groupId)
