@@ -950,16 +950,17 @@ fun Routing.getTopicConsumerGroups(adminClient: AdminClient?, environment: Envir
 @Location("$TOPICS/{topicName}/consumergroups/{groupId}/offsets")
 data class PutTopicConsumerGroupOffsets(val topicName: String, val groupId: String)
 
-enum class DryrunOperation {
+enum class SwaggerBoolean {
     @SerializedName("true")
     `true`,
+
     @SerializedName("false")
     `false`
 }
 
 data class UpdateConsumerGroupOffsets(
     val dateTime: LocalDateTime,
-    val dryrun: DryrunOperation = DryrunOperation.`false`
+    val dryrun: SwaggerBoolean = SwaggerBoolean.`false`
 )
 
 data class UpdateConsumerGroupOffsetsResponse(
@@ -1050,33 +1051,31 @@ private fun PipelineContext<Unit, ApplicationCall>.alterConsumerGroupOffsets(
 ): UpdateConsumerGroupOffsetsResponse.Result {
     try {
         adminClient?.let { ac ->
-            val topicPartitions: List<TopicPartition> = ac.getTopicPartitions(topicName, environment)
-                .map { TopicPartition(topicName, it.partition()) }
-
             val offsetSpec: OffsetSpec = OffsetSpec.forTimestamp(
                 body.dateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
             )
 
-            val partitionsWithDesiredOffsets: Map<TopicPartition, ListOffsetsResult.ListOffsetsResultInfo> =
-                topicPartitions.associateWith { partition ->
-                    ac.listOffsets(mapOf(partition to offsetSpec))
-                        .all()
-                        .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)[partition]
-                        ?: throw Exception("partition ${partition.partition()} for ${partition.topic()} not found in listOffsets method invocation")
-                }.filterValues { it.offset() > -1 }
+            val partitionsWithDesiredOffsets: Map<TopicPartition, OffsetAndMetadata> =
+                ac.getTopicPartitions(topicName, environment)
+                    .map { TopicPartition(topicName, it.partition()) }
+                    .associateWith { partition ->
+                        ac.listOffsets(mapOf(partition to offsetSpec))
+                            .all()
+                            .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)[partition]
+                            ?: throw Exception("partition ${partition.partition()} for ${partition.topic()} not found in listOffsets method invocation")
+                    }
+                    .filterValues { it.offset() > -1 }
+                    .mapValues { (_, value) -> OffsetAndMetadata(value.offset()) }
 
-            val offsets: Map<TopicPartition, OffsetAndMetadata> = partitionsWithDesiredOffsets
-                .mapValues { (_, value) -> OffsetAndMetadata(value.offset()) }
-
-            if (body.dryrun == DryrunOperation.`true`) {
+            if (body.dryrun == SwaggerBoolean.`true`) {
                 application.environment.log.info("dry run enabled, returning computed results for altering consumer group offsets")
                 return UpdateConsumerGroupOffsetsResponse.Result(
-                    offsets = offsets.toTopicPartitionOffsetAndMetadata()
+                    offsets = partitionsWithDesiredOffsets.toTopicPartitionOffsetAndMetadata()
                         .filter { it.topicName == topicName }
                 )
             }
 
-            ac.alterConsumerGroupOffsets(groupId, offsets)
+            ac.alterConsumerGroupOffsets(groupId, partitionsWithDesiredOffsets)
                 .all()
                 .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
 
