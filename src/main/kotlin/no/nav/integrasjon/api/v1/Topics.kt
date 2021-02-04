@@ -1065,11 +1065,15 @@ private fun PipelineContext<Unit, ApplicationCall>.alterConsumerGroupOffsets(
                         ?: throw Exception("partition ${partition.partition()} for ${partition.topic()} not found in listOffsets method invocation")
                 }
 
+            application.environment.log.info(partitionsWithDesiredOffsets.toString())
+
             val offsets: Map<TopicPartition, OffsetAndMetadata> = partitionsWithDesiredOffsets
                 .mapValues { (_, value) -> OffsetAndMetadata(value.offset()) }
 
+            application.environment.log.info(offsets.toString())
+
             if (body.dryrun == DryrunOperation.`true`) {
-                application.environment.log.debug("dry run enabled, returning computed results for altering consumer group offsets")
+                application.environment.log.info("dry run enabled, returning computed results for altering consumer group offsets")
                 return UpdateConsumerGroupOffsetsResponse.Result(
                     offsets = offsets.toTopicPartitionOffsetAndMetadata()
                         .filter { it.topicName == topicName }
