@@ -1,5 +1,8 @@
 package no.nav.integrasjon
 
+import com.google.gson.JsonDeserializationContext
+import com.google.gson.JsonDeserializer
+import com.google.gson.JsonElement
 import com.google.gson.JsonSyntaxException
 import io.ktor.application.Application
 import io.ktor.application.call
@@ -28,6 +31,9 @@ import io.ktor.routing.Routing
 import io.ktor.routing.get
 import io.ktor.util.error
 import io.prometheus.client.CollectorRegistry
+import java.lang.reflect.Type
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Properties
 import java.util.UUID
 import mu.KotlinLogging
@@ -153,6 +159,18 @@ fun Application.kafkaAdminREST(environment: Environment) {
     install(ContentNegotiation) {
         gson {
             serializeNulls()
+            registerTypeAdapter(LocalDateTime::class.java, object : JsonDeserializer<LocalDateTime> {
+                override fun deserialize(
+                    json: JsonElement?,
+                    typeOfT: Type?,
+                    context: JsonDeserializationContext?
+                ): LocalDateTime {
+                    return LocalDateTime.parse(
+                        json!!.asString,
+                        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX")
+                    )
+                }
+            })
         }
     }
     install(Locations)
