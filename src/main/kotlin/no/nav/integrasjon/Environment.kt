@@ -27,7 +27,8 @@ data class Environment(
     val ldapCommon: LdapCommon = LdapCommon(),
     val ldapAuthenticate: LdapAuthenticate = LdapAuthenticate(),
     val ldapGroup: LdapGroup = LdapGroup(),
-    val ldapUser: LdapUser = LdapUser()
+    val ldapUser: LdapUser = LdapUser(),
+    val flags: Flags = Flags()
 ) {
     data class Kafka(
         val kafkaBrokers: String = config[Key("kafka.brokers", stringType)],
@@ -93,6 +94,10 @@ data class Environment(
     data class LdapUser(
         val ldapUser: String = config[Key("ldap.user", stringType)],
         val ldapPassword: String = config[Key("ldap.password", stringType)]
+    )
+
+    data class Flags(
+        val topicCreationEnabled: Boolean = System.getenv("TOPIC_CREATION_ENABLED") == "true"
     )
 
     // Return diverse distinguished name types

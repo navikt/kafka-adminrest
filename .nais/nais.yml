@@ -37,3 +37,6 @@ spec:
       memory: 128Mi
   vault:
     enabled: true
+  env:
+    - name: TOPIC_CREATION_ENABLED
+      value: "true"

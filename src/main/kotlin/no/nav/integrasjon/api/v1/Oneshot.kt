@@ -151,6 +151,21 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
                 return@put
             }
 
+            if (!environment.flags.topicCreationEnabled) {
+                log.info("Topic creation is disabled, checking if request wants to create new topic$logFormat", *logKeys)
+                request.topics.map { it.topicName }
+                    .filterNot { existingTopics.contains(it) }
+                    .any {
+                        val err = OneshotResponse(
+                            status = OneshotStatus.ERROR,
+                            message = "topic creation has been disabled, can't create topic $it",
+                            requestId = uuid
+                        )
+                        call.respond(HttpStatusCode.Forbidden, err)
+                        return@put
+                    }
+            }
+
             log.info("Checking if user has access to all topics in request$logFormat", *logKeys)
             request.topics.map { it.topicName }
                 .filter { existingTopics.contains(it) }
