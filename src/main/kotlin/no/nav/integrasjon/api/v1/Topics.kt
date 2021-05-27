@@ -192,6 +192,16 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
         application.environment.log.info(logEntry)
 
         /**
+         * Rule 0 - topic creation must be enabled
+         */
+        if (!environment.flags.topicCreationEnabled) {
+            val msg = "topic creation has been disabled"
+            application.environment.log.warn(msg)
+            call.respond(HttpStatusCode.ServiceUnavailable, AnError(msg))
+            return@post
+        }
+
+        /**
          * Rule 1 - user must exist in current ldap environment in order to be part of group KM-<topic>
          */
 
