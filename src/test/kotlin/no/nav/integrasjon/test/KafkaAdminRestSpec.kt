@@ -99,18 +99,21 @@ object KafkaAdminRestSpec : Spek({
         kafka = Environment.Kafka(kafkaBrokers = kCluster.brokersURL, kafkaTimeout = 1000L),
         ldapCommon = Environment.LdapCommon(ldapConnTimeout = 1000),
         ldapAuthenticate = Environment.LdapAuthenticate(ldapAuthPort = InMemoryLDAPServer.LPORT),
-        ldapGroup = Environment.LdapGroup(ldapPort = InMemoryLDAPServer.LPORT)
+        ldapGroup = Environment.LdapGroup(ldapPort = InMemoryLDAPServer.LPORT),
+        flags = Environment.Flags(topicCreationEnabled = true)
     )
 
     fun injectValues(
         portLDAPGroup: Int = InMemoryLDAPServer.LPORT,
         portLDAPAuth: Int = InMemoryLDAPServer.LPORT,
-        kafkaURL: String = kCluster.brokersURL
+        kafkaURL: String = kCluster.brokersURL,
+        topicCreationEnabled: Boolean = true
     ) = Environment(
         kafka = Environment.Kafka(kafkaBrokers = kafkaURL, kafkaTimeout = 1000L),
         ldapAuthenticate = Environment.LdapAuthenticate(ldapAuthPort = portLDAPAuth),
         ldapGroup = Environment.LdapGroup(ldapPort = portLDAPGroup),
-        ldapCommon = Environment.LdapCommon(ldapConnTimeout = 1000)
+        ldapCommon = Environment.LdapCommon(ldapConnTimeout = 1000),
+        flags = Environment.Flags(topicCreationEnabled = topicCreationEnabled)
     )
 
     val gson = Gson()
@@ -1575,8 +1578,70 @@ object KafkaAdminRestSpec : Spek({
             afterGroup {
                 engine2.stop(1000, 2000)
                 InMemoryLDAPServer.stop()
-                kCluster.tearDown()
             }
+        }
+
+        context("test of topic creation flag with all backend services up") {
+            val engine = TestApplicationEngine(createTestEnvironment())
+
+            beforeGroup {
+                InMemoryLDAPServer.start()
+                engine.start(wait = false)
+                engine.application.kafkaAdminREST(injectValues(topicCreationEnabled = false))
+            }
+
+            with(engine) {
+                it("should report forbidden when creating topic using $TOPICS endpoint") {
+
+                    val call = handleRequest(HttpMethod.Post, TOPICS) {
+                        addHeader(HttpHeaders.Accept, "application/json")
+                        addHeader(HttpHeaders.ContentType, "application/json")
+                        addHeader(
+                            HttpHeaders.Authorization,
+                            "Basic ${encodeBase64("n000002:itest2".toByteArray())}"
+                        )
+                        setBody(gson.toJson(PostTopicBody("topic-to-create")))
+                    }
+
+                    call.response.status() shouldBe HttpStatusCode.Forbidden
+                }
+
+                it("should report forbidden when creating topic using $ONESHOT endpoint") {
+                    val oneshotCreationRequest = OneshotCreationRequest(
+                        topics = listOf(
+                            TopicCreation(
+                                topicName = "integrationTestCreationDisabled",
+                                members = listOf(
+                                    RoleMember("n000001", KafkaGroupType.MANAGER)
+                                ),
+                                configEntries = emptyMap(),
+                                numPartitions = 3
+                            )
+                        )
+                    )
+
+                    val call = handleRequest(HttpMethod.Put, ONESHOT) {
+                        addHeader(HttpHeaders.Accept, "application/json")
+                        addHeader(HttpHeaders.ContentType, "application/json")
+                        addHeader(
+                            HttpHeaders.Authorization,
+                            "Basic ${encodeBase64("n000001:itest1".toByteArray())}"
+                        )
+                        setBody(gson.toJson(oneshotCreationRequest))
+                    }
+
+                    call.response.status() shouldBe HttpStatusCode.Forbidden
+                }
+            }
+
+            afterGroup {
+                engine.stop(1000, 2000)
+                InMemoryLDAPServer.stop()
+            }
+        }
+
+        afterGroup {
+            kCluster.tearDown()
         }
     }
 })

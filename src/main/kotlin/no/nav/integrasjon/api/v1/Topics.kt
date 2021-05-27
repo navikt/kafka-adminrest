@@ -197,7 +197,7 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
         if (!environment.flags.topicCreationEnabled) {
             val msg = "topic creation has been disabled"
             application.environment.log.warn(msg)
-            call.respond(HttpStatusCode.ServiceUnavailable, AnError(msg))
+            call.respond(HttpStatusCode.Forbidden, AnError(msg))
             return@post
         }
 
