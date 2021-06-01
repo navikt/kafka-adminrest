@@ -48,3 +48,4 @@ See also swagger documentation at host:port/api/v1 or at https://kafka-adminrest
 Create an issue or pull request here.
 
 Internal resources may reach us on Slack in #kafka.
+
