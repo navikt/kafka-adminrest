@@ -1,4 +1,4 @@
-namespace: default
+name: kafka-adminrest
 ingresses:
   - https://kafka-adminrest.nais.preprod.local
   - https://kafka-adminrest.dev-fss.nais.io

@@ -1,8 +1,8 @@
 kind: Application
 apiVersion: nais.io/v1alpha1
 metadata:
-  name: kafka-adminrest
-  namespace: {{namespace}}
+  name: {{name}}
+  namespace: integrasjon
   labels:
     team: integrasjon
 spec:

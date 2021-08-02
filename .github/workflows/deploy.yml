@@ -59,7 +59,7 @@ jobs:
           docker push ${IMAGE}
 
   deploy-test:
-    name: Deploy to dev-fss (t4)
+    name: Deploy to dev-fss (test)
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
     needs: build
@@ -70,9 +70,9 @@ jobs:
           APIKEY: ${{ secrets.NAIS_DEPLOY_APIKEY }}
           CLUSTER: dev-fss
           RESOURCE: .nais/nais.yml
-          VARS: .nais/vars-dev-t4.yml
+          VARS: .nais/vars-dev-t.yml
   deploy-dev:
-    name: Deploy to dev-fss (default)
+    name: Deploy to dev-fss
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/master'
     needs: build
@@ -82,12 +82,12 @@ jobs:
         env:
           APIKEY: ${{ secrets.NAIS_DEPLOY_APIKEY }}
           CLUSTER: dev-fss
-          RESOURCE: .nais/nais.yml,.nais/alerts-dev.yml
-          VARS: .nais/vars-dev-default.yml
+          RESOURCE: .nais/nais.yml
+          VARS: .nais/vars-dev.yml
   deploy-prod:
     name: Deploy to prod-fss
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/master' && contains(github.event.head_commit.message, 'release')
+    if: github.ref == 'refs/heads/master'
     needs: [deploy-dev, deploy-test]
     steps:
       - uses: actions/checkout@v1
@@ -95,5 +95,5 @@ jobs:
         env:
           APIKEY: ${{ secrets.NAIS_DEPLOY_APIKEY }}
           CLUSTER: prod-fss
-          RESOURCE: .nais/nais.yml,.nais/alerts-prod.yml
+          RESOURCE: .nais/nais.yml
           VARS: .nais/vars-prod.yml
