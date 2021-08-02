@@ -39,7 +39,6 @@ plugins {
 
 repositories {
     maven(url = "http://packages.confluent.io/maven")
-    maven(url = "https://dl.bintray.com/kotlin/ktor")
     mavenCentral()
     jcenter()
     maven(url = "https://jitpack.io")
