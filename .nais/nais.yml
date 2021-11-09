@@ -39,4 +39,4 @@ spec:
     enabled: true
   env:
     - name: TOPIC_CREATION_ENABLED
-      value: "true"
+      value: "false"
