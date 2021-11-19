@@ -1,5 +1,6 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.gradle.api.tasks.testing.logging.TestLogEvent
+import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 
 group = "no.nav.integrasjon"
 
@@ -99,7 +100,6 @@ tasks {
         useJUnitPlatform {
             includeEngines("spek2")
         }
-        // testLogging.showStandardStreams = true
         testLogging {
             events(TestLogEvent.PASSED, TestLogEvent.SKIPPED, TestLogEvent.FAILED)
         }
@@ -110,8 +110,7 @@ tasks {
     }
     withType<KotlinCompile> {
         kotlinOptions.freeCompilerArgs = listOf(
-            "-Xuse-experimental=io.ktor.locations.KtorExperimentalLocationsAPI",
-            "-Xuse-experimental=io.ktor.util.KtorExperimentalAPI"
+            "-opt-in=io.ktor.locations.KtorExperimentalLocationsAPI",
         )
     }
 }

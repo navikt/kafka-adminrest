@@ -786,7 +786,6 @@ object KafkaAdminRestSpec : Spek({
                                     )
                                 }
 
-                                val result: DeleteTopicModel = gson.fromJson(call.response.content ?: "")
                                 call.response.status() shouldBe HttpStatusCode.Unauthorized
                             }
                         }
