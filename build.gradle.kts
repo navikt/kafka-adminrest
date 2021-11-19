@@ -1,6 +1,5 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.gradle.api.tasks.testing.logging.TestLogEvent
-import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 
 group = "no.nav.integrasjon"
 
@@ -39,7 +38,7 @@ plugins {
 repositories {
     mavenCentral()
     maven(url = "https://packages.confluent.io/maven")
-    maven(url = "https://repository-master.mulesoft.org/nexus/content/groups/public/")
+    maven(url = "https://jitpack.io") // for transitive dependency `org.everit.json.schema` in `io.confluent:kafka-schema-registry`
 }
 
 configurations.compileClasspath {
