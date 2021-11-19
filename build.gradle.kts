@@ -1,47 +1,44 @@
-import com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar
-import com.github.jengelman.gradle.plugins.shadow.transformers.ServiceFileTransformer
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 
 group = "no.nav.integrasjon"
 
-val kotlinVersion = "1.3.61"
+val kotlinVersion = "1.6.0"
 val kotlinLogginVersion = "1.7.8"
-val ktorVersion = "1.3.1"
+val ktorVersion = "1.6.5"
 
-val jacksonDatatypeVersion = "2.10.2"
+val jacksonDatatypeVersion = "2.13.0"
 
-val kafkaVersion = "2.5.0"
-val embeddedkafkaVersion = "2.5.0"
-val confluentVersion = "5.5.0"
+val kafkaVersion = "2.8.0"
+val embeddedkafkaVersion = "2.8.0"
+val confluentVersion = "6.2.0"
 
-val prometheusVersion = "0.8.1"
-val logstashEncoderVersion = "6.3"
+val prometheusVersion = "0.12.0"
+val logstashEncoderVersion = "7.0.1"
 val logbackVersion = "1.2.3"
 val log4jVersion = "1.7.25"
 
-val unboundidVersion = "4.0.14"
+val unboundidVersion = "6.0.2"
 
 // do not update - breaks compatibility (should look into fixing this)
 val swaggerVersion = "3.1.7"
 
-val spekVersion = "2.0.9"
-val kluentVersion = "1.60"
+val spekVersion = "2.0.17"
+val kluentVersion = "1.68"
 
 val konfigVersion = "1.6.10.0"
 
 plugins {
-    kotlin("jvm") version "1.3.61"
-    id("org.jmailen.kotlinter") version "2.3.0"
-    id("com.github.ben-manes.versions") version "0.27.0"
-    id("com.github.johnrengelman.shadow") version "5.2.0"
+    kotlin("jvm") version "1.6.0"
+    id("org.jmailen.kotlinter") version "3.7.0"
+    id("com.github.ben-manes.versions") version "0.39.0"
+    id("com.github.johnrengelman.shadow") version "7.1.0"
 }
 
 repositories {
-    maven(url = "http://packages.confluent.io/maven")
     mavenCentral()
-    jcenter()
-    maven(url = "https://jitpack.io")
+    maven(url = "https://packages.confluent.io/maven")
+    maven(url = "https://repository-master.mulesoft.org/nexus/content/groups/public/")
 }
 
 configurations.compileClasspath {
@@ -108,7 +105,7 @@ tasks {
         }
     }
     withType<Wrapper> {
-        gradleVersion = "6.1"
+        gradleVersion = "7.3"
         distributionType = Wrapper.DistributionType.BIN
     }
     withType<KotlinCompile> {
