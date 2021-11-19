@@ -8,8 +8,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
-import java.util.UUID
-import java.util.concurrent.TimeUnit
 import net.logstash.logback.argument.StructuredArguments.keyValue
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.Environment
@@ -34,6 +32,8 @@ import org.apache.kafka.common.config.ConfigResource
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
+import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 val log: Logger = LoggerFactory.getLogger("kafka-adminrest.oneshot.v1")
 
@@ -92,7 +92,7 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
             )
     ) { _, request ->
 
-        val currentUser = call.principal<UserIdPrincipal>()!!.name.toLowerCase()
+        val currentUser = call.principal<UserIdPrincipal>()!!.name.lowercase()
 
         val uuid = try {
             MDC.get("callId") ?: UUID.randomUUID().toString()
@@ -302,12 +302,14 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
             val incrementallyUpdatedConfigurationsForTopics: Map<ConfigResource, List<AlterConfigOp>> = request.topics
                 .filter { existingTopics.contains(it.topicName) }
                 .associate { topicCreation ->
-                    ConfigResource(ConfigResource.Type.TOPIC, topicCreation.topicName) to (topicCreation.configEntries
-                        ?: emptyMap())
+                    ConfigResource(ConfigResource.Type.TOPIC, topicCreation.topicName) to (
+                        topicCreation.configEntries
+                            ?: emptyMap()
+                        )
                 }
                 .mapValues { (_, configEntries) ->
                     configEntries.map { (key, value) ->
-                        AlterConfigOp(ConfigEntry(key, value.toLowerCase()), AlterConfigOp.OpType.SET)
+                        AlterConfigOp(ConfigEntry(key, value.lowercase()), AlterConfigOp.OpType.SET)
                     }
                 }
 
@@ -367,12 +369,14 @@ fun Routing.registerOneshotApi(adminClient: AdminClient?, environment: Environme
             // Create topics that are missing
             log.debug("Creating topics$logFormat", *logKeys)
             try {
-                adminClient?.createTopics(request.topics
-                    .filterNot { existingTopics.contains(it.topicName) }
-                    .map {
-                        NewTopic(it.topicName, it.numPartitions, getDefaultReplicationFactor(adminClient, environment))
-                            .configs(it.configEntries?.mapValues { it.value.toLowerCase() })
-                    })?.all()?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                adminClient?.createTopics(
+                    request.topics
+                        .filterNot { existingTopics.contains(it.topicName) }
+                        .map {
+                            NewTopic(it.topicName, it.numPartitions, getDefaultReplicationFactor(adminClient, environment))
+                                .configs(it.configEntries?.mapValues { it.value.lowercase() })
+                        }
+                )?.all()?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
             } catch (e: Exception) {
                 log.error("Exception caught while creating topic(s), request: {} $logFormat", logKeys, e)
                 call.respond(
@@ -453,7 +457,7 @@ private fun List<TopicCreation>.getCreationResult(
 
         val configEntries: Map<String, String> = adminClient
             .getConfigEntries(topicCreation.topicName, environment)
-            .map { entry -> Pair(entry.name(), entry.value().toLowerCase()) }
+            .map { entry -> Pair(entry.name(), entry.value().lowercase()) }
             .toMap()
             .flatMap { actualEntries ->
                 topicCreation.configEntries

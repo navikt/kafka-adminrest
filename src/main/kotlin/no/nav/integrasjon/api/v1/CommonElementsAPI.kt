@@ -6,7 +6,6 @@ import io.ktor.application.call
 import io.ktor.http.HttpStatusCode
 import io.ktor.response.respond
 import io.ktor.util.pipeline.PipelineContext
-import java.util.concurrent.TimeUnit
 import mu.KotlinLogging
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.Environment
@@ -14,6 +13,7 @@ import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
 import no.nav.integrasjon.ldap.LDAPAuthenticate
 import no.nav.integrasjon.ldap.LDAPGroup
 import org.apache.kafka.clients.admin.AdminClient
+import java.util.concurrent.TimeUnit
 
 private val logger = KotlinLogging.logger { }
 

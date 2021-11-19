@@ -31,11 +31,6 @@ import io.ktor.routing.Routing
 import io.ktor.routing.get
 import io.ktor.util.error
 import io.prometheus.client.CollectorRegistry
-import java.lang.reflect.Type
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Properties
-import java.util.UUID
 import mu.KotlinLogging
 import no.nav.integrasjon.api.nais.client.naisAPI
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Contact
@@ -57,6 +52,11 @@ import org.apache.kafka.clients.admin.AdminClient
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.kafka.common.config.SaslConfigs
 import org.slf4j.event.Level
+import java.lang.reflect.Type
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.util.Properties
+import java.util.UUID
 
 const val AUTHENTICATION_BASIC = "basicAuth"
 
@@ -94,17 +94,22 @@ fun Application.kafkaAdminREST(environment: Environment) {
 
             log.info { "Creating kafka admin client" }
 
-            AdminClient.create(Properties()
-                .apply {
-                    set(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, env.kafka.kafkaBrokers)
-                    set(ConsumerConfig.CLIENT_ID_CONFIG, env.kafka.kafkaClientID)
-                    if (env.kafka.securityEnabled()) {
-                        set(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, env.kafka.kafkaSecProt)
-                        set(SaslConfigs.SASL_MECHANISM, env.kafka.kafkaSaslMec)
-                        set(SaslConfigs.SASL_JAAS_CONFIG, "$JAAS_PLAIN_LOGIN $JAAS_REQUIRED " +
-                            "username=\"${env.kafka.kafkaUser}\" password=\"${env.kafka.kafkaPassword}\";")
+            AdminClient.create(
+                Properties()
+                    .apply {
+                        set(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, env.kafka.kafkaBrokers)
+                        set(ConsumerConfig.CLIENT_ID_CONFIG, env.kafka.kafkaClientID)
+                        if (env.kafka.securityEnabled()) {
+                            set(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, env.kafka.kafkaSecProt)
+                            set(SaslConfigs.SASL_MECHANISM, env.kafka.kafkaSaslMec)
+                            set(
+                                SaslConfigs.SASL_JAAS_CONFIG,
+                                "$JAAS_PLAIN_LOGIN $JAAS_REQUIRED " +
+                                    "username=\"${env.kafka.kafkaUser}\" password=\"${env.kafka.kafkaPassword}\";"
+                            )
+                        }
                     }
-                })
+            )
         }
     } catch (e: Exception) {
         log.error(e) { "Could not initialize AdminClient" }
@@ -159,18 +164,21 @@ fun Application.kafkaAdminREST(environment: Environment) {
     install(ContentNegotiation) {
         gson {
             serializeNulls()
-            registerTypeAdapter(LocalDateTime::class.java, object : JsonDeserializer<LocalDateTime> {
-                override fun deserialize(
-                    json: JsonElement?,
-                    typeOfT: Type?,
-                    context: JsonDeserializationContext?
-                ): LocalDateTime {
-                    return LocalDateTime.parse(
-                        json!!.asString,
-                        DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX")
-                    )
+            registerTypeAdapter(
+                LocalDateTime::class.java,
+                object : JsonDeserializer<LocalDateTime> {
+                    override fun deserialize(
+                        json: JsonElement?,
+                        typeOfT: Type?,
+                        context: JsonDeserializationContext?
+                    ): LocalDateTime {
+                        return LocalDateTime.parse(
+                            json!!.asString,
+                            DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSX")
+                        )
+                    }
                 }
-            })
+            )
         }
     }
     install(Locations)

@@ -150,25 +150,36 @@ class LDAPGroup(private val env: Environment) :
         )
 
     fun createGroup(groupName: String, initialMember: String? = null) {
-        ldapConnection.add(AddRequest(DN(env.groupDN(groupName)), newGroupAttr.toMutableList().apply {
-            add(Attribute("cn", groupName))
-            add(Attribute("sAMAccountName", groupName))
-            if (initialMember != null) {
-                add(Attribute(env.ldapGroup.ldapGrpMemberAttrName, resolveUserDN(initialMember)))
-            }
-        }))
+        ldapConnection.add(
+            AddRequest(
+                DN(env.groupDN(groupName)),
+                newGroupAttr.toMutableList().apply {
+                    add(Attribute("cn", groupName))
+                    add(Attribute("sAMAccountName", groupName))
+                    if (initialMember != null) {
+                        add(Attribute(env.ldapGroup.ldapGrpMemberAttrName, resolveUserDN(initialMember)))
+                    }
+                }
+            )
+        )
     }
 
     fun removeGroupMembers(groupName: String, membersToRemove: List<String>) {
-        ldapConnection.modify(env.groupDN(groupName), membersToRemove.map {
-            Modification(ModificationType.DELETE, env.ldapGroup.ldapGrpMemberAttrName, resolveUserDN(it))
-        })
+        ldapConnection.modify(
+            env.groupDN(groupName),
+            membersToRemove.map {
+                Modification(ModificationType.DELETE, env.ldapGroup.ldapGrpMemberAttrName, resolveUserDN(it))
+            }
+        )
     }
 
     fun addToGroup(groupName: String, groupMembers: List<String>) {
-        ldapConnection.modify(env.groupDN(groupName), groupMembers.map {
-            Modification(ModificationType.ADD, env.ldapGroup.ldapGrpMemberAttrName, resolveUserDN(it))
-        })
+        ldapConnection.modify(
+            env.groupDN(groupName),
+            groupMembers.map {
+                Modification(ModificationType.ADD, env.ldapGroup.ldapGrpMemberAttrName, resolveUserDN(it))
+            }
+        )
     }
 
     fun getGroupMembers(groupName: String): List<String> =
@@ -195,10 +206,12 @@ class LDAPGroup(private val env: Environment) :
 
                         resolveUserDN(creator).let { userDN ->
                             if (groupName.startsWith(KafkaGroupType.MANAGER.prefix) &&
-                                userDN.isNotEmpty())
+                                userDN.isNotEmpty()
+                            )
                                 add(Attribute(env.ldapGroup.ldapGrpMemberAttrName, userDN))
                         }
-                    })
+                    }
+                )
                     .also { req -> log.info { "Create group request: $req" } }
             ).simplify()
 
@@ -264,7 +277,8 @@ class LDAPGroup(private val env: Environment) :
                 userInGroup(
                     resolveUserDN(userName),
                     env.groupDN(toGroupName(KafkaGroupType.MANAGER.prefix, topicName)),
-                    groupName)
+                    groupName
+                )
             else false
         }
 
@@ -315,8 +329,10 @@ class LDAPGroup(private val env: Environment) :
      */
     private val searchInKafkaNode = searchWithPagination(env.ldapGroup.ldapGroupBase, SearchScope.ONE)
     private val searchInServiceAccountsNode = searchXInY(env.ldapGroup.ldapSrvUserBase, SearchScope.SUB)
-    private val searchInUserAccountsNode = searchXInY(inheritDNTail(env.ldapGroup.ldapSrvUserBase, env.ldapAuthenticate.ldapAuthUserBase),
-        SearchScope.SUB)
+    private val searchInUserAccountsNode = searchXInY(
+        inheritDNTail(env.ldapGroup.ldapSrvUserBase, env.ldapAuthenticate.ldapAuthUserBase),
+        SearchScope.SUB
+    )
 
     /**
      * Level 2 - Search functions getting attributes, based on search functions locked to nodes
@@ -393,9 +409,9 @@ class LDAPGroup(private val env: Environment) :
         private const val MAX_GROUPNAME_LENGTH = 64
 
         fun validGroupLength(topicName: String): Boolean =
-            KafkaGroupType.values().map { it.prefix.length }.max()!! + topicName.length <= MAX_GROUPNAME_LENGTH
+            KafkaGroupType.values().maxOf { it.prefix.length } + topicName.length <= MAX_GROUPNAME_LENGTH
 
-        fun maxTopicNameLength(): Int = MAX_GROUPNAME_LENGTH - KafkaGroupType.values().map { it.prefix.length }.max()!!
+        fun maxTopicNameLength(): Int = MAX_GROUPNAME_LENGTH - KafkaGroupType.values().maxOf { it.prefix.length }
 
         fun LDAPResult.simplify(): SLDAPResult = SLDAPResult(this.resultCode, this.diagnosticMessage ?: "")
     }

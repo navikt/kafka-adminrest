@@ -8,7 +8,6 @@ import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
 import io.ktor.util.pipeline.PipelineContext
-import java.util.concurrent.TimeUnit
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_K
@@ -22,6 +21,7 @@ import org.apache.kafka.clients.admin.ConsumerGroupDescription
 import org.apache.kafka.clients.admin.MemberAssignment
 import org.apache.kafka.clients.admin.MemberDescription
 import org.apache.kafka.common.ConsumerGroupState
+import java.util.concurrent.TimeUnit
 
 fun Routing.consumerGroupsAPI(adminClient: AdminClient?, environment: Environment) {
     getConsumerGroup(adminClient, environment)
@@ -106,12 +106,14 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupDescription
     consumerGroupName: String
 ): Pair<Boolean, GetConsumerGroupModel> {
     return try {
-        Pair(true, adminClient?.let { ac ->
-            ac.describeConsumerGroups(listOf(consumerGroupName))
-                .all()
-                .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)[consumerGroupName]
-                .toSafeDeserializable()
-        } ?: throw Exception(SERVICES_ERR_K)
+        Pair(
+            true,
+            adminClient?.let { ac ->
+                ac.describeConsumerGroups(listOf(consumerGroupName))
+                    .all()
+                    .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)[consumerGroupName]
+                    .toSafeDeserializable()
+            } ?: throw Exception(SERVICES_ERR_K)
         )
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION get consumer group description request $consumerGroupName - $e")
@@ -126,7 +128,8 @@ fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupOffsets(
 ): Pair<Boolean, List<TopicPartitionOffsetAndMetadata>> {
     return try {
         Pair(
-            true, adminClient
+            true,
+            adminClient
                 ?.listConsumerGroupOffsets(consumerGroupName)?.partitionsToOffsetAndMetadata()
                 ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
                 ?.toTopicPartitionOffsetAndMetadata()

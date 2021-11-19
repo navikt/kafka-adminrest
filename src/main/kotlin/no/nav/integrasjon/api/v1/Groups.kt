@@ -53,8 +53,10 @@ data class GetGroupMembersModel(val name: String, val members: List<String>)
 
 fun Routing.getGroupMembers(environment: Environment) =
     get<GetGroupMembers>(
-        "members in a group".responds(ok<GetGroupMembersModel>(),
-            serviceUnavailable<AnError>())
+        "members in a group".responds(
+            ok<GetGroupMembersModel>(),
+            serviceUnavailable<AnError>()
+        )
     ) { group ->
         respondOrServiceUnavailable(environment) { lc ->
             GetGroupMembersModel(group.groupName, lc.getKafkaGroupMembers(group.groupName))

@@ -5,7 +5,6 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
-import java.util.concurrent.TimeUnit
 import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.BasicAuthSecurity
 import no.nav.integrasjon.api.nielsfalk.ktor.swagger.Group
@@ -23,6 +22,7 @@ import org.apache.kafka.common.acl.AclPermissionType
 import org.apache.kafka.common.resource.PatternType
 import org.apache.kafka.common.resource.ResourcePattern
 import org.apache.kafka.common.resource.ResourceType
+import java.util.concurrent.TimeUnit
 
 private const val swGroup = "Streams"
 
@@ -55,10 +55,11 @@ fun Routing.streamsAPI(adminClient: AdminClient?, environment: Environment) {
         }?.let {
             log.error("Trying to register a stream app which is a prefix of $it")
             call.respond(
-                HttpStatusCode.BadRequest, PostStreamResponse(
-                status = PostStreamStatus.ERROR,
-                message = "Stream name is prefix of a topic"
-            )
+                HttpStatusCode.BadRequest,
+                PostStreamResponse(
+                    status = PostStreamStatus.ERROR,
+                    message = "Stream name is prefix of a topic"
+                )
             )
         } ?: run {
             val streamsAcl = listOf(
@@ -84,10 +85,11 @@ fun Routing.streamsAPI(adminClient: AdminClient?, environment: Environment) {
             } catch (e: Exception) {
                 log.error("Exception caught while updating ACL for stream app ${body.applicationName}", e)
                 call.respond(
-                    HttpStatusCode.ServiceUnavailable, PostStreamResponse(
-                    status = PostStreamStatus.ERROR,
-                    message = "Failed to update ACL"
-                )
+                    HttpStatusCode.ServiceUnavailable,
+                    PostStreamResponse(
+                        status = PostStreamStatus.ERROR,
+                        message = "Failed to update ACL"
+                    )
                 )
             }
         }

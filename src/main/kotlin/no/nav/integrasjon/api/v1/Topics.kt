@@ -14,10 +14,6 @@ import io.ktor.locations.Location
 import io.ktor.response.respond
 import io.ktor.routing.Routing
 import io.ktor.util.pipeline.PipelineContext
-import java.time.LocalDateTime
-import java.time.ZoneId
-import java.util.concurrent.TimeUnit
-import java.util.regex.Pattern
 import no.nav.integrasjon.EXCEPTION
 import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_G
@@ -57,6 +53,10 @@ import org.apache.kafka.common.internals.Topic
 import org.apache.kafka.common.resource.PatternType
 import org.apache.kafka.common.resource.ResourcePatternFilter
 import org.apache.kafka.common.resource.ResourceType
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.util.concurrent.TimeUnit
+import java.util.regex.Pattern
 
 /**
  * Topic API
@@ -225,7 +225,8 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
 
         if (!body.name.isValidTopicName()) {
             call.respond(
-                HttpStatusCode.BadRequest, AnError(
+                HttpStatusCode.BadRequest,
+                AnError(
                     "Invalid topic name - $body.name. " +
                         "Must contain [a..z]||[A..Z]||[0..9]||'-' only " +
                         "&& + length ≤ ${LDAPGroup.maxTopicNameLength()}"
@@ -250,7 +251,8 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
 
         if (defaultRepFactor == repFactorError) {
             call.respond(
-                HttpStatusCode.ServiceUnavailable, AnError(
+                HttpStatusCode.ServiceUnavailable,
+                AnError(
                     "Could not get replicationFactor for topic from Kafka"
                 )
             )
@@ -270,7 +272,8 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
         } else {
             application.environment.log.error("Groups for topic $newTopic have some issues")
             call.respond(
-                HttpStatusCode.ServiceUnavailable, AnError(
+                HttpStatusCode.ServiceUnavailable,
+                AnError(
                     "Could not create LDAP groups for topic - ${groupsResult.map { it.ldapResult.message }}"
                 )
             )
@@ -289,7 +292,8 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
             // TODO should have warning for topcis already exists
             application.environment.log.error("$EXCEPTION topic create request $newTopic - $e")
             call.respond(
-                HttpStatusCode.ServiceUnavailable, AnError(
+                HttpStatusCode.ServiceUnavailable,
+                AnError(
                     "Failed to create Kafka topic $newTopic - $e"
                 )
             )
@@ -313,7 +317,8 @@ fun Routing.createNewTopic(adminClient: AdminClient?, environment: Environment) 
         } catch (e: Exception) {
             application.environment.log.error("$EXCEPTION ACLs create request $acls - $e")
             call.respond(
-                HttpStatusCode.ServiceUnavailable, AnError(
+                HttpStatusCode.ServiceUnavailable,
+                AnError(
                     "Failed to create ACLs $acls for Kafka topic - $e"
                 )
             )
@@ -628,7 +633,7 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, environment: Environmen
 
         val newConfigEntries = try {
             body.entries.map {
-                ConfigEntry(it.configentry.entryName, it.value.toLowerCase())
+                ConfigEntry(it.configentry.entryName, it.value.lowercase())
             }
         } catch (e: Exception) {
             log.warn("Could not parse input body", e)
@@ -672,12 +677,14 @@ fun Routing.updateTopicConfig(adminClient: AdminClient?, environment: Environmen
 
         // NB! .all is throwing error... Use of future for specific entry instead
         val (alterConfigRequestOk, _) = try {
-            Pair(true, adminClient?.let { ac ->
-                ac.incrementalAlterConfigs(configReq)
-                    .values()
-                    .get(configResource)
-                    ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS) ?: Unit
-            } ?: throw Exception(SERVICES_ERR_K)
+            Pair(
+                true,
+                adminClient?.let { ac ->
+                    ac.incrementalAlterConfigs(configReq)
+                        .values()
+                        .get(configResource)
+                        ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS) ?: Unit
+                } ?: throw Exception(SERVICES_ERR_K)
             )
         } catch (e: Exception) {
             Pair(false, Unit)
@@ -725,7 +732,8 @@ fun Routing.getTopicAcls(adminClient: AdminClient?, environment: Environment) =
 
         val (aclRequestOk, acls) = try {
             Pair(
-                true, adminClient
+                true,
+                adminClient
                     ?.describeAcls(aclFilter)
                     ?.values()
                     ?.get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
@@ -1119,21 +1127,23 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchConsumerGroupsWithOffset
     topicName: String
 ): Pair<Boolean, List<ConsumerGroupWithOffsets>> {
     return try {
-        Pair(true, adminClient?.let { ac ->
-            ac.listConsumerGroups()
-                .all()
-                .get()
-                .map { listing -> listing.groupId() }
-                .associateWith { groupId ->
-                    ac.listConsumerGroupOffsets(groupId)
-                        .partitionsToOffsetAndMetadata()
-                        .get()
-                        .toMap()
-                        .filterKeys { it.topic() == topicName }
-                }
-                .filterValues { it.isNotEmpty() }
-                .map { (key, value) -> ConsumerGroupWithOffsets(key, value.toTopicPartitionOffsetAndMetadata()) }
-        } ?: throw Exception(SERVICES_ERR_K)
+        Pair(
+            true,
+            adminClient?.let { ac ->
+                ac.listConsumerGroups()
+                    .all()
+                    .get()
+                    .map { listing -> listing.groupId() }
+                    .associateWith { groupId ->
+                        ac.listConsumerGroupOffsets(groupId)
+                            .partitionsToOffsetAndMetadata()
+                            .get()
+                            .toMap()
+                            .filterKeys { it.topic() == topicName }
+                    }
+                    .filterValues { it.isNotEmpty() }
+                    .map { (key, value) -> ConsumerGroupWithOffsets(key, value.toTopicPartitionOffsetAndMetadata()) }
+            } ?: throw Exception(SERVICES_ERR_K)
         )
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION topic get consumer groups request $topicName - $e")
@@ -1148,27 +1158,29 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchOffsetsForPartitions(
     topicName: String
 ): Pair<Boolean, Map<Int, GetTopicOffsetsModel.OffsetInfo>> {
     return try {
-        Pair(true, adminClient?.let { ac ->
-            partitions.associateBy(
-                { partitionInfo -> partitionInfo.partition() },
-                { partitionInfo ->
-                    val topicPartition = TopicPartition(topicName, partitionInfo.partition())
+        Pair(
+            true,
+            adminClient?.let { ac ->
+                partitions.associateBy(
+                    { partitionInfo -> partitionInfo.partition() },
+                    { partitionInfo ->
+                        val topicPartition = TopicPartition(topicName, partitionInfo.partition())
 
-                    val earliest = ac.listOffsets(mapOf(topicPartition to OffsetSpec.earliest()))
-                        .all()
-                        .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                        val earliest = ac.listOffsets(mapOf(topicPartition to OffsetSpec.earliest()))
+                            .all()
+                            .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
 
-                    val latest = ac.listOffsets(mapOf(topicPartition to OffsetSpec.latest()))
-                        .all()
-                        .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                        val latest = ac.listOffsets(mapOf(topicPartition to OffsetSpec.latest()))
+                            .all()
+                            .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
 
-                    GetTopicOffsetsModel.OffsetInfo(
-                        earliest = earliest[topicPartition],
-                        latest = latest[topicPartition]
-                    )
-                }
-            )
-        } ?: throw Exception(SERVICES_ERR_K)
+                        GetTopicOffsetsModel.OffsetInfo(
+                            earliest = earliest[topicPartition],
+                            latest = latest[topicPartition]
+                        )
+                    }
+                )
+            } ?: throw Exception(SERVICES_ERR_K)
         )
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION topic get consumer groups request $topicName - $e")
@@ -1182,12 +1194,14 @@ private fun PipelineContext<Unit, ApplicationCall>.fetchTopics(
     topicName: String
 ): Pair<Boolean, List<String>> {
     return try {
-        Pair(true, adminClient?.let { ac ->
-            ac.listTopics()
-                .listings()
-                .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
-                .map { it.name() }
-        } ?: throw Exception(SERVICES_ERR_K)
+        Pair(
+            true,
+            adminClient?.let { ac ->
+                ac.listTopics()
+                    .listings()
+                    .get(environment.kafka.kafkaTimeout, TimeUnit.MILLISECONDS)
+                    .map { it.name() }
+            } ?: throw Exception(SERVICES_ERR_K)
         )
     } catch (e: Exception) {
         application.environment.log.error("$EXCEPTION topic get config request $topicName - $e")

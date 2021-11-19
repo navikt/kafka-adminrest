@@ -4,6 +4,8 @@ package no.nav.integrasjon.api.nielsfalk.ktor.swagger
 
 import io.ktor.http.HttpStatusCode
 import io.ktor.locations.Location
+import mu.KotlinLogging
+import no.nav.integrasjon.swagger
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -13,8 +15,6 @@ import kotlin.reflect.KProperty1
 import kotlin.reflect.KType
 import kotlin.reflect.full.isSubclassOf
 import kotlin.reflect.full.memberProperties
-import mu.KotlinLogging
-import no.nav.integrasjon.swagger
 
 /**
  * @author Niels Falk, changed by Torstein Nesby

@@ -39,9 +39,11 @@ class GetApiGatewayGroup
 data class GetApiGwGroupMembersModel(val name: String, val members: List<String>)
 
 fun Routing.getAllowedUsersInApiGwGroup(environment: Environment) =
-    get<GetApiGatewayGroup>("all members in $apiGw group".responds(
-        ok<GetApiGwGroupMembersModel>(),
-        serviceUnavailable<AnError>())
+    get<GetApiGatewayGroup>(
+        "all members in $apiGw group".responds(
+            ok<GetApiGwGroupMembersModel>(),
+            serviceUnavailable<AnError>()
+        )
     ) {
         respondOrServiceUnavailable(environment) { lc ->
             GetApiGwGroupMembersModel(apiGw, lc.getGroupMembers(apiGw))
@@ -85,7 +87,7 @@ fun Routing.updateApiGwGroup(environment: Environment) =
         )
     ) { _, body ->
 
-        val currentUser = call.principal<UserIdPrincipal>()!!.name.toLowerCase()
+        val currentUser = call.principal<UserIdPrincipal>()!!.name.lowercase()
 
         val logEntry = "Group membership update request by " +
             "${this.context.authentication.principal} - $apiGw "

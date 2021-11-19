@@ -11,7 +11,6 @@ import io.ktor.server.testing.TestApplicationEngine
 import io.ktor.server.testing.createTestEnvironment
 import io.ktor.server.testing.handleRequest
 import io.ktor.server.testing.setBody
-import java.util.Base64
 import no.nav.common.KafkaEnvironment
 import no.nav.integrasjon.Environment
 import no.nav.integrasjon.api.nais.client.SERVICES_ERR_A
@@ -67,6 +66,7 @@ import org.amshove.kluent.shouldContain
 import org.amshove.kluent.shouldContainAll
 import org.spekframework.spek2.Spek
 import org.spekframework.spek2.style.specification.describe
+import java.util.Base64
 
 @KtorExperimentalLocationsAPI
 object KafkaAdminRestSpec : Spek({
@@ -616,12 +616,16 @@ object KafkaAdminRestSpec : Spek({
                                         "Basic ${encodeBase64("n145821:itest3".toByteArray())}"
                                     )
 
-                                    val jsonPayload = gson.toJson(ConfigEntries(listOf(
-                                        PutTopicConfigEntryBody(
-                                            AllowedConfigEntries.MIN_COMPACTION_LAG_MS,
-                                            "3600000"
+                                    val jsonPayload = gson.toJson(
+                                        ConfigEntries(
+                                            listOf(
+                                                PutTopicConfigEntryBody(
+                                                    AllowedConfigEntries.MIN_COMPACTION_LAG_MS,
+                                                    "3600000"
+                                                )
+                                            )
                                         )
-                                    )))
+                                    )
                                     setBody(jsonPayload)
                                 }
                                 call.response.status() shouldBe HttpStatusCode.OK
@@ -1034,7 +1038,8 @@ object KafkaAdminRestSpec : Spek({
                                     HttpHeaders.Authorization,
                                     "Basic ${encodeBase64("n000001:itest1".toByteArray())}"
                                 )
-                                setBody("""
+                                setBody(
+                                    """
                                     {
                                       "topics": [
                                         {
@@ -1050,7 +1055,8 @@ object KafkaAdminRestSpec : Spek({
                                         }
                                       ]
                                     }
-                                """.trimIndent())
+                                    """.trimIndent()
+                                )
                             }
                             call.response.status() shouldBe HttpStatusCode.BadRequest
                         }
@@ -1090,7 +1096,7 @@ object KafkaAdminRestSpec : Spek({
                             outputTopic.numPartitions shouldBeEqualTo inputTopic.numPartitions
                             outputTopic.members.size shouldBeEqualTo 5
                             outputTopic.configEntries!!.forEach { (key, value) ->
-                                value.shouldBeEqualTo(inputTopic.configEntries!!.get(key)!!.toLowerCase())
+                                value.shouldBeEqualTo(inputTopic.configEntries!!.get(key)!!.lowercase())
                             }
                         }
 
@@ -1115,9 +1121,10 @@ object KafkaAdminRestSpec : Spek({
                     context("Put oneshot request for existing topic with new added config entry and previous config entry removed") {
                         it("should successfully perform the request") {
                             val request = oneshotCreationRequest.copy(
-                                topics = listOf(oneshotCreationRequest.topics
-                                    .first()
-                                    .copy(configEntries = mapOf(retentionBytesConfigEntry))
+                                topics = listOf(
+                                    oneshotCreationRequest.topics
+                                        .first()
+                                        .copy(configEntries = mapOf(retentionBytesConfigEntry))
                                 )
                             )
                             val call = handleRequest(HttpMethod.Put, ONESHOT) {
@@ -1139,7 +1146,7 @@ object KafkaAdminRestSpec : Spek({
                             outputTopic.numPartitions shouldBeEqualTo inputTopic.numPartitions
                             outputTopic.members.size shouldBeEqualTo 5
                             outputTopic.configEntries!!.forEach { (key, value) ->
-                                value.shouldBeEqualTo(inputTopic.configEntries!!.get(key)!!.toLowerCase())
+                                value.shouldBeEqualTo(inputTopic.configEntries!!.get(key)!!.lowercase())
                             }
                         }
                         it("should have preserved the missing previous config entry value") {
@@ -1165,7 +1172,7 @@ object KafkaAdminRestSpec : Spek({
                                 .find { it.name() == cleanupPolicyConfigEntry.first }
                                 ?.value()
                                 ?: ""
-                            cleanupPolicyValue shouldBeEqualTo cleanupPolicyConfigEntry.second.toLowerCase()
+                            cleanupPolicyValue shouldBeEqualTo cleanupPolicyConfigEntry.second.lowercase()
                         }
                     }
                     context("Put oneshot request for existing topic with increased partition count") {
