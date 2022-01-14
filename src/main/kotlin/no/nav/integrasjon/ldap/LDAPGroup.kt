@@ -270,17 +270,19 @@ class LDAPGroup(private val env: Environment) :
             .compare(CompareRequest(groupDN, env.ldapGroup.ldapGrpMemberAttrName, userDN))
             .compareMatched()
 
-    fun userIsManager(topicName: String, userName: String): Boolean =
-        toGroupName(KafkaGroupType.MANAGER.prefix, topicName).let { groupName ->
+    fun userIsManager(topicName: String, userName: String): Boolean {
+        val groupName: String = toGroupName(KafkaGroupType.MANAGER.prefix, topicName)
 
-            if (groupName in getKafkaGroupNames())
-                userInGroup(
-                    resolveUserDN(userName),
-                    env.groupDN(toGroupName(KafkaGroupType.MANAGER.prefix, topicName)),
-                    groupName
-                )
-            else false
+        return when {
+            userName.lowercase() in env.superusers -> true
+            groupName in getKafkaGroupNames() -> userInGroup(
+                resolveUserDN(userName),
+                env.groupDN(toGroupName(KafkaGroupType.MANAGER.prefix, topicName)),
+                groupName
+            )
+            else -> false
         }
+    }
 
     fun userExists(userName: String): Boolean = resolveUserDN(userName).isNotEmpty().also { exists ->
         if (!exists) log.error { "$userName doesn't exists as NAV ident or service user in current LDAP domain" }

@@ -4,6 +4,7 @@ import com.natpryce.konfig.ConfigurationProperties
 import com.natpryce.konfig.EnvironmentVariables
 import com.natpryce.konfig.Key
 import com.natpryce.konfig.intType
+import com.natpryce.konfig.listType
 import com.natpryce.konfig.longType
 import com.natpryce.konfig.overriding
 import com.natpryce.konfig.stringType
@@ -28,7 +29,8 @@ data class Environment(
     val ldapAuthenticate: LdapAuthenticate = LdapAuthenticate(),
     val ldapGroup: LdapGroup = LdapGroup(),
     val ldapUser: LdapUser = LdapUser(),
-    val flags: Flags = Flags()
+    val flags: Flags = Flags(),
+    val superusers: List<String> = config[Key("superusers", listType(stringType, separator = Regex(",")))]
 ) {
     data class Kafka(
         val kafkaBrokers: String = config[Key("kafka.brokers", stringType)],

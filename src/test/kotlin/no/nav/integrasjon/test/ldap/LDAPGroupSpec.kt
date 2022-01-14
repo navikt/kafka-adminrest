@@ -18,7 +18,8 @@ object LDAPGroupSpec : Spek({
 
     val environment = Environment(
         ldapAuthenticate = Environment.LdapAuthenticate(ldapAuthPort = InMemoryLDAPServer.LPORT),
-        ldapGroup = Environment.LdapGroup(ldapPort = InMemoryLDAPServer.LPORT)
+        ldapGroup = Environment.LdapGroup(ldapPort = InMemoryLDAPServer.LPORT),
+        superusers = listOf("admin", "other-admin")
     )
 
     describe("LDAPGroup class test specification") {
@@ -251,7 +252,10 @@ object LDAPGroupSpec : Spek({
             val topics = mapOf(
                 Pair("tpc-01", "n000002") to true,
                 Pair("tpc-02", "n141414") to false,
-                Pair("tpc-03", "n145821") to true
+                Pair("tpc-03", "n145821") to true,
+                Pair("tpc-01", "admin") to true,
+                Pair("tpc-01", "other-admin") to true,
+                Pair("tpc-01", "not-admin") to false,
             )
 
             topics.forEach { (pair, result) ->
