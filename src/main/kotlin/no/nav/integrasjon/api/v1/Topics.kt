@@ -377,12 +377,15 @@ private suspend fun PipelineContext<Unit, ApplicationCall>.userTopicManagerStatu
         val isProtectedTopic = protectedOrphantedTopics.any { protectedTopicName ->
             topicName.contains(protectedTopicName, ignoreCase = true)
         }
-        if (isProtectedTopic) {
+
+        val isSuperUser = user.lowercase() in environment.superusers
+
+        return if (isProtectedTopic && !isSuperUser) {
             application.environment.log.warn("User attempted to delete internal protected topic, denying request")
             call.respond(HttpStatusCode.Unauthorized, AnError("Cannot delete internal topic"))
-            return UserIsManager.IS_NOT_MANAGER
+            UserIsManager.IS_NOT_MANAGER
         } else {
-            return UserIsManager.LDAP_NO_GROUPS_FOUND
+            UserIsManager.LDAP_NO_GROUPS_FOUND
         }
     }
 
